@@ -117,7 +117,7 @@ export function responseContent(result: unknown): unknown {
   return undefined;
 }
 
-async function detectChunk(env: Env, chunk: string, model: string, usage: Usage): Promise<Entity[]> {
+async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[]): Promise<Entity[]> {
   const result = (await env.AI!.run(model as Parameters<Ai['run']>[0], {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -127,6 +127,7 @@ async function detectChunk(env: Env, chunk: string, model: string, usage: Usage)
     max_tokens: 4096,
     temperature: 0,
   } as never)) as { usage?: Usage };
+  raw?.push(result);
   usage.prompt_tokens = (usage.prompt_tokens ?? 0) + (result?.usage?.prompt_tokens ?? 0);
   usage.completion_tokens = (usage.completion_tokens ?? 0) + (result?.usage?.completion_tokens ?? 0);
   return parseEntities(responseContent(result), chunk);
@@ -164,9 +165,10 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const trial = env.MODEL_TRIALS === '1' && typeof requested === 'string' && requested.startsWith('@cf/');
   const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
   const usage: Usage = {};
+  const raw: unknown[] | undefined = trial ? [] : undefined;
   const started = Date.now();
   try {
-    const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage)));
+    const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw)));
     const seen = new Set<string>();
     const entities = results.flat().filter((e) => {
       const k = `${e.type}\u0000${e.text}`;
@@ -174,7 +176,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
       seen.add(k);
       return true;
     });
-    if (trial) return json({ entities, model, ms: Date.now() - started, usage });
+    if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw });
     return json({ entities });
   } catch (err) {
     console.error('detect failed', err);
