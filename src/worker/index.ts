@@ -20,8 +20,19 @@ export default {
     if (url.pathname === '/api/health') return json({ ok: true });
     // Preview-only model catalogue, for picking models to benchmark.
     if (url.pathname === '/api/models' && env.MODEL_TRIALS === '1' && env.AI) {
-      const models = await env.AI.models({ task: url.searchParams.get('task') || 'Text Generation', per_page: 200 } as never);
-      return json(models.map((m) => m.name));
+      const search = url.searchParams.get('search');
+      const models = await env.AI.models((search ? { search, per_page: 50 } : { task: url.searchParams.get('task') || 'Text Generation', per_page: 200 }) as never);
+      return json(search ? models : models.map((m) => m.name));
+    }
+    // Preview-only raw model call, for trying inputs such as images before building on them.
+    if (url.pathname === '/api/trial' && request.method === 'POST' && env.MODEL_TRIALS === '1' && env.AI) {
+      if (env.DETECT_LIMITER && !(await env.DETECT_LIMITER.limit({ key: `trial:${request.headers.get('cf-connecting-ip')}` })).success) return json({ error: 'rate limited' }, 429);
+      const { model, input } = (await request.json()) as { model: string; input: Record<string, unknown> };
+      try {
+        return json({ result: await env.AI.run(model as never, input as never) });
+      } catch (err) {
+        return json({ error: String(err) }, 500);
+      }
     }
     return env.ASSETS.fetch(request);
   },
