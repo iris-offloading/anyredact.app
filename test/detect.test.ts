@@ -101,3 +101,18 @@ test('AI organisation owner marks a contact public everywhere it appears', async
   assert.equal(spans.length, 2);
   assert.ok(spans.every((s) => s.publicHint));
 });
+
+test('a company named far away in the same paragraph does not make an address public', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = `Die XY GmbH ist diesen Risiken ausgesetzt, ${'durch eine breite Kundenstruktur, '.repeat(3)}etwa durch Kieran Wilson, wohnhaft in der 30 Stretto Dandolo, Apt. 34.`;
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['address'], ai: [{ text: '30 Stretto Dandolo, Apt. 34', type: 'address' }] });
+  assert.equal(spans.length, 1);
+  assert.equal(spans[0].publicHint, undefined);
+});
+
+test('the AI type wins over a rule match of the same text', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = 'Credit Card Number: 3022 3330 5753';
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['phone', 'card'], ai: [{ text: '3022 3330 5753', type: 'card' }] });
+  assert.deepEqual(spans.map((s) => [s.type, s.publicHint]), [['card', undefined]]);
+});

@@ -76,6 +76,7 @@ export function phonePublicHint(text: string, start: number, match: string): str
 // Same-line signs that a contact detail belongs to an organisation: company
 // registration and VAT numbers, legal forms and web addresses, as in letterheads and footers.
 const ORG_CONTEXT = /(?:^|[^\p{L}])(?:IČO?|DIČ|VAT(?: (?:No|Reg))?|USt-?IdNr|Steuernummer|HRB|SIRE[NT]|TVA|KvK|BTW|NIF|CIF|P\.? ?IVA|Reg(?:istration)?\.? ?No|Company (?:No|Number|Reg)|ABN|ACN|EIN)\b|www\.|\b(?:s\.r\.o\.|z\.s\.p\.o\.?|a\.s\.|GmbH|AG|Ltd|LLC|LLP|PLC|Inc\.?|Corp\.?|S\.A\.|SAS|SARL|S\.p\.A\.|S\.r\.l\.|B\.V\.|N\.V\.|Oy|AB|ApS|Sp\. z o\.o\.)(?![\p{L}])/u;
+const ORG_WINDOW = 80;
 // Mailboxes that belong to a team or company rather than a person.
 const GENERIC_MAILBOX = /^(?:info|kontakt|contact|contacto|contatto|office|kancelar|support|help|hello|hi|sales|admin|enquiries|inquiries|service|customerservice|noreply|no-reply|press|media|hr|jobs|careers|billing|invoices?|accounts|mail|team|reception|post|postmaster|webmaster|privacy|dpo|legal|marketing|orders|booking|bookings)(?:[._-][a-z]+)?@/i;
 
@@ -91,9 +92,11 @@ export function contactPublicHint(text: string, start: number, end: number, type
   }
   if (type === 'email' && GENERIC_MAILBOX.test(match)) return 'Generic company mailbox';
   if (type === 'phone' || type === 'email' || type === 'url' || type === 'address') {
-    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    // The same line, but no further than a short window: in a paragraph of
+    // prose, a company named two sentences away says nothing about an address.
+    const lineStart = Math.max(text.lastIndexOf('\n', start - 1) + 1, start - ORG_WINDOW);
     const lineEnd = text.indexOf('\n', end);
-    const line = text.slice(lineStart, start) + ' ' + text.slice(end, lineEnd < 0 ? text.length : lineEnd);
+    const line = text.slice(lineStart, start) + ' ' + text.slice(end, Math.min(lineEnd < 0 ? text.length : lineEnd, end + ORG_WINDOW));
     if (ORG_CONTEXT.test(line)) return 'Company letterhead or footer';
   }
   return undefined;
@@ -248,8 +251,15 @@ export function dedupe(spans: Span[]): Span[] {
   for (const s of spans) {
     const cover = out.find((o) => o.start <= s.start && o.end >= s.end);
     if (cover) {
-      // Keep a public hint from a duplicate of the same text (e.g. the AI saying a rule match is a company's).
-      if (s.publicHint && !cover.publicHint && cover.start === s.start && cover.end === s.end) cover.publicHint = s.publicHint;
+      if (cover.start === s.start && cover.end === s.end) {
+        // The AI reads the context, so its type wins over a rule's guess (a card number the phone rule also matched).
+        if (s.source === 'ai' && cover.source !== 'ai' && s.type !== cover.type) {
+          cover.type = s.type;
+          cover.publicHint = s.publicHint;
+        }
+        // Keep a public hint from a duplicate of the same text (e.g. the AI saying a rule match is a company's).
+        else if (s.publicHint && !cover.publicHint) cover.publicHint = s.publicHint;
+      }
       continue;
     }
     for (let i = out.length - 1; i >= 0; i--) {
