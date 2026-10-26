@@ -6,9 +6,9 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "dev": "npm run build && wrangler dev",
-    "dev:local": "npm run build && wrangler dev --env local",
-    "deploy": "npm run build && wrangler deploy",
+    "dev": "wrangler dev",
+    "dev:local": "wrangler dev --env local",
+    "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json && tsc -p src/worker/tsconfig.json",
     "test": "node --test --experimental-strip-types --no-warnings test/*.test.ts",
     "test:e2e": "node test/e2e/run.mjs e2e-out"

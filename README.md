@@ -33,13 +33,15 @@ Each tool has its own landing page (`/redact-pdf`, `/redact-image`, `/redact-wor
 
 ```sh
 npm install
-npm run dev:local   # no Cloudflare login needed; AI mode reports itself unavailable
+npm run dev:local   # builds the site, no Cloudflare login needed; AI mode reports itself unavailable
 npm run dev         # uses the real Workers AI binding (needs `wrangler login`)
 npm test            # unit tests
 npm run test:e2e    # with dev:local running; needs Playwright + Chromium installed
 npm run typecheck
 npm run deploy
 ```
+
+Wrangler runs `npm run build` itself before dev, deploy and preview uploads (see `build` in `wrangler.jsonc`), so Workers Builds needs no build command. Pull request previews use the `previews` bindings.
 
 The Workers AI model defaults to `@cf/meta/llama-3.3-70b-instruct-fp8-fast` and can be overridden with an `AI_MODEL` variable.
 

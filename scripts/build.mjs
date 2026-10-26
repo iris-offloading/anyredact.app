@@ -1,7 +1,7 @@
 // Builds the static site into dist/: bundles the client, then renders one
 // HTML page per tool plus the home page, sitemap and robots.txt.
 import { build } from 'esbuild';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { HOME, SITE, TOOLS } from './pages.mjs';
@@ -10,7 +10,8 @@ const root = path.resolve(import.meta.dirname, '..');
 const dist = path.join(root, 'dist');
 const require = createRequire(import.meta.url);
 
-await rm(dist, { recursive: true, force: true });
+// Overwrite in place and prune stale assets at the end, rather than deleting
+// dist/ up front: `wrangler dev` serves from it while rebuilding.
 await mkdir(path.join(dist, 'assets'), { recursive: true });
 
 const pdfjsVersion = require('pdfjs-dist/package.json').version;
@@ -205,5 +206,10 @@ ${sitemapUrls.map((s) => `  <url><loc>${url(s)}</loc><lastmod>${today}</lastmod>
 `,
 );
 await writeFile(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${SITE.origin}/sitemap.xml\n`);
+
+const keep = new Set([...Object.keys(result.metafile.outputs).map((f) => path.basename(f)), path.basename(pdfWorker)]);
+for (const f of await readdir(path.join(dist, 'assets'))) {
+  if (!keep.has(f)) await rm(path.join(dist, 'assets', f), { force: true });
+}
 
 console.log(`Built ${pages.length + 2} pages into dist/ (app: ${appSrc})`);

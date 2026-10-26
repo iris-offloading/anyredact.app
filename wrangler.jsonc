@@ -1,8 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "anyredact",
+  "name": "anyredact-app",
   "main": "src/worker/index.ts",
   "compatibility_date": "2025-09-01",
+  // Wrangler builds the site before every dev, deploy and versions upload, so
+  // Workers Builds works even when the dashboard build command is left empty.
+  "build": { "command": "npm run build", "watch_dir": ["src", "scripts", "static"] },
   "observability": { 
     "logs": { "enabled": true }, 
     "traces": { "enabled": true }, 
@@ -19,6 +22,14 @@
   "ratelimits": [
     { "name": "DETECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }
   ],
+  // Preview deployments (pull request builds) need their own bindings. They get a
+  // separate rate-limit namespace so previews don't share production's counters.
+  "previews": {
+    "ai": { "binding": "AI" },
+    "ratelimits": [
+      { "name": "DETECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
+    ]
+  },
   // `npm run dev:local` runs without a Cloudflare login: no AI binding, so
   // AI-assisted mode reports itself unavailable while private mode works.
   "env": {
