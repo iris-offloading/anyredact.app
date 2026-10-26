@@ -4,6 +4,7 @@ import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts'
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
+import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
 
@@ -19,6 +20,10 @@ ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
 // What the "Look for" chips offer. AI and pattern findings are both filtered by these.
 const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
 const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'other'];
+// Picture regions are opt-in: plenty of people want faces left visible.
+const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
+// Each page is one AI request, so very long PDFs only get the local pass after this.
+const MAX_AI_PICTURE_PAGES = 30;
 
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
@@ -85,6 +90,12 @@ class App {
   private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   private terms = '';
+  private visualKinds = new Set<VisualKind>();
+  // Per page, and the kinds they were computed for.
+  private visualLocal: { kinds: string; hits: VisualHit[][] } | null = null;
+  private visualAi: { kinds: string; hits: VisualHit[][] } | null = null;
+  private visualError: string | null = null;
+  private pictureBox: HTMLElement;
   private style: RedactStyle = 'block';
   private busy = false;
 
@@ -154,6 +165,26 @@ class App {
       typeBoxes.append(h('label', { className: 'chip' }, cb, ENTITY_LABELS[t]));
     }
 
+    const saved = (store.get('picture-kinds') || '').split(',');
+    for (const k of VISUAL_KINDS) if (saved.includes(k)) this.visualKinds.add(k);
+    const pictureChips = h('div', { className: 'types' });
+    for (const k of VISUAL_KINDS) {
+      const cb = h('input', { type: 'checkbox', checked: this.visualKinds.has(k) });
+      cb.addEventListener('change', () => {
+        cb.checked ? this.visualKinds.add(k) : this.visualKinds.delete(k);
+        store.set('picture-kinds', [...this.visualKinds].join(','));
+        this.analyze();
+      });
+      pictureChips.append(h('label', { className: 'chip' }, cb, VISUAL_LABELS[k]));
+    }
+    this.pictureBox = h(
+      'div',
+      { hidden: true },
+      h('h3', {}, 'In pictures'),
+      pictureChips,
+      h('p', { className: 'hint' }, 'Off unless you tick them. Faces, screens and stop signs are looked for on this device; with AI on, pictures are also checked on our server, which also finds number plates and other signs.'),
+    );
+
     const termsArea = h('textarea', { rows: 3, placeholder: 'One per line, e.g. a name or project', 'aria-label': 'Words to always redact' });
     let termTimer = 0;
     termsArea.addEventListener('input', () => {
@@ -187,6 +218,7 @@ class App {
       this.consentBox,
       h('h3', {}, 'Look for'),
       typeBoxes,
+      this.pictureBox,
       h('h3', {}, 'Always redact'),
       termsArea,
       h('h3', {}, 'Found'),
@@ -225,6 +257,7 @@ class App {
       this.doc = await load(file, (m) => this.say(m));
       this.docName.textContent = file.name;
       this.styleRow.hidden = this.doc.kind === 'pdf' || this.doc.kind === 'image';
+      this.pictureBox.hidden = !this.doc.pages.length;
       this.notes.replaceChildren(...this.doc.notes.map((n) => h('li', {}, n)));
       this.intake.hidden = true;
       this.workspace.hidden = false;
@@ -246,6 +279,9 @@ class App {
     this.boxes = [];
     this.aiEntities = null;
     this.aiError = null;
+    this.visualLocal = null;
+    this.visualAi = null;
+    this.visualError = null;
     this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
     this.consentBox.hidden = true;
     this.overrides.clear();
@@ -310,14 +346,74 @@ class App {
         rects: unit.rectsFor?.(s.start, s.end) ?? [],
       };
     });
-    this.findings = findings;
+    const pictures = await this.pictureFindings(doc);
+    if (this.doc !== doc) return;
+    this.findings = [...findings, ...pictures];
     this.warn.hidden = true;
     if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
+    else if (this.visualError) this.say(this.visualError, true);
     else if (this.consent === 'no') this.say('Using the built-in rules only. Nothing was sent to our server, but names and addresses are easy to miss this way. Review carefully.');
     else if (this.consent === 'ask') this.say('Your file has not left this device. The list shows what the built-in rules found so far.');
     else this.say('');
     this.renderList();
     this.refreshPreview();
+  }
+
+  /** Faces, screens, signs and plates on page bitmaps, when the visitor ticked any. */
+  private async pictureFindings(doc: LoadedDoc): Promise<Finding[]> {
+    const kinds = this.visualKinds;
+    if (!kinds.size || !doc.pages.length) return [];
+    const key = [...kinds].sort().join(',');
+    this.visualError = null;
+    if (this.visualLocal?.kinds !== key) {
+      this.say('Looking for faces and screens on this device…');
+      const hits: VisualHit[][] = [];
+      try {
+        for (const p of doc.pages) hits[p.index] = await detectVisual(p.canvas, kinds);
+      } catch (err) {
+        console.warn(err);
+        this.visualError = 'The on-device picture detector could not start in this browser.';
+      }
+      this.visualLocal = { kinds: key, hits };
+    }
+    if (this.consent === 'yes' && this.visualAi?.kinds !== key) {
+      const hits: VisualHit[][] = [];
+      const pages = doc.pages.slice(0, MAX_AI_PICTURE_PAGES);
+      try {
+        for (const p of pages) {
+          this.say(pages.length > 1 ? `Checking pictures with AI… page ${p.index + 1} of ${pages.length}` : 'Checking the picture with AI…');
+          hits[p.index] = await detectVisualAi(p.canvas, kinds);
+          if (this.doc !== doc) return [];
+        }
+      } catch (err) {
+        console.warn(err);
+        this.visualError = `${err instanceof Error ? err.message : 'Picture detection failed.'} Showing what this device found; review the pictures carefully.`;
+      }
+      this.visualAi = { kinds: key, hits };
+    }
+    const out: Finding[] = [];
+    const counts = new Map<VisualKind, number>();
+    for (const p of doc.pages) {
+      const merged = mergeHits([...(this.visualLocal?.hits[p.index] ?? []), ...(this.consent === 'yes' ? (this.visualAi?.hits[p.index] ?? []) : [])]);
+      for (const hit of merged.filter((x) => kinds.has(x.kind)).sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x)) {
+        const n = (counts.get(hit.kind) ?? 0) + 1;
+        counts.set(hit.kind, n);
+        const key = `picture:${p.index}:${hit.kind}:${Math.round(hit.rect.x)}:${Math.round(hit.rect.y)}`;
+        out.push({
+          key,
+          unitId: 'pictures',
+          start: 0,
+          end: 0,
+          type: hit.kind,
+          source: 'visual',
+          text: `${ENTITY_LABELS[hit.kind]} ${n}`,
+          enabled: this.overrides.get(key) ?? true,
+          page: p.index,
+          rects: [hit.rect],
+        });
+      }
+    }
+    return out;
   }
 
   private toggle(keys: string[], on: boolean) {
@@ -497,7 +593,8 @@ class App {
     if (!this.consentBox.hidden) return;
     const text = doc.units.map((u) => u.text).join(' ');
     const words = text.split(/\s+/).filter(Boolean).length;
-    if (!words) {
+    const pictures = this.visualKinds.size > 0 && doc.pages.length > 0;
+    if (!words && !pictures) {
       this.consentBox.hidden = true;
       return;
     }
@@ -509,13 +606,20 @@ class App {
       this.analyze();
     };
     this.consentBox.replaceChildren(
-      h('p', {}, h('strong', {}, 'Nothing has been sent yet. '), `To find names, addresses and other personal details, AnyRedact sends the text it read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare. The file itself stays here, and nothing is stored.`),
+      h(
+        'p',
+        {},
+        h('strong', {}, 'Nothing has been sent yet. '),
+        words ? `To find names, addresses and other personal details, AnyRedact sends the text it read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare. ` : '',
+        pictures ? `Because picture redaction is on, it also sends the page image${doc.pages.length > 1 ? 's' : ''} so the AI can find what this device missed. ` : 'The file itself stays here. ',
+        'Nothing is stored.',
+      ),
       h('button', { type: 'button', className: 'btn primary', textContent: 'Find personal info with AI', onclick: () => choose('yes') }),
       h('button', { type: 'button', className: 'btn ghost', textContent: 'Use built-in rules only', onclick: () => choose('no') }),
       h('label', { className: 'row' }, always, 'Always use AI on this device'),
     );
     this.consentBox.hidden = false;
-    const pages = Math.max(1, Math.ceil(text.length / 3000));
+    const pages = (words ? Math.max(1, Math.ceil(text.length / 3000)) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
     freePagesLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
       this.consentBox.append(

@@ -15,13 +15,18 @@ export type EntityType =
   | 'id'
   | 'org'
   | 'custom'
-  | 'other';
+  | 'other'
+  // Picture regions found in the browser (src/client/visual.ts).
+  | 'face'
+  | 'screen'
+  | 'sign'
+  | 'plate';
 
 export interface Span {
   start: number;
   end: number;
   type: EntityType;
-  source: 'pattern' | 'ai' | 'term';
+  source: 'pattern' | 'ai' | 'term' | 'visual';
   /** Set when the match is probably not personal (e.g. a public helpline), so it starts unticked. */
   publicHint?: string;
 }
@@ -41,6 +46,10 @@ export const ENTITY_LABELS: Record<EntityType, string> = {
   org: 'Organization',
   custom: 'Custom term',
   other: 'Other sensitive',
+  face: 'Face',
+  screen: 'Screen',
+  sign: 'Road sign',
+  plate: 'Number plate',
 };
 
 /** Types the offline engine can find (names via names.ts); the UI lets users toggle each. */

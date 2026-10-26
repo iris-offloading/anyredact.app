@@ -16,6 +16,7 @@ await mkdir(path.join(dist, 'assets'), { recursive: true });
 
 const pdfjsVersion = require('pdfjs-dist/package.json').version;
 const pdfWorker = `/assets/pdf.worker-${pdfjsVersion}.min.mjs`;
+const mediapipeVersion = JSON.parse(await readFile(path.join(root, 'node_modules/@mediapipe/tasks-vision/package.json'), 'utf8')).version;
 
 const result = await build({
   entryPoints: { app: path.join(root, 'src/client/main.ts'), account: path.join(root, 'src/client/account.ts') },
@@ -29,7 +30,10 @@ const result = await build({
   entryNames: '[name]-[hash]',
   chunkNames: 'chunk-[hash]',
   metafile: true,
-  define: { __PDF_WORKER_SRC__: JSON.stringify(pdfWorker) },
+  define: {
+    __PDF_WORKER_SRC__: JSON.stringify(pdfWorker),
+    __MEDIAPIPE_WASM__: JSON.stringify(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${mediapipeVersion}/wasm`),
+  },
   logLevel: 'warning',
 });
 const entrySrc = (name) => {
@@ -184,9 +188,9 @@ await writeFile(
 <h1>Privacy</h1>
 <p>AnyRedact is built so that your documents stay with you.</p>
 <h2>How your content is processed</h2>
-<p>To find personal information, the content of your file is sent over HTTPS to our Cloudflare Worker and analysed by AI models on Cloudflare Workers AI. Today that is the text read from your document; for formats that need it, such as audio or video, it may be the media itself. Content is processed in memory for that request only. We do not store it or the results, do not log it, and do not use it for training. Cloudflare processes the request as our infrastructure provider.</p>
+<p>To find personal information, the content of your file is sent over HTTPS to our Cloudflare Worker and analysed by AI models on Cloudflare Workers AI. Normally that is the text read from your document. If you turn on picture redaction (faces, screens, road signs or number plates), the page images are sent too. Content is processed in memory for that request only. We do not store it or the results, do not log it, and do not use it for training. Cloudflare processes the request as our infrastructure provider.</p>
 <p>Wherever possible the work happens in your browser instead: documents are opened, text is read (using the open-source Tesseract OCR engine, loaded from the jsDelivr CDN, for images and scanned pages) and the redacted copy is created on your device.</p>
-<p>Nothing is sent until you choose AI detection for a file. You can always use the built-in rules instead, which run entirely in your browser.</p>
+<p>Nothing is sent until you choose AI detection for a file. You can always use the built-in rules instead, which run entirely in your browser. Picture redaction also looks for faces, screens and stop signs in your browser first, with models downloaded to your device.</p>
 <h2>What we collect</h2>
 <p>No third-party analytics. To give everyone a free daily AI allowance, your browser keeps a random ID (in local storage) and we count, per day, how many characters that ID and your IP address sent for AI detection. Our hosting provider keeps standard, short-lived request logs (such as IP address and URL) for security and abuse prevention.</p>
 <h2>Accounts and payments</h2>

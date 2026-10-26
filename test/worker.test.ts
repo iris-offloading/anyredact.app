@@ -141,3 +141,17 @@ test('free allowance is enforced per browser, with a larger shared IP allowance'
   assert.equal(res.status, 402);
   assert.equal(((await res.json()) as { code: string }).code, 'quota');
 });
+
+test('vision regions are validated and scaled to thousandths', async () => {
+  const { parseRegions } = await import('../src/worker/vision.ts');
+  const out = parseRegions(
+    'Here: {"items":[{"kind":"face","box":[10,20,110,220]},{"kind":"plate","box":[0.1,0.2,0.3,0.4]},{"kind":"dog","box":[1,2,3,4]},{"kind":"face","box":[5,5]},{"kind":"face","box":[900,900,1200,950]}]}',
+    ['face', 'plate'],
+  );
+  assert.deepEqual(out, [
+    { kind: 'face', box: [10, 20, 110, 220] },
+    { kind: 'plate', box: [100, 200, 300, 400] },
+    { kind: 'face', box: [900, 900, 1000, 950] },
+  ]);
+  assert.deepEqual(parseRegions('not json', ['face']), []);
+});

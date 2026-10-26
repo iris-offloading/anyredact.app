@@ -125,6 +125,29 @@ async function download(name) {
   await page.unroute('**/api/check');
 }
 
+// Picture redaction: off by default, local pass first, server pass only after consent
+{
+  const visionCalls = [];
+  await page.route('**/api/vision', (route) => {
+    visionCalls.push(JSON.parse(route.request().postData() || '{}'));
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ regions: [{ kind: 'plate', box: [100, 100, 300, 200] }] }) });
+  });
+  await page.route('**/api/detect', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities: [] }) }));
+  await run('redact-image', fx('sample.png'));
+  const pictureChips = page.locator('label.chip', { hasText: 'Number plates' });
+  check((await pictureChips.count()) === 1 && !(await pictureChips.locator('input').isChecked()), 'picture options shown and off by default');
+  await pictureChips.click();
+  await page.waitForFunction(() => !/Looking for faces/.test(document.querySelector('.status')?.textContent ?? ''), null, { timeout: 60_000 });
+  check(visionCalls.length === 0, 'no picture sent before consent');
+  await page.click('text=Find personal info with AI');
+  await page.waitForSelector('label.finding:has-text("Number plate 1")', { timeout: 30_000 });
+  check(visionCalls.length === 1 && /^data:image\/jpeg;base64,/.test(visionCalls[0].image) && visionCalls[0].kinds.join() === 'plate', 'picture sent after consent with the ticked kinds');
+  await page.screenshot({ path: fx('pictures.png') });
+  await pictureChips.click(); // leave the option off for later tests
+  await page.unroute('**/api/vision');
+  await page.unroute('**/api/detect');
+}
+
 // Home page, and the fallback when the AI binding is missing
 {
   await page.goto(BASE);

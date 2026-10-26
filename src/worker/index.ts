@@ -5,6 +5,7 @@ import { handleDetect, json, type Env } from './detect.ts';
 import { handleAccounts } from './accounts.ts';
 import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';
+import { handleVision } from './vision.ts';
 
 // Durable Object class for the free daily allowance; workerd allows class exports.
 export { Quota } from './quota.ts';
@@ -14,6 +15,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/detect') return handleDetect(request, env);
     if (url.pathname === '/api/check') return handleCheck(request, env);
+    if (url.pathname === '/api/vision') return handleVision(request, env);
     const account = (await handleAccounts(request, env, url)) ?? (await handleBilling(request, env, url));
     if (account) return account;
     if (url.pathname === '/api/quota') return json({ quota: await quotaStatus(request, env) });
