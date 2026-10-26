@@ -1,10 +1,14 @@
-import { dedupe, detectPatterns, findTerms, phonePublicHint, plausibleEntity, type EntityType, type Span } from './detect.ts';
+import { contactPublicHint, dedupe, detectPatterns, findTerms, plausibleEntity, type EntityType, type Span } from './detect.ts';
 import { detectNames, nameVariants } from './names.ts';
 
 export interface Term {
   text: string;
   type: EntityType;
+  /** Set by the AI for contact details that belong to a business or public service. */
+  owner?: 'person' | 'organization';
 }
+
+const CONTACT_TYPES = new Set<EntityType>(['phone', 'email', 'url', 'address']);
 
 export interface UnitSpan extends Span {
   unitId: string;
@@ -37,11 +41,12 @@ export function analyzeUnits(
   }
   const ai = opts.ai?.filter((e) => plausibleEntity(e.text, e.type));
   if (ai) {
+    const orgOwned = new Set(ai.filter((e) => e.owner === 'organization' && CONTACT_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
     for (let s of findTerms(text, ai, 'ai')) {
       // Models sometimes call an SSN/ITIN-shaped number a phone number.
       if (s.type === 'phone' && /^\d{3}[- ]\d{2}[- ]\d{4}$/.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
-      const hint = s.type === 'phone' ? phonePublicHint(text, s.start, text.slice(s.start, s.end)) : undefined;
-      spans.push(hint ? { ...s, publicHint: hint } : s);
+      if (CONTACT_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };
+      spans.push(s);
     }
     names.push(...ai.filter((e) => e.type === 'name').map((e) => e.text));
   }
@@ -49,14 +54,19 @@ export function analyzeUnits(
   const variants = nameVariants(names).map((t) => ({ text: t, type: 'name' as EntityType }));
   spans.push(...findTerms(text, variants, 'pattern', true));
 
-  // The same number should be treated the same everywhere: if any mention looks
-  // like a public line (e.g. next to "Helpline"), flag every mention of it.
+  // Business and public-service contact details start unticked. The same
+  // number or address is treated the same everywhere: if any mention looks
+  // public (e.g. next to "Helpline" or in a letterhead), flag every mention.
   const merged = dedupe(spans);
-  const phoneKey = (s: Span) => text.slice(s.start, s.end).replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
-  const publicPhones = new Map<string, string>();
-  for (const s of merged) if (s.type === 'phone' && s.publicHint) publicPhones.set(phoneKey(s), s.publicHint);
+  for (const s of merged) if (!s.publicHint && CONTACT_TYPES.has(s.type)) s.publicHint = contactPublicHint(text, s.start, s.end, s.type);
+  const contactKey = (s: Span) => {
+    const v = text.slice(s.start, s.end);
+    return s.type === 'phone' ? `phone:${v.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '')}` : `${s.type}:${v.toLowerCase()}`;
+  };
+  const publicContacts = new Map<string, string>();
+  for (const s of merged) if (s.publicHint && CONTACT_TYPES.has(s.type)) publicContacts.set(contactKey(s), s.publicHint);
   for (const s of merged) {
-    const hint = s.type === 'phone' && !s.publicHint ? publicPhones.get(phoneKey(s)) : undefined;
+    const hint = CONTACT_TYPES.has(s.type) && !s.publicHint ? publicContacts.get(contactKey(s)) : undefined;
     if (hint) s.publicHint = hint;
   }
 

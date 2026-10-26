@@ -73,3 +73,31 @@ test('service and helpline numbers are flagged as probably public', () => {
   assert.deepEqual(hints('International callers: 1-267-941-1000'), [['1-267-941-1000', 'Looks like a helpline']]);
   assert.deepEqual(hints('My mobile is 07700 900123'), [['07700 900123', undefined]]);
 });
+
+test('company letterhead contacts start as public, personal ones do not', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = [
+    'CZ.NIC, z.s.p.o     IČ 67985726     T +420 222 745 111     kontakt@nic.cz',
+    'Milešovská 1136/5, 130 00 Prague 3     DIČ CZ67985726     M +420 731 657 660     www.nic.cz',
+    '',
+    'Dear Jan, call me on +420 602 123 456 or write to jan.novak@seznam.cz.',
+  ].join('\n');
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['name', 'email', 'phone'], ai: [] });
+  const hint = (v: string) => spans.find((s) => text.slice(s.start, s.end) === v)?.publicHint;
+  assert.ok(hint('+420 222 745 111'), 'switchboard');
+  assert.ok(hint('+420 731 657 660'), 'letterhead mobile');
+  assert.ok(hint('kontakt@nic.cz'), 'generic mailbox');
+  assert.equal(hint('+420 602 123 456'), undefined);
+  assert.equal(hint('jan.novak@seznam.cz'), undefined);
+});
+
+test('AI organisation owner marks a contact public everywhere it appears', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = 'Write to j.smith@acme.example today.\nAgain: j.smith@acme.example';
+  const spans = analyzeUnits([{ id: 'u', text }], {
+    types: ['email'],
+    ai: [{ text: 'j.smith@acme.example', type: 'email', owner: 'organization' }],
+  });
+  assert.equal(spans.length, 2);
+  assert.ok(spans.every((s) => s.publicHint));
+});

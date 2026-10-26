@@ -64,6 +64,32 @@ export function phonePublicHint(text: string, start: number, match: string): str
   return undefined;
 }
 
+// Same-line signs that a contact detail belongs to an organisation: company
+// registration and VAT numbers, legal forms and web addresses, as in letterheads and footers.
+const ORG_CONTEXT = /(?:^|[^\p{L}])(?:IČO?|DIČ|VAT(?: (?:No|Reg))?|USt-?IdNr|Steuernummer|HRB|SIRE[NT]|TVA|KvK|BTW|NIF|CIF|P\.? ?IVA|Reg(?:istration)?\.? ?No|Company (?:No|Number|Reg)|ABN|ACN|EIN)\b|www\.|\b(?:s\.r\.o\.|z\.s\.p\.o\.?|a\.s\.|GmbH|AG|Ltd|LLC|LLP|PLC|Inc\.?|Corp\.?|S\.A\.|SAS|SARL|S\.p\.A\.|S\.r\.l\.|B\.V\.|N\.V\.|Oy|AB|ApS|Sp\. z o\.o\.)(?![\p{L}])/u;
+// Mailboxes that belong to a team or company rather than a person.
+const GENERIC_MAILBOX = /^(?:info|kontakt|contact|contacto|contatto|office|kancelar|support|help|hello|hi|sales|admin|enquiries|inquiries|service|customerservice|noreply|no-reply|press|media|hr|jobs|careers|billing|invoices?|accounts|mail|team|reception|post|postmaster|webmaster|privacy|dpo|legal|marketing|orders|booking|bookings)(?:[._-][a-z]+)?@/i;
+
+/**
+ * Flags contact details (phones, emails, addresses, links) that look like an
+ * organisation's or a public service's rather than a private person's.
+ */
+export function contactPublicHint(text: string, start: number, end: number, type: EntityType): string | undefined {
+  const match = text.slice(start, end);
+  if (type === 'phone') {
+    const hint = phonePublicHint(text, start, match);
+    if (hint) return hint;
+  }
+  if (type === 'email' && GENERIC_MAILBOX.test(match)) return 'Generic company mailbox';
+  if (type === 'phone' || type === 'email' || type === 'url' || type === 'address') {
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    const lineEnd = text.indexOf('\n', end);
+    const line = text.slice(lineStart, start) + ' ' + text.slice(end, lineEnd < 0 ? text.length : lineEnd);
+    if (ORG_CONTEXT.test(line)) return 'Company letterhead or footer';
+  }
+  return undefined;
+}
+
 interface Rule {
   type: EntityType;
   re: RegExp;
@@ -211,7 +237,12 @@ export function plausibleEntity(text: string, type: EntityType): boolean {
 export function dedupe(spans: Span[]): Span[] {
   const out: Span[] = [];
   for (const s of spans) {
-    if (out.some((o) => o.start <= s.start && o.end >= s.end)) continue;
+    const cover = out.find((o) => o.start <= s.start && o.end >= s.end);
+    if (cover) {
+      // Keep a public hint from a duplicate of the same text (e.g. the AI saying a rule match is a company's).
+      if (s.publicHint && !cover.publicHint && cover.start === s.start && cover.end === s.end) cover.publicHint = s.publicHint;
+      continue;
+    }
     for (let i = out.length - 1; i >= 0; i--) {
       if (s.start <= out[i].start && s.end >= out[i].end) out.splice(i, 1);
     }

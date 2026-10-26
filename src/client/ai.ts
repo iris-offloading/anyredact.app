@@ -3,6 +3,7 @@ import type { EntityType } from '../shared/detect.ts';
 export interface AiEntity {
   text: string;
   type: EntityType;
+  owner?: 'person' | 'organization';
 }
 
 // Stays under the Worker's per-request limit (MAX_CHARS in src/worker/detect.ts).

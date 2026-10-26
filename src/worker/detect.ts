@@ -30,7 +30,8 @@ const SYSTEM_PROMPT = `You find personally identifiable and sensitive informatio
 Return every exact substring of the input that should be redacted, copied character for character, each distinct string once.
 Types: name (people's names), ssn (US Social Security numbers and ITINs), address (street addresses, postal codes with city), email, phone, id (passport, licence, tax, account, patient, employee, case or national ID numbers), date (birth dates and other personal dates), org (employers, schools, hospitals tied to a person), card (payment cards), iban (bank accounts), url (personal links), other (anything else sensitive such as health details, signatures, usernames or passwords).
 Be thorough with names: include every private person mentioned anywhere (headers, greetings, signatures, tables, lists, quoted emails), in every form that appears, such as "Jane Doe", "Doe, Jane", "J. Doe", "Ms. Doe", "Jane" and "DOE". Names from any language or culture count.
-Return the values, never field labels or acronyms such as "Name:", "SSN" or "ITIN". Do not return headings, generic words, well-known public figures mentioned in passing, or the contact details of businesses and public services (helplines, office numbers and addresses). If nothing is sensitive return an empty list.`;
+Return the values, never field labels or acronyms such as "Name:", "SSN" or "ITIN". Do not return headings, generic words or well-known public figures mentioned in passing.
+For every phone, email, address and url, set owner: "organization" when it belongs to a business, institution or public service (letterheads and footers, company switchboards, helplines, generic mailboxes such as info@ or kontakt@, office addresses), and "person" when it belongs to a private person, including an employee's direct line or personal mobile. For all other types set owner to "person". If nothing is sensitive return an empty list.`;
 
 const SCHEMA = {
   type: 'object',
@@ -42,8 +43,9 @@ const SCHEMA = {
         properties: {
           text: { type: 'string' },
           type: { type: 'string', enum: [...AI_TYPES] },
+          owner: { type: 'string', enum: ['person', 'organization'] },
         },
-        required: ['text', 'type'],
+        required: ['text', 'type', 'owner'],
       },
     },
   },
@@ -53,6 +55,7 @@ const SCHEMA = {
 export interface Entity {
   text: string;
   type: (typeof AI_TYPES)[number];
+  owner?: 'organization';
 }
 
 export function chunkText(text: string, size = CHUNK_CHARS): string[] {
@@ -93,7 +96,7 @@ function parseEntities(raw: unknown, source: string): Entity[] {
     if (!source.includes(text)) continue;
     const type = (AI_TYPES as readonly string[]).includes(e.type) ? e.type : 'other';
     if (!plausibleEntity(text, type)) continue;
-    out.push({ text, type });
+    out.push(e.owner === 'organization' ? { text, type, owner: 'organization' } : { text, type });
   }
   return out;
 }
