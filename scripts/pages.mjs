@@ -8,8 +8,8 @@ export const SITE = {
 };
 
 const privacyFaq = {
-  q: 'Are my files uploaded?',
-  a: 'No. Files are opened and redacted inside your browser. Only the text read from the file is sent to our AI model to find personal information; the file itself never leaves your device, and nothing is stored.',
+  q: 'Do you store my files?',
+  a: 'No. Your content is sent to our AI model only to find personal information, is processed in memory and is never stored, logged or used for training. There are no accounts, and nothing is kept after the request finishes.',
 };
 const freeFaq = {
   q: 'Is AnyRedact really free?',
@@ -23,10 +23,10 @@ export const TOOLS = [
     nav: 'PDF',
     title: 'Redact PDF Online Free – Permanently Remove Text | AnyRedact',
     description:
-      'Redact PDF files online for free. Automatically find emails, phone numbers, account numbers and names, black them out and download a clean PDF. Your file never leaves your browser.',
+      'Redact PDF files online for free. Automatically find emails, phone numbers, account numbers and names, black them out and download a clean PDF. Free, no sign-up, nothing stored.',
     h1: 'Redact PDF online',
     lead: 'Black out sensitive text in any PDF, including scanned pages, and download a flattened copy that cannot be un-redacted.',
-    hint: 'PDF up to 60 pages · your file stays in your browser',
+    hint: 'PDF up to 60 pages · nothing is stored',
     points: [
       ['True redaction', 'Pages are flattened to images on export, so the original text, links, form fields and metadata are gone, not just covered.'],
       ['Scanned PDFs too', 'Pages without a text layer are read with OCR so their contents can be detected.'],
@@ -82,7 +82,7 @@ export const TOOLS = [
       'Redact Word documents (DOCX) online for free. Find and remove personal information from text, headers, footers, comments and tracked changes, and strip author metadata.',
     h1: 'Redact Word documents (DOCX)',
     lead: 'Remove personal information from .docx files while keeping the formatting. Headers, footers, footnotes, comments and tracked changes are covered.',
-    hint: 'Word .docx files · your file stays in your browser',
+    hint: 'Word .docx files · nothing is stored',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
       ['Hidden places too', 'Tracked changes, comments, headers, footers and hyperlink targets are redacted along with the body.'],
@@ -132,12 +132,12 @@ export const HOME = {
   format: 'all',
   title: 'AnyRedact – Free Online Redaction Tool for PDF, Images, Word & Text',
   description:
-    'Redact PDFs, images, Word documents and text online for free. AI finds the personal information and you black it out. Your file never leaves your browser.',
+    'Redact PDFs, images, Word documents and text online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
   lead: 'Drop a PDF, image, Word document or text file. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
   hint: 'PDF, Word (DOCX), PNG, JPG, WebP or text',
   points: [
-    ['Your file stays with you', 'Files are opened and redacted in your browser. Only the text is checked by our AI model, and nothing is stored.'],
+    ['Nothing is stored', 'Your content is processed only to find personal information and is never stored, logged or used for training. No accounts needed.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],
   ],

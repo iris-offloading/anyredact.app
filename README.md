@@ -6,7 +6,7 @@ Free online redaction for PDF, images, Word (DOCX) and text, served from Cloudfl
 
 - **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
 - **Rules alongside the model:** `src/shared/detect.ts` adds checksum-verified card numbers and IBANs, emails, phones (including ones wrapped across a line), SSNs and IPs, and `src/shared/names.ts` adds names found from titles, labels and greetings. `src/shared/analyze.ts` merges everything and matches every later mention of each name. If the AI endpoint fails, these rules still run and the user is warned.
-- **Redaction** always happens in the browser; the file itself is never uploaded.
+- **Redaction** happens in the browser. Today only extracted text is sent to the server; future formats such as audio or video may need the media itself, so user-facing copy promises "processed, never stored" rather than "never uploaded".
 
 | Format | What the download contains |
 | --- | --- |
