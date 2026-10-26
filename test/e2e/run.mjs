@@ -105,7 +105,7 @@ async function download(name) {
 
 // Image metadata: listed in the panel, gone from the download
 {
-  writeFileSync(fx('photo.jpg'), withMetadata(await page.screenshot({ type: 'jpeg' })));
+  writeFileSync(fx('photo.jpg'), await withMetadata(await page.screenshot({ type: 'jpeg' })));
   await run('redact-image', fx('photo.jpg'), '.meta dl');
   const meta = await page.$$eval('.meta > dl dt, .meta > dl dd', (els) => els.map((e) => e.textContent));
   const value = (label) => meta[meta.indexOf(label) + 1];
