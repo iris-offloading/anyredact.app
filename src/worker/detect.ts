@@ -183,6 +183,39 @@ export function json(body: unknown, status = 200) {
   });
 }
 
+async function detectText(env: Env, text: string, model: string, usage: Usage, raw?: unknown[], options?: object): Promise<Entity[]> {
+  const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, options)));
+  const seen = new Set<string>();
+  return results.flat().filter((e) => {
+    const k = `${e.type}\u0000${e.text}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+// Preview-only batch mode for benchmarks: many texts in one request, a few at a time.
+async function detectBatch(env: Env, texts: unknown[], model: string, options?: object): Promise<Response> {
+  const out: unknown[] = new Array(texts.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < texts.length) {
+      const i = next++;
+      const text = texts[i];
+      const usage: Usage = {};
+      const started = Date.now();
+      try {
+        if (typeof text !== 'string' || text.length > MAX_CHARS) throw new Error('invalid text');
+        out[i] = { entities: await detectText(env, text, model, usage, undefined, options), ms: Date.now() - started, usage };
+      } catch (err) {
+        out[i] = { error: String(err), usage };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, texts.length) }, worker));
+  return json({ model, results: out });
+}
+
 export async function handleDetect(request: Request, env: Env): Promise<Response> {
   if (!env.AI) return json({ error: 'AI detection is not configured on this server.' }, 503);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -196,30 +229,28 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   }
 
   let text: unknown;
+  let texts: unknown;
   let requested: unknown;
   let options: unknown;
   try {
-    ({ text, model: requested, options } = (await request.json()) as { text?: unknown; model?: unknown; options?: unknown });
+    ({ text, texts, model: requested, options } = (await request.json()) as { text?: unknown; texts?: unknown; model?: unknown; options?: unknown });
   } catch {
     return json({ error: 'Invalid JSON' }, 400);
   }
+  const trials = env.MODEL_TRIALS === '1';
+  const trial = trials && typeof requested === 'string' && requested.startsWith('@cf/');
+  const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
+  const extra = trials && options && typeof options === 'object' ? options : undefined;
+  if (trials && Array.isArray(texts) && texts.length <= 50) return detectBatch(env, texts, model, extra);
+
   if (typeof text !== 'string' || !text.trim()) return json({ entities: [] });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long for AI mode (max ${MAX_CHARS} characters).` }, 413);
 
-  const trial = env.MODEL_TRIALS === '1' && typeof requested === 'string' && requested.startsWith('@cf/');
-  const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
   const usage: Usage = {};
   const raw: unknown[] | undefined = trial ? [] : undefined;
   const started = Date.now();
   try {
-    const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, trial && options && typeof options === 'object' ? options : undefined)));
-    const seen = new Set<string>();
-    const entities = results.flat().filter((e) => {
-      const k = `${e.type}\u0000${e.text}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
+    const entities = await detectText(env, text, model, usage, raw, trial ? extra : undefined);
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw });
     return json({ entities });
   } catch (err) {
