@@ -180,14 +180,17 @@ export async function runWithRetry<T>(call: () => Promise<T>, waits = [1500, 400
 
 async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object, waits?: number[]): Promise<Entity[]> {
   if (model.endsWith('/clairic')) return detectClairic(env, chunk, model, usage, raw);
+  // Partner models (e.g. openai/…) go through AI Gateway with OpenAI's own
+  // parameters: max_completion_tokens, a named strict schema, default temperature.
+  const partner = !model.startsWith('@cf/');
   const result = (await runWithRetry(() => env.AI!.run(model as Parameters<Ai['run']>[0], {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: chunk },
     ],
-    response_format: { type: 'json_schema', json_schema: SCHEMA },
-    max_tokens: 4096,
-    temperature: 0,
+    ...(partner
+      ? { response_format: { type: 'json_schema', json_schema: { name: 'entities', schema: SCHEMA } }, max_completion_tokens: 4096 }
+      : { response_format: { type: 'json_schema', json_schema: SCHEMA }, max_tokens: 4096, temperature: 0 }),
     ...MODEL_OPTIONS[model],
     ...extra,
   } as never), waits)) as { usage?: Usage };
@@ -269,7 +272,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     return json({ error: 'Invalid JSON' }, 400);
   }
   const trials = env.MODEL_TRIALS === '1';
-  const trial = trials && typeof requested === 'string' && requested.startsWith('@cf/');
+  const trial = trials && typeof requested === 'string' && /^(@cf\/)?[\w.-]+\/[\w.-]+$/.test(requested);
   const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
   const extra = trials && options && typeof options === 'object' ? options : undefined;
   if (trials && Array.isArray(texts) && texts.length <= 50) return detectBatch(env, texts, model, extra);
