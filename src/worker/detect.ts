@@ -108,7 +108,7 @@ export function json(body: unknown, status = 200) {
 }
 
 export async function handleDetect(request: Request, env: Env): Promise<Response> {
-  if (!env.AI) return json({ error: 'AI detection is not configured on this server. Private mode still works.' }, 503);
+  if (!env.AI) return json({ error: 'AI detection is not configured on this server.' }, 503);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const origin = request.headers.get('origin');
   if (origin && new URL(origin).host !== new URL(request.url).host) return json({ error: 'Forbidden' }, 403);
@@ -140,6 +140,6 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     return json({ entities });
   } catch (err) {
     console.error('detect failed', err);
-    return json({ error: 'AI detection is unavailable right now. Private mode still works.' }, 502);
+    return json({ error: 'AI detection is unavailable right now.' }, 502);
   }
 }

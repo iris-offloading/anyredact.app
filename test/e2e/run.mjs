@@ -99,15 +99,14 @@ async function download(name) {
   check(filename === 'sample-redacted.png', `image filename ${filename}`);
 }
 
-// Home page and AI mode fallback without an AI binding
+// Home page, and the fallback when the AI binding is missing
 {
   await page.goto(BASE);
   await page.screenshot({ path: fx('home.png'), fullPage: true });
-  await page.check('input[value="ai"]');
   await page.setInputFiles('#file-input', fx('sample.txt'));
   await page.waitForSelector('label.finding');
   const status = await page.textContent('.status');
-  check(/private-mode results/i.test(status), `ai fallback status: ${status}`);
+  check(/built-in rules only/i.test(status), `ai fallback status: ${status}`);
 }
 
 check(errors.filter((e) => !/api\/detect|503/.test(e)).length === 0, `no page errors ${JSON.stringify(errors)}`);

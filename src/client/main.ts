@@ -1,11 +1,10 @@
 import { analyzeUnits } from '../shared/analyze.ts';
-import { ENTITY_LABELS, PATTERN_TYPES, type EntityType } from '../shared/detect.ts';
+import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
 import { detectWithAi, type AiEntity } from './ai.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
 
 type Kind = LoadedDoc['kind'];
-type Mode = 'private' | 'ai';
 
 const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
@@ -16,7 +15,9 @@ const ACCEPT: Record<Kind | 'all', string> = {
 };
 ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
 
-const DEFAULT_TYPES: EntityType[] = ['name', 'email', 'phone', 'ssn', 'card', 'iban', 'ip'];
+// What the "Look for" chips offer. AI and pattern findings are both filtered by these.
+const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
+const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'other'];
 
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
@@ -77,7 +78,7 @@ class App {
   private aiEntities: AiEntity[] | null = null;
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
-  private mode: Mode = store.get('anyredact.mode') === 'ai' ? 'ai' : 'private';
+  private aiError: string | null = null;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   private terms = '';
   private style: RedactStyle = 'block';
@@ -131,17 +132,6 @@ class App {
       }),
     );
 
-    const modeBox = h('fieldset', { className: 'mode' }, h('legend', {}, 'Detection mode'));
-    const modes: [Mode, string, string][] = [
-      ['private', 'Private', 'Runs entirely in your browser. Finds names, emails, phone numbers, card and bank numbers, IDs and more.'],
-      ['ai', 'AI-assisted', 'Better at names, addresses and other context. Sends the extracted text (never the file) to our server; nothing is stored.'],
-    ];
-    for (const [value, title, desc] of modes) {
-      const input = h('input', { type: 'radio', name: 'mode', value, checked: this.mode === value });
-      input.addEventListener('change', () => this.setMode(value));
-      modeBox.append(h('label', { className: 'mode-opt' }, input, h('span', {}, h('strong', {}, title), h('small', {}, desc))));
-    }
-
     this.intake = h('div', { className: 'intake' }, drop, paste);
     this.status = h('div', { className: 'status', role: 'status', 'aria-live': 'polite', hidden: true });
 
@@ -150,7 +140,7 @@ class App {
     const reset = h('button', { type: 'button', className: 'btn ghost', textContent: 'New file', onclick: () => this.reset() });
 
     const typeBoxes = h('div', { className: 'types' });
-    for (const t of PATTERN_TYPES) {
+    for (const t of CHIP_TYPES) {
       const cb = h('input', { type: 'checkbox', checked: this.types.has(t) });
       cb.addEventListener('change', () => {
         cb.checked ? this.types.add(t) : this.types.delete(t);
@@ -200,7 +190,7 @@ class App {
     this.preview = h('div', { className: 'preview' });
     this.workspace = h('div', { className: 'workspace', hidden: true }, panel, this.preview);
 
-    root.append(modeBox, this.intake, this.status, this.workspace);
+    root.append(this.intake, this.status, this.workspace);
     document.addEventListener('paste', (e) => {
       if (this.doc || (e.target as HTMLElement)?.closest?.('textarea,input')) return;
       const f = e.clipboardData?.files[0];
@@ -214,12 +204,6 @@ class App {
     this.status.hidden = !msg;
     this.status.textContent = msg;
     this.status.classList.toggle('error', error);
-  }
-
-  private setMode(m: Mode) {
-    this.mode = m;
-    store.set('anyredact.mode', m);
-    if (this.doc) this.analyze();
   }
 
   async open(file: File) {
@@ -252,6 +236,7 @@ class App {
     this.findings = [];
     this.boxes = [];
     this.aiEntities = null;
+    this.aiError = null;
     this.overrides.clear();
     this.editors = [];
     this.preview.replaceChildren();
@@ -270,14 +255,15 @@ class App {
       .filter(Boolean)
       .map((text) => ({ text, type: 'custom' as EntityType }));
 
-    if (this.mode === 'ai' && !this.aiEntities) {
+    // Ask the model once per document; pattern rules run alongside it as a safety net.
+    if (!this.aiEntities && !this.aiError) {
       const text = doc.units.map((u) => u.text).join('\n\n');
       if (text.trim()) {
-        this.say('Asking the AI model to look for names, addresses and other details…');
+        this.say('Finding names, addresses and other personal details…');
         try {
           this.aiEntities = await detectWithAi(text);
         } catch (err) {
-          this.say(`${err instanceof Error ? err.message : 'AI detection failed.'} Showing private-mode results.`, true);
+          this.aiError = err instanceof Error ? err.message : 'AI detection failed.';
         }
       }
       if (this.doc !== doc) return;
@@ -287,8 +273,8 @@ class App {
     const spans = analyzeUnits(doc.units, {
       types: this.types,
       terms,
-      ai: this.mode === 'ai' ? this.aiEntities : null,
-    });
+      ai: this.aiEntities,
+    }).filter((s) => s.type === 'custom' || this.types.has(s.type));
     const findings: Finding[] = spans.map((s) => {
       const unit = byId.get(s.unitId)!;
       const key = `${unit.id}:${s.start}:${s.end}`;
@@ -307,7 +293,8 @@ class App {
       };
     });
     this.findings = findings;
-    if (!this.status.classList.contains('error')) this.say('');
+    if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
+    else this.say('');
     this.renderList();
     this.refreshPreview();
   }

@@ -29,7 +29,7 @@ export interface Span {
 export const ENTITY_LABELS: Record<EntityType, string> = {
   email: 'Email',
   phone: 'Phone',
-  ssn: 'SSN / national ID',
+  ssn: 'SSN',
   card: 'Card number',
   iban: 'IBAN / bank',
   ip: 'IP address',
@@ -40,7 +40,7 @@ export const ENTITY_LABELS: Record<EntityType, string> = {
   id: 'ID number',
   org: 'Organization',
   custom: 'Custom term',
-  other: 'Other',
+  other: 'Other sensitive',
 };
 
 /** Types the offline engine can find (names via names.ts); the UI lets users toggle each. */

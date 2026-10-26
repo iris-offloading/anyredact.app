@@ -48,7 +48,7 @@ function nav(current) {
     .map((t) => `<a href="/${t.slug}"${t.slug === current ? ' aria-current="page"' : ''}>${esc(t.nav)}</a>`)
     .join('');
   return `<header class="site-header"><div class="wrap">
-  <a class="logo" href="/"><span class="logo-mark" aria-hidden="true">▮</span>AnyRedact</a>
+  <a class="logo" href="/"><img class="logo-mark" src="/favicon.svg" width="26" height="26" alt="">AnyRedact</a>
   <nav aria-label="Tools">${links}</nav>
 </div></header>`;
 }
@@ -146,7 +146,7 @@ function toolPage(page) {
 <section class="wrap how">
   <h2>How it works</h2>
   <ol>
-    <li><strong>Open your file.</strong> It is read inside your browser, not uploaded.</li>
+    <li><strong>Open your file.</strong> It is read inside your browser and its text is checked by AI. The file itself is not uploaded.</li>
     <li><strong>Review what was found.</strong> Untick anything you want to keep, add your own words, or draw boxes.</li>
     <li><strong>Download the redacted copy.</strong> The sensitive content is removed from the file itself.</li>
   </ol>
@@ -165,7 +165,7 @@ for (const [page, file] of pages) await writeFile(path.join(dist, file), toolPag
 const privacy = {
   slug: 'privacy',
   title: 'Privacy – AnyRedact',
-  description: 'How AnyRedact handles your files: processed in your browser, never uploaded, no accounts and no tracking.',
+  description: 'How AnyRedact handles your files: redacted in your browser, only text sent for AI detection, nothing stored, no accounts and no tracking.',
   jsonLd: false,
 };
 await writeFile(
@@ -175,10 +175,10 @@ await writeFile(
     `<article class="wrap prose">
 <h1>Privacy</h1>
 <p>AnyRedact is built so that your documents stay with you.</p>
-<h2>Private mode (default)</h2>
-<p>Files are opened, analysed and redacted entirely inside your browser. They are never sent to our servers. To read text in images and scanned PDFs, your browser downloads the open-source Tesseract OCR engine and its English language data from the jsDelivr CDN; your images are not sent anywhere.</p>
-<h2>AI-assisted mode (opt-in)</h2>
-<p>If you switch to AI-assisted mode, the <em>text</em> extracted from your file is sent over HTTPS to our Cloudflare Worker and analysed by a language model on Cloudflare Workers AI. The file itself is not sent. We do not store the text or the results, and we do not use them for training. Cloudflare processes the request as our infrastructure provider.</p>
+<h2>Your file</h2>
+<p>Files are opened and redacted inside your browser, and the redacted copy is created there too. The file itself is never sent to our servers. To read text in images and scanned PDFs, your browser downloads the open-source Tesseract OCR engine and its English language data from the jsDelivr CDN; your images are not sent anywhere.</p>
+<h2>AI detection</h2>
+<p>To find personal information, the <em>text</em> read from your file is sent over HTTPS to our Cloudflare Worker and analysed by a language model on Cloudflare Workers AI. We do not store the text or the results, and we do not use them for training. Cloudflare processes the request as our infrastructure provider.</p>
 <h2>What we collect</h2>
 <p>No accounts, no cookies and no third-party analytics. Our hosting provider keeps standard, short-lived request logs (such as IP address and URL) for security and abuse prevention, and we rate-limit the AI endpoint per IP address.</p>
 <h2>Check before you share</h2>

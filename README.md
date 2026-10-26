@@ -4,8 +4,9 @@ Free online redaction for PDF, images, Word (DOCX) and text, served from Cloudfl
 
 ## How it works
 
-- **Private mode (default):** files are opened and redacted in the browser. Pattern rules in `src/shared/detect.ts` find emails, phone numbers, card numbers (Luhn-checked), IBANs (mod-97 checked), US SSNs, IPs, URLs and dates (numbers may wrap across a line break). `src/shared/names.ts` finds person names from titles, form labels, greetings, sign-offs and a list of common first names, and `src/shared/analyze.ts` then matches every later mention of each name, including first or last name alone. Images and scanned PDF pages are read with Tesseract OCR, which the browser loads from jsDelivr.
-- **AI-assisted mode (opt-in):** the browser sends the *extracted text* (never the file) to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
+- **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
+- **Rules alongside the model:** `src/shared/detect.ts` adds checksum-verified card numbers and IBANs, emails, phones (including ones wrapped across a line), SSNs and IPs, and `src/shared/names.ts` adds names found from titles, labels and greetings. `src/shared/analyze.ts` merges everything and matches every later mention of each name. If the AI endpoint fails, these rules still run and the user is warned.
+- **Redaction** always happens in the browser; the file itself is never uploaded.
 
 | Format | What the download contains |
 | --- | --- |
@@ -33,7 +34,7 @@ Each tool has its own landing page (`/redact-pdf`, `/redact-image`, `/redact-wor
 
 ```sh
 npm install
-npm run dev:local   # builds the site, no Cloudflare login needed; AI mode reports itself unavailable
+npm run dev:local   # builds the site, no Cloudflare login needed; AI detection reports itself unavailable
 npm run dev         # uses the real Workers AI binding (needs `wrangler login`)
 npm test            # unit tests
 npm run test:e2e    # with dev:local running; needs Playwright + Chromium installed

@@ -9,7 +9,7 @@ export const SITE = {
 
 const privacyFaq = {
   q: 'Are my files uploaded?',
-  a: 'No. Files are opened and redacted inside your browser. In the optional AI-assisted mode, only the extracted text is sent to our server for detection; the file itself never leaves your device and nothing is stored.',
+  a: 'No. Files are opened and redacted inside your browser. Only the text read from the file is sent to our AI model to find personal information; the file itself never leaves your device, and nothing is stored.',
 };
 const freeFaq = {
   q: 'Is AnyRedact really free?',
@@ -23,10 +23,10 @@ export const TOOLS = [
     nav: 'PDF',
     title: 'Redact PDF Online Free – Permanently Remove Text | AnyRedact',
     description:
-      'Redact PDF files online for free. Automatically find emails, phone numbers, account numbers and names, black them out and download a clean PDF. Private, in-browser.',
+      'Redact PDF files online for free. Automatically find emails, phone numbers, account numbers and names, black them out and download a clean PDF. Your file never leaves your browser.',
     h1: 'Redact PDF online',
     lead: 'Black out sensitive text in any PDF, including scanned pages, and download a flattened copy that cannot be un-redacted.',
-    hint: 'PDF up to 60 pages · processed on your device',
+    hint: 'PDF up to 60 pages · your file stays in your browser',
     points: [
       ['True redaction', 'Pages are flattened to images on export, so the original text, links, form fields and metadata are gone, not just covered.'],
       ['Scanned PDFs too', 'Pages without a text layer are read with OCR so their contents can be detected.'],
@@ -53,7 +53,7 @@ export const TOOLS = [
     description:
       'Redact images and screenshots online. AnyRedact reads the text in PNG, JPG and WebP files, finds personal data and blacks it out. Removes EXIF and GPS metadata too.',
     h1: 'Redact images and screenshots',
-    lead: 'Hide emails, phone numbers, card numbers and names in screenshots, scans and photos. Text is found automatically with on-device OCR.',
+    lead: 'Hide emails, phone numbers, card numbers and names in screenshots, scans and photos. Text is read automatically and checked by AI.',
     hint: 'PNG, JPG or WebP · or paste a screenshot with Ctrl+V',
     points: [
       ['Automatic text detection', 'On-device OCR reads the image and highlights sensitive details for you.'],
@@ -82,7 +82,7 @@ export const TOOLS = [
       'Redact Word documents (DOCX) online for free. Find and remove personal information from text, headers, footers, comments and tracked changes, and strip author metadata.',
     h1: 'Redact Word documents (DOCX)',
     lead: 'Remove personal information from .docx files while keeping the formatting. Headers, footers, footnotes, comments and tracked changes are covered.',
-    hint: 'Word .docx files · processed on your device',
+    hint: 'Word .docx files · your file stays in your browser',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
       ['Hidden places too', 'Tracked changes, comments, headers, footers and hyperlink targets are redacted along with the body.'],
@@ -119,7 +119,7 @@ export const TOOLS = [
     faq: [
       {
         q: 'Which kinds of data are detected?',
-        a: 'Private mode finds names (from clues such as titles, form labels, greetings and common first names, then every later mention), emails, phone numbers, payment card numbers (Luhn-checked), IBANs (checksum-verified), US Social Security numbers, IP addresses, URLs and dates. AI-assisted mode is better at names without such clues, and adds addresses, organizations and ID numbers.',
+        a: 'Names, street addresses, emails, phone numbers, ID and account numbers, payment card numbers (Luhn-checked), IBANs (checksum-verified), US Social Security numbers, IP addresses and other personal details. An AI model finds context-dependent items like names and addresses, and checksum rules catch structured numbers.',
       },
       privacyFaq,
       freeFaq,
@@ -132,20 +132,20 @@ export const HOME = {
   format: 'all',
   title: 'AnyRedact – Free Online Redaction Tool for PDF, Images, Word & Text',
   description:
-    'Redact PDFs, images, Word documents and text online for free. Automatically find and black out personal information, in your browser, with an optional AI mode.',
-  h1: 'Redact anything, right in your browser',
+    'Redact PDFs, images, Word documents and text online for free. AI finds the personal information and you black it out. Your file never leaves your browser.',
+  h1: 'Redact anything, with AI that finds it for you',
   lead: 'Drop a PDF, image, Word document or text file. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
   hint: 'PDF, Word (DOCX), PNG, JPG, WebP or text',
   points: [
-    ['Private by default', 'Files are processed on your device. Nothing is uploaded unless you turn on AI-assisted detection, and even then only the text is sent.'],
+    ['Your file stays with you', 'Files are opened and redacted in your browser. Only the text is checked by our AI model, and nothing is stored.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],
   ],
   faq: [
     privacyFaq,
     {
-      q: 'What is the difference between Private and AI-assisted mode?',
-      a: 'Private mode uses rules that run in your browser. They are great at structured data like emails, phone numbers and card numbers, and find names that come with clues such as "Name:", "Dr." or "Dear". AI-assisted mode also sends the extracted text to a language model running on Cloudflare, which can recognise names, addresses and other context-dependent details.',
+      q: 'How does detection work?',
+      a: 'The text in your file is checked by a language model running on Cloudflare Workers AI, which recognises names, addresses and other context-dependent details. Checksum-verified rules for card numbers, IBANs and similar run alongside it. You review every finding before downloading.',
     },
     {
       q: 'Which file types are supported?',

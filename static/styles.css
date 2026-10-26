@@ -43,7 +43,7 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
 .site-header { border-bottom: 1px solid var(--line); background: var(--surface); }
 .site-header .wrap { display: flex; align-items: center; gap: 24px; min-height: 60px; flex-wrap: wrap; }
 .logo { font-weight: 700; font-size: 1.15rem; text-decoration: none; display: flex; align-items: center; gap: 8px; }
-.logo-mark { color: var(--accent); }
+.logo-mark { display: block; border-radius: 6px; }
 .site-header nav { display: flex; gap: 4px; flex-wrap: wrap; }
 .site-header nav a { text-decoration: none; padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 0.95rem; }
 .site-header nav a:hover { color: var(--text); background: var(--bg); }
@@ -63,16 +63,6 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
 .btn.primary:disabled { opacity: 0.6; cursor: progress; }
 .btn.ghost { padding: 6px 10px; font-size: 0.9rem; }
 
-.mode { border: 0; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-.mode legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
-.mode-opt {
-  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; cursor: pointer;
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
-}
-.mode-opt:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.mode-opt input { margin-top: 4px; accent-color: var(--accent); }
-.mode-opt strong { display: block; }
-.mode-opt small { color: var(--muted); font-size: 0.85rem; }
 
 .drop {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
