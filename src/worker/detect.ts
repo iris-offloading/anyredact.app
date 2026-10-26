@@ -160,9 +160,22 @@ async function detectClairic(env: Env, chunk: string, model: string, usage: Usag
   return parseEntities({ entities }, chunk);
 }
 
-async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object): Promise<Entity[]> {
+// Workers AI caps requests per minute per model (error 3021). Back off and retry
+// rather than failing a document because of a short burst.
+export async function runWithRetry<T>(call: () => Promise<T>, waits = [1500, 4000]): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (err) {
+      if (attempt >= waits.length || !/\b3021\b|rate limit/i.test(String(err))) throw err;
+      await new Promise((r) => setTimeout(r, waits[attempt]));
+    }
+  }
+}
+
+async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object, waits?: number[]): Promise<Entity[]> {
   if (model.endsWith('/clairic')) return detectClairic(env, chunk, model, usage, raw);
-  const result = (await env.AI!.run(model as Parameters<Ai['run']>[0], {
+  const result = (await runWithRetry(() => env.AI!.run(model as Parameters<Ai['run']>[0], {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: chunk },
@@ -172,7 +185,7 @@ async function detectChunk(env: Env, chunk: string, model: string, usage: Usage,
     temperature: 0,
     ...MODEL_OPTIONS[model],
     ...extra,
-  } as never)) as { usage?: Usage };
+  } as never), waits)) as { usage?: Usage };
   raw?.push(result);
   usage.prompt_tokens = (usage.prompt_tokens ?? 0) + (result?.usage?.prompt_tokens ?? 0);
   usage.completion_tokens = (usage.completion_tokens ?? 0) + (result?.usage?.completion_tokens ?? 0);
@@ -186,8 +199,8 @@ export function json(body: unknown, status = 200) {
   });
 }
 
-async function detectText(env: Env, text: string, model: string, usage: Usage, raw?: unknown[], options?: object): Promise<Entity[]> {
-  const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, options)));
+async function detectText(env: Env, text: string, model: string, usage: Usage, raw?: unknown[], options?: object, waits?: number[]): Promise<Entity[]> {
+  const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, options, waits)));
   const seen = new Set<string>();
   return results.flat().filter((e) => {
     const k = `${e.type}\u0000${e.text}`;
@@ -209,13 +222,13 @@ async function detectBatch(env: Env, texts: unknown[], model: string, options?: 
       const started = Date.now();
       try {
         if (typeof text !== 'string' || text.length > MAX_CHARS) throw new Error('invalid text');
-        out[i] = { entities: await detectText(env, text, model, usage, undefined, options), ms: Date.now() - started, usage };
+        out[i] = { entities: await detectText(env, text, model, usage, undefined, options, [5000, 10000, 20000, 30000]), ms: Date.now() - started, usage };
       } catch (err) {
         out[i] = { error: String(err), usage };
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(6, texts.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(2, texts.length) }, worker));
   return json({ model, results: out });
 }
 

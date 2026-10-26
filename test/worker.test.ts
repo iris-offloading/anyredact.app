@@ -91,3 +91,14 @@ test('keeps the organisation owner on contact details', async () => {
     ],
   });
 });
+
+test('retries when Workers AI rate-limits the model', async () => {
+  const { runWithRetry } = await import('../src/worker/detect.ts');
+  let calls = 0;
+  const value = await runWithRetry(async () => {
+    if (++calls < 3) throw new Error('AiError: 3021: rate limiting: inference request per min rate reached');
+    return 'ok';
+  }, [1, 1]);
+  assert.equal(value, 'ok');
+  await assert.rejects(runWithRetry(async () => { throw new Error('other'); }, [1]), /other/);
+});

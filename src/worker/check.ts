@@ -1,4 +1,4 @@
-import { json, MAX_CHARS, type Env } from './detect.ts';
+import { json, MAX_CHARS, runWithRetry, type Env } from './detect.ts';
 
 // Final check before download: the browser sends the document text with every
 // redaction already masked (█), and a decision model estimates, per category,
@@ -63,7 +63,7 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
     Object.entries(CHECKS).map(([k, q]) => [k, { type: 'noul', instructions: `${q} ${NOT_COUNTED}` }]),
   );
   try {
-    const result = (await env.AI.run(CHECK_MODEL as Parameters<Ai['run']>[0], { model: 'clef', state: text, questions } as never)) as {
+    const result = (await runWithRetry(() => env.AI!.run(CHECK_MODEL as Parameters<Ai['run']>[0], { model: 'clef', state: text, questions } as never))) as {
       answers?: Record<string, unknown>;
     };
     const risks: Partial<Record<CheckKey, number>> = {};
