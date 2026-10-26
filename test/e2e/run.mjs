@@ -1,9 +1,10 @@
 // End-to-end check of every format in a real browser.
 // Usage: npm run dev:local (in another shell), then node test/e2e/run.mjs <outdir>
 import { createRequire } from 'node:module';
+import exifr from 'exifr';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 // Playwright is not a dependency; use a globally installed copy.
@@ -12,7 +13,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8787';
 const out = path.resolve(process.argv[2] || 'e2e-out');
 mkdirSync(out, { recursive: true });
 const fx = (f) => path.join(out, f);
-await import('./fixtures.mjs').catch(() => {}); // fixtures.mjs writes into argv[2]
+const { withMetadata } = await import('./fixtures.mjs'); // fixtures.mjs writes into argv[2]
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
@@ -100,6 +101,24 @@ async function download(name) {
   await page.screenshot({ path: fx('image.png') });
   const { filename } = await download('out.png');
   check(filename === 'sample-redacted.png', `image filename ${filename}`);
+}
+
+// Image metadata: listed in the panel, gone from the download
+{
+  writeFileSync(fx('photo.jpg'), withMetadata(await page.screenshot({ type: 'jpeg' })));
+  await run('redact-image', fx('photo.jpg'), '.meta dl');
+  const meta = await page.$$eval('.meta > dl dt, .meta > dl dd', (els) => els.map((e) => e.textContent));
+  const value = (label) => meta[meta.indexOf(label) + 1];
+  check(value('Location') === '37.77500, -122.42000' && value('Camera') === 'Canon EOS R6' && value('Author') === 'Jane Doe' && value('Place') === 'San Francisco', `metadata listed: ${meta.join(' | ')}`);
+  await page.locator('.meta').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: fx('metadata.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.meta').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: fx('metadata-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { path: p, filename } = await download('photo-out.jpg');
+  const left = await exifr.parse(readFileSync(p), { xmp: true, iptc: true, mergeOutput: true }).catch(() => undefined);
+  check(filename === 'photo-redacted.jpg' && !left, `metadata stripped from ${filename}: ${JSON.stringify(left)}`);
 }
 
 // Final check: a warning stops the download until the user chooses

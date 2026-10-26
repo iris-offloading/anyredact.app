@@ -5,7 +5,7 @@ import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts'
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import { pagesFor } from '../shared/pricing.ts';
-import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
+import type { Finding, LoadedDoc, ManualBox, MetaField, RedactStyle } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
@@ -101,6 +101,7 @@ class App {
   private list: HTMLElement;
   private preview: HTMLElement;
   private notes: HTMLElement;
+  private metaBox: HTMLElement;
   private docName: HTMLElement;
   private download: HTMLButtonElement;
   private warn: HTMLElement;
@@ -204,6 +205,7 @@ class App {
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
+    this.metaBox = h('div', { className: 'meta', hidden: true });
     this.consentBox = h('div', { className: 'consent', hidden: true });
 
     const panel = h(
@@ -218,6 +220,7 @@ class App {
       termsArea,
       h('h3', {}, 'Found'),
       this.list,
+      this.metaBox,
       this.styleRow,
       this.download,
       this.warn,
@@ -254,6 +257,7 @@ class App {
       this.styleRow.hidden = this.doc.kind === 'pdf' || this.doc.kind === 'image';
       this.pictureBox.hidden = !this.doc.pages.length;
       this.notes.replaceChildren(...this.doc.notes.map((n) => h('li', {}, n)));
+      this.renderMetadata(this.doc.metadata);
       this.intake.hidden = true;
       this.workspace.hidden = false;
       this.renderPreview();
@@ -283,6 +287,7 @@ class App {
     this.editors = [];
     this.preview.replaceChildren();
     this.list.replaceChildren();
+    this.metaBox.hidden = true;
     this.workspace.hidden = true;
     this.intake.hidden = false;
     if (clearStatus) this.say('');
@@ -460,6 +465,21 @@ class App {
       out.push(h('p', { className: 'manual-count' }, `${manual} hand-drawn box${manual > 1 ? 'es' : ''}. Click a box on the preview to remove it.`));
     }
     this.list.replaceChildren(...out);
+  }
+
+  private renderMetadata(fields: MetaField[] | undefined) {
+    this.metaBox.hidden = !fields;
+    if (!fields) return;
+    const dl = (rows: MetaField[]) => h('dl', {}, ...rows.flatMap((f) => [h('dt', {}, f.label), h('dd', {}, f.value)]));
+    const key = fields.filter((f) => f.key);
+    const rest = fields.filter((f) => !f.key);
+    const body: HTMLElement[] = [];
+    if (!fields.length) body.push(h('p', { className: 'empty' }, 'None found.'));
+    else {
+      body.push(dl(key.length ? key : rest));
+      if (key.length && rest.length) body.push(h('details', {}, h('summary', {}, 'More fields'), dl(rest)));
+    }
+    this.metaBox.replaceChildren(h('h3', {}, 'Metadata'), ...body);
   }
 
   private focus(f: Finding) {

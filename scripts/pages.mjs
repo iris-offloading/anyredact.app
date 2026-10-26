@@ -48,7 +48,7 @@ export const TOOLS = [
     points: [
       ['Automatic text detection', 'On-device OCR reads the image and highlights sensitive details for you.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
-      ['Metadata removed', 'The download is re-encoded, which strips EXIF data such as GPS location and camera details.'],
+      ['Metadata removed', 'The download is re-encoded, which strips EXIF, XMP and IPTC data such as GPS location and camera details.'],
     ],
     faq: [
       {

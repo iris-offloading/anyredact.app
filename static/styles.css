@@ -140,6 +140,13 @@ textarea, select {
 .empty, .manual-count, .hint { color: var(--muted); font-size: 0.9rem; }
 .row { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 0.9rem; }
 .row select { flex: 1; }
+.meta { margin-bottom: 16px; }
+.meta dl { display: grid; grid-template-columns: minmax(84px, max-content) 1fr; gap: 4px 12px; margin: 0; font-size: 0.9rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.meta details { margin-top: 8px; }
+.meta details dl { margin-top: 8px; max-height: 240px; overflow: auto; }
+.meta summary { cursor: pointer; font-size: 0.9rem; }
 .notes { padding-left: 18px; color: var(--muted); font-size: 0.85rem; margin-bottom: 0; }
 
 .preview { min-width: 0; }
