@@ -3,7 +3,7 @@
   "name": "anyredact",
   "main": "src/worker/index.ts",
   "compatibility_date": "2025-09-01",
-  "observability": { "enabled": true },
+  "observability": { "logs": true, "traces": true, "issues": true },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
