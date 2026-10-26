@@ -1,5 +1,5 @@
-// Light/dark theme: follows the system until the visitor picks one with the
-// header toggle. Loaded in <head> so the saved theme applies before first paint.
+// Theme: system (default), light or dark, picked with the header switch and
+// kept in localStorage. Loaded in <head> so a saved theme applies before first paint.
 (() => {
   const root = document.documentElement;
   const read = () => {
@@ -9,31 +9,47 @@
       return null;
     }
   };
-  const saved = read();
-  if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
-
-  const current = () => root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  const label = (btn) => {
-    const next = current() === 'dark' ? 'light' : 'dark';
-    btn.textContent = next === 'dark' ? '☾ Dark' : '☀ Light';
-    btn.setAttribute('aria-label', `Switch to ${next} mode`);
+  const apply = (theme) => {
+    if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+    else delete root.dataset.theme;
   };
+  apply(read());
 
   document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.querySelector('.theme-toggle');
-    if (!btn) return;
-    btn.hidden = false;
-    label(btn);
-    btn.addEventListener('click', () => {
-      const next = current() === 'dark' ? 'light' : 'dark';
-      root.dataset.theme = next;
+    const group = document.querySelector('.theme-switch');
+    if (!group) return;
+    const buttons = [...group.querySelectorAll('button')];
+    const sync = () => {
+      const current = root.dataset.theme || 'system';
+      for (const b of buttons) {
+        const on = b.dataset.themeValue === current;
+        b.setAttribute('aria-checked', String(on));
+        b.tabIndex = on ? 0 : -1;
+      }
+    };
+    const choose = (b) => {
+      const value = b.dataset.themeValue;
+      apply(value);
       try {
-        localStorage.setItem('theme', next);
+        if (value === 'system') localStorage.removeItem('theme');
+        else localStorage.setItem('theme', value);
       } catch {
         /* storage unavailable: the choice lasts for this page only */
       }
-      label(btn);
+      sync();
+    };
+    for (const b of buttons) b.addEventListener('click', () => choose(b));
+    // Arrow keys move between options, as in any radio group.
+    group.addEventListener('keydown', (e) => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      const i = buttons.indexOf(document.activeElement);
+      const next = buttons[(i + step + buttons.length) % buttons.length];
+      choose(next);
+      next.focus();
     });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => label(btn));
+    sync();
+    group.hidden = false;
   });
 })();

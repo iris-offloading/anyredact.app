@@ -11,7 +11,7 @@
   --radius: 12px;
   color-scheme: light;
 }
-/* Dark colours follow the system unless the header toggle picked a theme (static/theme.js). */
+/* Dark colours follow the system unless the header switch picked a theme (static/theme.js). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --bg: #111318;
@@ -61,10 +61,13 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
 .site-header nav a { text-decoration: none; padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 0.95rem; }
 .site-header nav a:hover { color: var(--text); background: var(--bg); }
 .site-header nav a[aria-current='page'] { color: var(--text); background: var(--bg); font-weight: 600; }
-.theme-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; cursor: pointer; }
-.theme-toggle:hover { color: var(--text); background: var(--bg); }
+.theme-switch { margin-left: auto; display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); }
+.theme-switch button { display: grid; place-items: center; width: 30px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button[aria-checked='true'] { background: var(--accent); color: var(--accent-ink); }
+.theme-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (max-width: 640px) {
-  .theme-toggle { order: 1; }
+  .theme-switch { order: 1; }
   .site-header nav { order: 2; }
 }
 

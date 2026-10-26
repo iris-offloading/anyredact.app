@@ -52,6 +52,19 @@ const themeHash = (await import('node:crypto')).createHash('sha256').update(awai
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const url = (slug) => `${SITE.origin}/${slug}`;
 
+// Three-way theme switch; static/theme.js wires it up and reveals it.
+const ICONS = {
+  system: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  dark: '<path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/>',
+};
+const themeSwitch = `<div class="theme-switch" role="radiogroup" aria-label="Theme" hidden>${Object.entries(ICONS)
+  .map(
+    ([value, path]) =>
+      `<button type="button" role="radio" aria-checked="false" data-theme-value="${value}" title="${value[0].toUpperCase() + value.slice(1)} theme"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg><span class="visually-hidden">${value[0].toUpperCase() + value.slice(1)}</span></button>`,
+  )
+  .join('')}</div>`;
+
 function nav(current) {
   const links = [{ slug: '', nav: 'All formats' }, ...TOOLS]
     .map((t) => `<a href="/${t.slug}"${t.slug === current ? ' aria-current="page"' : ''}>${esc(t.nav)}</a>`)
@@ -59,7 +72,7 @@ function nav(current) {
   return `<header class="site-header"><div class="wrap">
   <a class="logo" href="/"><img class="logo-mark" src="/favicon.svg" width="26" height="26" alt="">AnyRedact</a>
   <nav aria-label="Tools">${links}</nav>
-  <button type="button" class="theme-toggle" hidden></button>
+  ${themeSwitch}
 </div></header>`;
 }
 
