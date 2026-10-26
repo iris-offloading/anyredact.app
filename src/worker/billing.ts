@@ -147,7 +147,7 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   const priceData = {
     currency: 'usd',
     unit_amount: product.cents,
-    product_data: { name: `AnyRedact ${product.name} (${product.pages.toLocaleString('en-US')} pages${product.monthly ? ' a month' : ''})` },
+    product_data: { name: product.monthly ? `AnyRedact monthly plan, ${product.pages.toLocaleString('en-US')} credits a month` : `AnyRedact ${product.name}` },
     ...(product.monthly ? { recurring: { interval: 'month' } } : {}),
   };
   const session = await stripe<{ url: string }>(env, 'checkout/sessions', {

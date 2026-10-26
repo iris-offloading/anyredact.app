@@ -1,4 +1,4 @@
-// Theme: system (default), light or dark, picked with the header switch and
+// Header behaviour. Theme: system (default), light or dark, picked with the header switch and
 // kept in localStorage. Loaded in <head> so a saved theme applies before first paint.
 (() => {
   const root = document.documentElement;
@@ -16,6 +16,10 @@
   apply(read());
 
   document.addEventListener('DOMContentLoaded', () => {
+    // The sign-in link becomes "Account" once a session exists (cookie set by the Worker).
+    const account = document.querySelector('.signin-link');
+    if (account && /(?:^|;\s*)signed_in=1/.test(document.cookie)) account.textContent = 'Account';
+
     const group = document.querySelector('.theme-switch');
     if (!group) return;
     const buttons = [...group.querySelectorAll('button')];

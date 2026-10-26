@@ -7,26 +7,18 @@ export const SITE = {
   tagline: 'Free online redaction for PDF, images, Word and text',
 };
 
-const privacyFaq = {
-  q: 'Do you store my files?',
-  a: 'No. Your content is sent to our AI model only to find personal information, is processed in memory and is never stored, logged or used for training. There are no accounts, and nothing is kept after the request finishes.',
-};
-const freeFaq = {
-  q: 'Is AnyRedact really free?',
-  a: 'Yes. There is no sign-up, watermark or page limit beyond what your browser can handle.',
-};
 
 export const TOOLS = [
   {
     slug: 'redact-pdf',
     format: 'pdf',
     nav: 'PDF',
-    title: 'Redact PDF Online Free – Permanently Remove Text | AnyRedact',
+    title: 'Redact PDF Online Free: Permanently Remove Text | AnyRedact',
     description:
-      'Redact PDF files online for free. Automatically find emails, phone numbers, account numbers and names, black them out and download a clean PDF. Free, no sign-up, nothing stored.',
+      'Redact PDF files online for free. Automatically find emails, phone numbers, account numbers and names, black them out and download a clean PDF. Free to start.',
     h1: 'Redact PDF online',
     lead: 'Black out sensitive text in any PDF, including scanned pages, and download a flattened copy that cannot be un-redacted.',
-    hint: 'PDF up to 60 pages · nothing is stored',
+    hint: 'PDF up to 60 pages',
     points: [
       ['True redaction', 'Pages are flattened to images on export, so the original text, links, form fields and metadata are gone, not just covered.'],
       ['Scanned PDFs too', 'Pages without a text layer are read with OCR so their contents can be detected.'],
@@ -34,27 +26,25 @@ export const TOOLS = [
     ],
     faq: [
       {
-        q: 'Is drawing a black box in a PDF editor enough?',
-        a: 'Often not. Many editors only place a shape on top, and the text underneath can still be copied or extracted. AnyRedact rebuilds each page as an image, so the hidden text no longer exists in the file.',
+        q: 'Is a black box drawn in a PDF editor enough?',
+        a: 'Often not. Many editors only place a shape on top, and the text underneath can still be copied. AnyRedact rebuilds each page as an image, so the hidden text is gone from the file.',
       },
       {
         q: 'Will my redacted PDF still be searchable?',
-        a: 'No. Because each page is flattened to remove the underlying text, the output is an image-only PDF. This is the safest way to make sure nothing can be recovered.',
+        a: 'No. Each page is flattened to an image, so the output has no text layer.',
       },
-      privacyFaq,
-      freeFaq,
     ],
   },
   {
     slug: 'redact-image',
     format: 'image',
     nav: 'Image',
-    title: 'Redact Image Online Free – Black Out Text in Screenshots & Photos | AnyRedact',
+    title: 'Redact Image Online Free: Black Out Text in Screenshots & Photos | AnyRedact',
     description:
       'Redact images and screenshots online. AnyRedact reads the text in PNG, JPG and WebP files, finds personal data and blacks it out. Removes EXIF and GPS metadata too.',
     h1: 'Redact images and screenshots',
     lead: 'Hide emails, phone numbers, card numbers and names in screenshots, scans and photos. Text is read automatically and checked by AI.',
-    hint: 'PNG, JPG or WebP · or paste a screenshot with Ctrl+V',
+    hint: 'PNG, JPG or WebP, or paste a screenshot',
     points: [
       ['Automatic text detection', 'On-device OCR reads the image and highlights sensitive details for you.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
@@ -63,26 +53,24 @@ export const TOOLS = [
     faq: [
       {
         q: 'Can I paste a screenshot directly?',
-        a: 'Yes. Copy a screenshot and press Ctrl+V (or Cmd+V) on this page.',
+        a: 'Yes. Copy it and press Ctrl+V or Cmd+V on this page.',
       },
       {
         q: 'Why not blur instead of a black box?',
-        a: 'Blurred or pixelated text can sometimes be reconstructed. A solid box replaces the pixels completely.',
+        a: 'Blurred or pixelated text can sometimes be reconstructed. A solid box replaces the pixels.',
       },
-      privacyFaq,
-      freeFaq,
     ],
   },
   {
     slug: 'redact-word',
     format: 'docx',
     nav: 'Word',
-    title: 'Redact Word Document Online Free – DOCX Redaction Tool | AnyRedact',
+    title: 'Redact Word Document Online Free: DOCX Redaction Tool | AnyRedact',
     description:
       'Redact Word documents (DOCX) online for free. Find and remove personal information from text, headers, footers, comments and tracked changes, and strip author metadata.',
     h1: 'Redact Word documents (DOCX)',
     lead: 'Remove personal information from .docx files while keeping the formatting. Headers, footers, footnotes, comments and tracked changes are covered.',
-    hint: 'Word .docx files · nothing is stored',
+    hint: 'Word .docx files',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
       ['Hidden places too', 'Tracked changes, comments, headers, footers and hyperlink targets are redacted along with the body.'],
@@ -91,26 +79,24 @@ export const TOOLS = [
     faq: [
       {
         q: 'Does it work with old .doc files?',
-        a: 'Not yet. Open the file in Word, LibreOffice or Google Docs and save it as .docx first.',
+        a: 'Not yet. Save it as .docx in Word, LibreOffice or Google Docs first.',
       },
       {
         q: 'Can I replace text with a label instead of black boxes?',
-        a: 'Yes. Choose "Replace with label" to turn, for example, an email address into [EMAIL].',
+        a: 'Yes. Pick "Replace with label" to turn an email address into [EMAIL], for example.',
       },
-      privacyFaq,
-      freeFaq,
     ],
   },
   {
     slug: 'redact-text',
     format: 'text',
     nav: 'Text',
-    title: 'Redact Text Online – Remove PII from Text, Logs & CSV | AnyRedact',
+    title: 'Redact Text Online: Remove PII from Text, Logs & CSV | AnyRedact',
     description:
       'Paste text or upload a TXT, CSV, JSON or log file and remove personal data in seconds. Mask emails, phone numbers, IPs, card numbers and more. Free and private.',
     h1: 'Redact text, logs and CSV files',
     lead: 'Paste text or drop a file to mask emails, phone numbers, IP addresses, card numbers and other personal data before you share it.',
-    hint: 'TXT, CSV, JSON, Markdown, logs · or paste below',
+    hint: 'TXT, CSV, JSON, Markdown or logs',
     points: [
       ['Great for logs and support tickets', 'Strip customer details before sharing logs, transcripts or datasets.'],
       ['Mask or label', 'Keep the shape of the text with █ blocks, or replace values with labels like [EMAIL].'],
@@ -118,11 +104,9 @@ export const TOOLS = [
     ],
     faq: [
       {
-        q: 'Which kinds of data are detected?',
-        a: 'Names, street addresses, emails, phone numbers, ID and account numbers, payment card numbers (Luhn-checked), IBANs (checksum-verified), US Social Security numbers, IP addresses and other personal details. An AI model finds context-dependent items like names and addresses, and checksum rules catch structured numbers.',
+        q: 'Can I keep the layout of a CSV or log?',
+        a: 'Yes. Black out keeps every line and column in place, using █ for each removed character.',
       },
-      privacyFaq,
-      freeFaq,
     ],
   },
 ];
@@ -130,27 +114,37 @@ export const TOOLS = [
 export const HOME = {
   slug: '',
   format: 'all',
-  title: 'AnyRedact – Free Online Redaction Tool for PDF, Images, Word & Text',
+  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word & Text',
   description:
     'Redact PDFs, images, Word documents and text online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
   lead: 'Drop a PDF, image, Word document or text file. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
   hint: 'PDF, Word (DOCX), PNG, JPG, WebP or text',
   points: [
-    ['Nothing is stored', 'Your content is processed only to find personal information and is never stored, logged or used for training. No accounts needed.'],
+    ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],
   ],
   faq: [
-    privacyFaq,
     {
-      q: 'How does detection work?',
-      a: 'The text in your file is checked by a language model running on Cloudflare Workers AI, which recognises names, addresses and other context-dependent details. Checksum-verified rules for card numbers, IBANs and similar run alongside it. You review every finding, and before the download a second model checks the redacted result for anything that was missed.',
+      q: 'Is AnyRedact free?',
+      a: 'Yes. You get about 30 credits a day, and one credit covers about one page of text or one picture. The built-in rules need no credits. For more, buy a monthly plan or a credit pack that never expires. There is no watermark.',
+    },
+    {
+      q: 'Do I need an account?',
+      a: 'Only to buy credits. Sign in with an email link or with Google.',
+    },
+    {
+      q: 'Do you store my files?',
+      a: 'No. Nothing leaves your browser until you agree. After that, the text (and page images, if picture redaction is on) is processed in memory to find personal information, then discarded. It is never logged or used for training.',
+    },
+    {
+      q: 'Which details are found?',
+      a: 'Names, addresses, emails, phone numbers, ID and account numbers, card numbers, IBANs, IP addresses and dates. If you turn them on, also faces, screens, road signs and number plates in pictures. Before the download, a second model checks the result for anything left.',
     },
     {
       q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), PNG, JPG, WebP and plain-text formats such as TXT, CSV, JSON and logs. Audio and video are planned.',
+      a: 'PDF, Word (.docx), PNG, JPG, WebP and text files such as TXT, CSV, JSON and logs. Audio and video are planned.',
     },
-    freeFaq,
   ],
 };

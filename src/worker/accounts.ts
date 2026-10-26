@@ -45,6 +45,9 @@ function cookie(request: Request, name: string): string | null {
 const setCookie = (name: string, value: string, maxAge: number) =>
   `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
+// Readable by page scripts only to label the header link; carries no identity.
+const signedInHint = (on: boolean) => `signed_in=${on ? 1 : ''}; Path=/; Secure; SameSite=Lax; Max-Age=${on ? SESSION_DAYS * 86400 : 0}`;
+
 const redirect = (location: string, cookies: string[] = []) => {
   const headers = new Headers({ location });
   for (const c of cookies) headers.append('set-cookie', c);
@@ -153,7 +156,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
       .first<{ email: string; expires_at: number }>();
     if (!row || row.expires_at < now()) return redirect('/account?error=link');
     const userId = await upsertUser(env, row.email);
-    return redirect('/account', [await startSession(env, userId)]);
+    return redirect('/account', [await startSession(env, userId), signedInHint(true)]);
   }
 
   if (path === '/auth/google') {
@@ -194,13 +197,13 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
       return redirect('/account?error=google');
     }
     const userId = await upsertUser(env, String(claims.email).toLowerCase(), String(claims.sub));
-    return redirect('/account', [await startSession(env, userId), setCookie('oauth_state', '', 0)]);
+    return redirect('/account', [await startSession(env, userId), signedInHint(true), setCookie('oauth_state', '', 0)]);
   }
 
   if (path === '/auth/logout' && request.method === 'POST') {
     const token = cookie(request, 'session');
     if (token) await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256(token)).run();
-    return json({ ok: true }, 200, [setCookie('session', '', 0)]);
+    return json({ ok: true }, 200, [setCookie('session', '', 0), signedInHint(false)]);
   }
 
   return json({ error: 'Not found' }, 404);

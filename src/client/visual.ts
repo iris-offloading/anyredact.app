@@ -159,7 +159,7 @@ export async function detectVisualAi(canvas: HTMLCanvasElement, kinds: Set<Visua
     body: JSON.stringify({ image: small.toDataURL('image/jpeg', 0.85), kinds: [...kinds] }),
   });
   const data = (await res.json().catch(() => ({}))) as { regions?: { kind: VisualKind; box: number[] }[]; error?: string };
-  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free AI allowance.");
+  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.");
   if (!res.ok) throw new Error(data.error || `Picture detection failed (${res.status}).`);
   const { width, height } = canvas;
   return (data.regions ?? []).map(({ kind, box: [x0, y0, x1, y1] }) => ({

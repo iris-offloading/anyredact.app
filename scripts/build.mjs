@@ -72,16 +72,16 @@ function nav(current) {
   return `<header class="site-header"><div class="wrap">
   <a class="logo" href="/"><img class="logo-mark" src="/favicon.svg" width="26" height="26" alt="">AnyRedact</a>
   <nav aria-label="Tools">${links}</nav>
-  ${themeSwitch}
+  <div class="header-actions">${themeSwitch}<a class="btn signin-link" href="/account">Sign in</a></div>
 </div></header>`;
 }
 
 function footer() {
   const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.h1)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
-  <div><strong>AnyRedact</strong><p>${esc(SITE.tagline)}. Free to use.</p></div>
+  <div><strong>AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
-  <div><h2>About</h2><ul><li><a href="/account">Plans and account</a></li><li><a href="/privacy">Privacy</a></li></ul></div>
+  <div><h2>About</h2><ul><li><a href="/privacy">Privacy</a></li></ul></div>
 </div></footer>`;
 }
 
@@ -89,7 +89,7 @@ function jsonLd(page) {
   const graph = [
     {
       '@type': 'WebApplication',
-      name: page.slug ? `${SITE.name} – ${page.h1}` : SITE.name,
+      name: page.slug ? `${SITE.name}: ${page.h1}` : SITE.name,
       url: url(page.slug),
       description: page.description,
       applicationCategory: 'UtilitiesApplication',
@@ -171,7 +171,7 @@ function toolPage(page) {
 <section class="wrap how">
   <h2>How it works</h2>
   <ol>
-    <li><strong>Open your file.</strong> Our AI finds the personal information in it. Nothing is stored.</li>
+    <li><strong>Open your file.</strong> Our AI finds the personal information in it.</li>
     <li><strong>Review what was found.</strong> Untick anything you want to keep, add your own words, or draw boxes.</li>
     <li><strong>Download the redacted copy.</strong> The sensitive content is removed from the file itself.</li>
   </ol>
@@ -189,7 +189,7 @@ for (const [page, file] of pages) await writeFile(path.join(dist, file), toolPag
 
 const privacy = {
   slug: 'privacy',
-  title: 'Privacy – AnyRedact',
+  title: 'Privacy | AnyRedact',
   description: 'How AnyRedact handles your files: processed only to find personal information, never stored or used for training, no accounts and no tracking.',
   jsonLd: false,
 };
@@ -207,7 +207,7 @@ await writeFile(
 <h2>What we collect</h2>
 <p>No third-party analytics. To give everyone a free daily AI allowance, your browser keeps a random ID (in local storage) and we count, per day, how many characters that ID and your IP address sent for AI detection. Our hosting provider keeps standard, short-lived request logs (such as IP address and URL) for security and abuse prevention.</p>
 <h2>Accounts and payments</h2>
-<p>An account is only needed to buy pages. We store your email address (or your Google account ID), your page balances and a sign-in cookie. Payments are handled by Stripe; we never see your card details. Sign-in emails are sent through Cloudflare.</p>
+<p>An account is only needed to buy credits. We store your email address (or your Google account ID), your credit balances and a sign-in cookie. Payments are handled by Stripe; we never see your card details. Sign-in emails are sent through Cloudflare.</p>
 <h2>Check before you share</h2>
 <p>Automatic detection can miss things. Always review the redacted file before sharing it.</p>
 </article>`,
@@ -217,7 +217,7 @@ await writeFile(
 await writeFile(
   path.join(dist, '404.html'),
   layout(
-    { slug: '404', title: 'Page not found – AnyRedact', description: 'Page not found.', jsonLd: false },
+    { slug: '404', title: 'Page not found | AnyRedact', description: 'Page not found.', jsonLd: false },
     `<article class="wrap prose"><h1>Page not found</h1><p>Try the <a href="/">redaction tool</a> instead.</p></article>`,
   ).replace('<link rel="canonical" href="https://anyredact.app/404">', '<meta name="robots" content="noindex">'),
 );
@@ -227,12 +227,12 @@ await writeFile(
   layout(
     {
       slug: 'account',
-      title: 'Plans and account – AnyRedact',
-      description: 'Free AI redaction every day, plus a monthly plan and page packs that never expire for larger jobs.',
+      title: 'Account | AnyRedact',
+      description: 'Free AI redaction credits every day, plus a monthly plan and credit packs that never expire.',
       jsonLd: false,
       script: accountSrc,
     },
-    `<article class="wrap prose"><h1>Plans and account</h1><div id="account"><p>Loading…</p></div></article>`,
+    `<article class="wrap prose"><h1>Account</h1><div id="account"><p>Loading…</p></div></article>`,
   ),
 );
 

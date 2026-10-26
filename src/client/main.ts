@@ -182,7 +182,6 @@ class App {
       { hidden: true },
       h('h3', {}, 'In pictures'),
       pictureChips,
-      h('p', { className: 'hint' }, 'Off unless you tick them. Faces, screens and stop signs are looked for on this device; with AI on, pictures are also checked on our server, which also finds number plates and other signs.'),
     );
 
     const termsArea = h('textarea', { rows: 3, placeholder: 'One per line, e.g. a name or project', 'aria-label': 'Words to always redact' });
@@ -314,7 +313,7 @@ class App {
         } catch (err) {
           this.aiError =
             err instanceof QuotaError
-              ? `${err.message} It resets tomorrow, and paid plans are coming soon.`
+              ? `${err.message} They reset tomorrow, or you can buy more under Account.`
               : err instanceof Error
                 ? err.message
                 : 'AI detection failed.';
@@ -353,7 +352,7 @@ class App {
     if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
     else if (this.visualError) this.say(this.visualError, true);
     else if (this.consent === 'no') this.say('Using the built-in rules only. Nothing was sent to our server, but names and addresses are easy to miss this way. Review carefully.');
-    else if (this.consent === 'ask') this.say('Your file has not left this device. The list shows what the built-in rules found so far.');
+    else if (this.consent === 'ask') this.say('The list shows what the built-in rules found so far.');
     else this.say('');
     this.renderList();
     this.refreshPreview();
@@ -444,7 +443,7 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? ` · p${f.page + 1}` : '';
+        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? `, p${f.page + 1}` : '';
         const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, (f.publicHint ? 'public? ' : '') + (f.source === 'ai' ? 'AI' : '') + where));
         row.addEventListener('mouseenter', () => this.focus(f));
         return row;
@@ -533,7 +532,7 @@ class App {
       for (const f of (byUnit.get(u.id) ?? []).sort((a, b) => a.start - b.start)) {
         if (f.start < pos) continue;
         el.append(u.text.slice(pos, f.start));
-        const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]} · click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, u.text.slice(f.start, f.end));
+        const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, u.text.slice(f.start, f.end));
         mark.addEventListener('click', () => this.toggle([f.key], !f.enabled));
         el.append(mark);
         pos = f.end;
@@ -610,9 +609,8 @@ class App {
         'p',
         {},
         h('strong', {}, 'Nothing has been sent yet. '),
-        words ? `To find names, addresses and other personal details, AnyRedact sends the text it read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare. ` : '',
-        pictures ? `Because picture redaction is on, it also sends the page image${doc.pages.length > 1 ? 's' : ''} so the AI can find what this device missed. ` : 'The file itself stays here. ',
-        'Nothing is stored.',
+        words ? `To find names, addresses and other personal details, AnyRedact sends the text read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare.` : '',
+        pictures ? ` With picture redaction on, it also sends the page image${doc.pages.length > 1 ? 's' : ''}.` : '',
       ),
       h('button', { type: 'button', className: 'btn primary', textContent: 'Find personal info with AI', onclick: () => choose('yes') }),
       h('button', { type: 'button', className: 'btn ghost', textContent: 'Use built-in rules only', onclick: () => choose('no') }),
@@ -623,7 +621,7 @@ class App {
     freePagesLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
       this.consentBox.append(
-        h('p', { className: 'hint' }, left >= pages ? `Free today: about ${left} page${left === 1 ? '' : 's'} of AI detection left. This file uses about ${pages}.` : `This file needs about ${pages} page${pages === 1 ? '' : 's'} of AI detection and you have about ${left} left today. The built-in rules are always free.`),
+        h('p', { className: 'hint' }, left >= pages ? `Uses about ${pages} credit${pages === 1 ? '' : 's'} of ${left} left today.` : `Needs about ${pages} credit${pages === 1 ? '' : 's'}; ${left} left today.`),
       );
     });
   }

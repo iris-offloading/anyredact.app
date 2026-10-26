@@ -247,7 +247,7 @@ export async function chargeUsage(request: Request, env: Env, chars: number): Pr
   const user = await currentUser(request, env);
   const paid = user ? await spendPaidPages(env, user.id, pagesFor(chars)) : false;
   if (paid) return quota;
-  return json({ error: "You've used today's free AI allowance.", code: 'quota', signedIn: !!user, quota: quota.state }, 402);
+  return json({ error: "You've used today's free credits.", code: 'quota', signedIn: !!user, quota: quota.state }, 402);
 }
 
 export async function handleDetect(request: Request, env: Env): Promise<Response> {

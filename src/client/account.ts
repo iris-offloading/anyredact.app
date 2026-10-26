@@ -46,7 +46,7 @@ function pricing(signedIn: boolean) {
         { className: 'card plan' },
         h('strong', {}, p.name),
         h('span', { className: 'plan-price' }, `${price(p.cents)}${p.monthly ? ' / month' : ''}`),
-        h('span', {}, `${p.pages.toLocaleString()} pages of AI detection${p.monthly ? ' every month' : ', never expire'}`),
+        h('span', {}, `${p.pages.toLocaleString()} credits${p.monthly ? ' every month' : ' that never expire'}`),
         h('button', {
           type: 'button',
           className: 'btn primary',
@@ -83,7 +83,7 @@ function signInForm(opts: { email: boolean; google: boolean }) {
     'section',
     {},
     h('h2', {}, 'Sign in'),
-    h('p', {}, 'You only need an account to buy pages. Free use needs no sign-in.'),
+    h('p', {}, 'Sign in to buy credits.'),
     form,
     h('a', { className: 'btn google', href: '/auth/google', 'aria-disabled': String(!opts.google), onclick: (e: Event) => !opts.google && e.preventDefault() }, 'Sign in with Google'),
     ...(!opts.email && !opts.google ? [h('p', { className: 'hint' }, 'Sign-in is being set up and will be available soon.')] : []),
@@ -95,11 +95,10 @@ function balance(user: NonNullable<Me['user']>) {
   const rows = [
     h('p', {}, 'Signed in as ', h('strong', {}, user.email ?? 'Google account')),
     sub
-      ? h('p', {}, `Monthly plan: ${(sub.pages - sub.used).toLocaleString()} of ${sub.pages.toLocaleString()} pages left, renews ${new Date(sub.renews * 1000).toLocaleDateString()}.`)
+      ? h('p', {}, `Monthly plan: ${(sub.pages - sub.used).toLocaleString()} of ${sub.pages.toLocaleString()} credits left, renews ${new Date(sub.renews * 1000).toLocaleDateString()}.`)
       : h('p', {}, 'No monthly plan.'),
-    h('p', {}, `Packs: ${user.packPages.toLocaleString()} pages left. They never expire.`),
-    h('p', { className: 'hint' }, 'Your free daily allowance is used first, then the monthly plan, then packs.'),
-  ];
+    h('p', {}, `Packs: ${user.packPages.toLocaleString()} credits left.`),
+      ];
   const actions = h('div', { className: 'row' });
   if (user.canManage) {
     actions.append(
@@ -126,12 +125,12 @@ function balance(user: NonNullable<Me['user']>) {
       },
     }),
   );
-  return h('section', {}, h('h2', {}, 'Your pages'), ...rows, actions);
+  return h('section', {}, h('h2', {}, 'Your credits'), ...rows, actions);
 }
 
 async function render() {
   const params = new URLSearchParams(location.search);
-  if (params.get('paid')) say('Thanks! Your pages are added as soon as the payment is confirmed, usually within seconds.');
+  if (params.get('paid')) say('Thanks! Your credits appear once the payment is confirmed, usually within seconds.');
   if (params.get('error') === 'link') say('That sign-in link has expired or was already used. Ask for a new one.', true);
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
   const me = (await fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null }))) as Me;
@@ -139,7 +138,7 @@ async function render() {
     status,
     me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }),
     h('h2', {}, 'Plans and packs'),
-    h('p', {}, 'Every visitor gets about 30 pages of AI detection a day for free, and the built-in rules are always free. For more, pick a plan or a pack.'),
+    h('p', {}, 'Free every day: about 30 credits. One credit covers about one page of text or one picture. The daily credits are used first, then the monthly plan, then packs.'),
     pricing(!!me.user),
   );
   if (params.get('paid')) setTimeout(render, 4000);

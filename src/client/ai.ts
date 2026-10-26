@@ -60,7 +60,7 @@ async function detectBatch(text: string): Promise<AiEntity[]> {
     body: JSON.stringify({ text }),
   });
   const data = (await res.json().catch(() => ({}))) as { entities?: AiEntity[]; error?: string };
-  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free AI allowance.");
+  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.");
   if (!res.ok) throw new Error(data.error || `AI detection failed (${res.status}).`);
   return data.entities ?? [];
 }
