@@ -19,7 +19,10 @@ zip.file('docProps/core.xml', `<?xml version="1.0" encoding="UTF-8" standalone="
 zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>
 <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Contact: </w:t></w:r><w:hyperlink r:id="rId5"><w:r><w:t>bob@</w:t></w:r><w:r><w:t>corp.io</w:t></w:r></w:hyperlink></w:p>
 <w:p><w:r><w:t xml:space="preserve">Call 555-</w:t></w:r><w:r><w:t>0100-200 today</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Prepared by: Maria Gonzalez</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Phone: 415-555-</w:t><w:br/><w:t>0132</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Fax: 415-555-</w:t></w:r></w:p><w:p><w:r><w:t>0199 (office)</w:t></w:r></w:p>
 <w:p><w:del w:id="1" w:author="Bob Author"><w:r><w:delText>old ssn 123-45-6789</w:delText></w:r></w:del></w:p>
 </w:body></w:document>`);
 writeFileSync(`${out}/sample.docx`, await zip.generateAsync({ type: 'nodebuffer' }));
-writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\n');
+writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\n');

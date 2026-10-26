@@ -49,7 +49,7 @@ async function download(name) {
   const { path: p, filename } = await download('out.txt');
   const txt = readFileSync(p, 'utf8');
   check(filename === 'sample-redacted.txt', `text filename ${filename}`);
-  check(!/jane|415|10\.0\.0/i.test(txt), `text output: ${JSON.stringify(txt)}`);
+  check(!/jane|415|0199|10\.0\.0/i.test(txt), `text output: ${JSON.stringify(txt)}`);
 }
 
 // DOCX
@@ -63,6 +63,7 @@ async function download(name) {
   const rels = await zip.file('word/_rels/document.xml.rels').async('string');
   const core = await zip.file('docProps/core.xml').async('string');
   check(!doc.includes('bob@') && !doc.includes('corp.io') && !doc.includes('123-45') && doc.includes('Contact: '), 'docx body redacted, formatting text kept');
+  check(!/Gonzalez|0132|0199/.test(doc) && doc.includes('<w:br/>'), 'docx name and wrapped phones redacted, line break kept');
   check(!doc.includes('Bob Author') && !core.includes('Bob Author'), 'docx authors removed');
   check(!rels.includes('mailto'), 'docx hyperlink target removed');
 }

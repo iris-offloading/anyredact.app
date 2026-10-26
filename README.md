@@ -4,7 +4,7 @@ Free online redaction for PDF, images, Word (DOCX) and text, served from Cloudfl
 
 ## How it works
 
-- **Private mode (default):** files are opened and redacted in the browser. Pattern rules in `src/shared/detect.ts` find emails, phone numbers, card numbers (Luhn-checked), IBANs (mod-97 checked), US SSNs, IPs, URLs and dates. Images and scanned PDF pages are read with Tesseract OCR, which the browser loads from jsDelivr.
+- **Private mode (default):** files are opened and redacted in the browser. Pattern rules in `src/shared/detect.ts` find emails, phone numbers, card numbers (Luhn-checked), IBANs (mod-97 checked), US SSNs, IPs, URLs and dates (numbers may wrap across a line break). `src/shared/names.ts` finds person names from titles, form labels, greetings, sign-offs and a list of common first names, and `src/shared/analyze.ts` then matches every later mention of each name, including first or last name alone. Images and scanned PDF pages are read with Tesseract OCR, which the browser loads from jsDelivr.
 - **AI-assisted mode (opt-in):** the browser sends the *extracted text* (never the file) to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
 
 | Format | What the download contains |

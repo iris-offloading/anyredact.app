@@ -41,8 +41,11 @@ export const ENTITY_LABELS: Record<EntityType, string> = {
   other: 'Other',
 };
 
-/** Types the offline pattern engine can find; the UI lets users toggle each. */
-export const PATTERN_TYPES: EntityType[] = ['email', 'phone', 'ssn', 'card', 'iban', 'ip', 'url', 'date'];
+/** Types the offline engine can find (names via names.ts); the UI lets users toggle each. */
+export const PATTERN_TYPES: EntityType[] = ['name', 'email', 'phone', 'ssn', 'card', 'iban', 'ip', 'url', 'date'];
+
+/** Separator between digit groups: spaces, a dot or dash, and at most one line break. */
+const SEP = String.raw`(?:[ \t]*[.-][ \t]*(?:\r?\n[ \t]*)?|[ \t]+(?:\r?\n[ \t]*)?|\r?\n[ \t]*)`;
 
 interface Rule {
   type: EntityType;
@@ -84,7 +87,7 @@ const RULES: Rule[] = [
   { type: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   { type: 'url', re: /\bhttps?:\/\/[^\s<>"')\]]*[^\s<>"')\].,;:!?]/g },
   { type: 'ssn', re: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g },
-  { type: 'card', re: /\b\d(?:[ -]?\d){12,18}\b/g, validate: luhn },
+  { type: 'card', re: /\b\d(?:[ -]?(?:\r?\n[ \t]*)?\d){12,18}\b/g, validate: luhn },
   { type: 'iban', re: /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, validate: validIban },
   {
     type: 'ip',
@@ -94,13 +97,20 @@ const RULES: Rule[] = [
   {
     type: 'phone',
     // Optional country code, optional area code in parentheses, then 2-4 digit groups.
-    re: /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{2,4}(?:[\s.-]\d{2,4}){1,4}\b|\+\d{8,15}\b/g,
+    // Groups may be split across a line break (wrapped text, PDF lines, OCR).
+    re: new RegExp(
+      String.raw`(?:\+\d{1,3}${SEP}?)?(?:\(\d{1,4}\)${SEP}?)?(?<![\d+])\d{2,5}(?:${SEP}\d{2,4}){1,4}\b|\+\d{8,15}\b`,
+      'g',
+    ),
     validate: (m) => {
       const n = digits(m).length;
       if (n < 7 || n > 15) return false;
-      // Skip things that look like dates or plain years ranges.
-      if (/^\d{4}-\d{2}-\d{2}$/.test(m.trim())) return false;
-      if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(m.trim())) return false;
+      // One wrapped line is plausible; numbers spread over several lines are likely a table.
+      if ((m.match(/\n/g) ?? []).length > 1) return false;
+      // Skip things that look like dates.
+      const flat = m.replace(/\s+/g, '');
+      if (/^\d{4}-\d{2}-\d{2}$/.test(flat)) return false;
+      if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(flat)) return false;
       return true;
     },
   },
@@ -131,11 +141,12 @@ function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Finds every occurrence of each term (case-insensitive, whitespace-tolerant). */
+/** Finds every occurrence of each term (case-insensitive unless asked, whitespace-tolerant). */
 export function findTerms(
   text: string,
   terms: { text: string; type: EntityType }[],
   source: Span['source'] = 'term',
+  caseSensitive = false,
 ): Span[] {
   const spans: Span[] = [];
   for (const term of terms) {
@@ -143,7 +154,7 @@ export function findTerms(
     if (t.length < 2) continue;
     const pattern = t.split(/\s+/).map(escapeRe).join('\\s+');
     const wordy = /^\w/.test(t) && /\w$/.test(t);
-    const re = new RegExp(wordy ? `(?<![\\w])${pattern}(?![\\w])` : pattern, 'gi');
+    const re = new RegExp(wordy ? `(?<![\\w])${pattern}(?![\\w])` : pattern, caseSensitive ? 'g' : 'gi');
     for (const m of text.matchAll(re)) {
       spans.push({ start: m.index!, end: m.index! + m[0].length, type: term.type, source });
     }

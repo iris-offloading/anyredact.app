@@ -1,4 +1,5 @@
-import { dedupe, detectPatterns, ENTITY_LABELS, findTerms, PATTERN_TYPES, type EntityType, type Span } from '../shared/detect.ts';
+import { analyzeUnits } from '../shared/analyze.ts';
+import { ENTITY_LABELS, PATTERN_TYPES, type EntityType } from '../shared/detect.ts';
 import { detectWithAi, type AiEntity } from './ai.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
@@ -15,7 +16,7 @@ const ACCEPT: Record<Kind | 'all', string> = {
 };
 ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
 
-const DEFAULT_TYPES: EntityType[] = ['email', 'phone', 'ssn', 'card', 'iban', 'ip'];
+const DEFAULT_TYPES: EntityType[] = ['name', 'email', 'phone', 'ssn', 'card', 'iban', 'ip'];
 
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
@@ -132,8 +133,8 @@ class App {
 
     const modeBox = h('fieldset', { className: 'mode' }, h('legend', {}, 'Detection mode'));
     const modes: [Mode, string, string][] = [
-      ['private', 'Private', 'Runs entirely in your browser. Finds emails, phone numbers, card and bank numbers, IDs and more.'],
-      ['ai', 'AI-assisted', 'Also finds names, addresses and other context. Sends the extracted text (never the file) to our server; nothing is stored.'],
+      ['private', 'Private', 'Runs entirely in your browser. Finds names, emails, phone numbers, card and bank numbers, IDs and more.'],
+      ['ai', 'AI-assisted', 'Better at names, addresses and other context. Sends the extracted text (never the file) to our server; nothing is stored.'],
     ];
     for (const [value, title, desc] of modes) {
       const input = h('input', { type: 'radio', name: 'mode', value, checked: this.mode === value });
@@ -282,27 +283,28 @@ class App {
       if (this.doc !== doc) return;
     }
 
-    const findings: Finding[] = [];
-    for (const unit of doc.units) {
-      let spans: Span[] = [...findTerms(unit.text, terms), ...detectPatterns(unit.text, this.types)];
-      if (this.mode === 'ai' && this.aiEntities) spans.push(...findTerms(unit.text, this.aiEntities, 'ai'));
-      spans = dedupe(spans);
-      for (const s of spans) {
-        const key = `${unit.id}:${s.start}:${s.end}`;
-        findings.push({
-          key,
-          unitId: unit.id,
-          start: s.start,
-          end: s.end,
-          type: s.type,
-          source: s.source,
-          text: unit.text.slice(s.start, s.end),
-          enabled: this.overrides.get(key) ?? true,
-          page: unit.page,
-          rects: unit.rectsFor?.(s.start, s.end) ?? [],
-        });
-      }
-    }
+    const byId = new Map(doc.units.map((u) => [u.id, u]));
+    const spans = analyzeUnits(doc.units, {
+      types: this.types,
+      terms,
+      ai: this.mode === 'ai' ? this.aiEntities : null,
+    });
+    const findings: Finding[] = spans.map((s) => {
+      const unit = byId.get(s.unitId)!;
+      const key = `${unit.id}:${s.start}:${s.end}`;
+      return {
+        key,
+        unitId: unit.id,
+        start: s.start,
+        end: s.end,
+        type: s.type,
+        source: s.source,
+        text: unit.text.slice(s.start, s.end),
+        enabled: this.overrides.get(key) ?? true,
+        page: unit.page,
+        rects: unit.rectsFor?.(s.start, s.end) ?? [],
+      };
+    });
     this.findings = findings;
     if (!this.status.classList.contains('error')) this.say('');
     this.renderList();

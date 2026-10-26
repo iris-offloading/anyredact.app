@@ -119,7 +119,7 @@ export const TOOLS = [
     faq: [
       {
         q: 'Which kinds of data are detected?',
-        a: 'Private mode finds emails, phone numbers, payment card numbers (Luhn-checked), IBANs (checksum-verified), US Social Security numbers, IP addresses, URLs and dates. AI-assisted mode adds names, addresses, organizations and ID numbers.',
+        a: 'Private mode finds names (from clues such as titles, form labels, greetings and common first names, then every later mention), emails, phone numbers, payment card numbers (Luhn-checked), IBANs (checksum-verified), US Social Security numbers, IP addresses, URLs and dates. AI-assisted mode is better at names without such clues, and adds addresses, organizations and ID numbers.',
       },
       privacyFaq,
       freeFaq,
@@ -145,7 +145,7 @@ export const HOME = {
     privacyFaq,
     {
       q: 'What is the difference between Private and AI-assisted mode?',
-      a: 'Private mode uses pattern rules that run in your browser and are great at structured data like emails, phone numbers and card numbers. AI-assisted mode also sends the extracted text to a language model running on Cloudflare, which can recognise names, addresses and other context-dependent details.',
+      a: 'Private mode uses rules that run in your browser. They are great at structured data like emails, phone numbers and card numbers, and find names that come with clues such as "Name:", "Dr." or "Dear". AI-assisted mode also sends the extracted text to a language model running on Cloudflare, which can recognise names, addresses and other context-dependent details.',
     },
     {
       q: 'Which file types are supported?',
