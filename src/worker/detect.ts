@@ -169,6 +169,8 @@ interface Run {
   waits?: number[];
   /** Model to use when the main one is still rate limited after the retries. */
   fallback?: string;
+  /** Characters per request (trials only). */
+  chunkChars?: number;
 }
 
 async function detectClairic({ env, model, usage, raw }: Run, chunk: string): Promise<Entity[]> {
@@ -225,8 +227,8 @@ async function runModel(run: Run, chunk: string): Promise<Entity[]> {
       { role: 'user', content: chunk },
     ],
     ...(partner
-      ? { response_format: { type: 'json_schema', json_schema: { name: 'entities', schema: SCHEMA } }, max_completion_tokens: 4096 }
-      : { response_format: { type: 'json_schema', json_schema: SCHEMA }, max_tokens: 4096, temperature: 0 }),
+      ? { response_format: { type: 'json_schema', json_schema: { name: 'entities', schema: SCHEMA } }, max_completion_tokens: maxTokens(chunk) }
+      : { response_format: { type: 'json_schema', json_schema: SCHEMA }, max_tokens: maxTokens(chunk), temperature: 0 }),
     ...MODEL_OPTIONS[model],
     ...extra,
   } as never), waits)) as { usage?: Usage };
@@ -236,8 +238,11 @@ async function runModel(run: Run, chunk: string): Promise<Entity[]> {
   return parseEntities(responseContent(result), chunk);
 }
 
+// Room for the entity list: a dense chunk lists about one entity per 25 characters, at about 20 tokens each.
+const maxTokens = (chunk: string) => Math.min(32_768, Math.max(4096, Math.ceil(chunk.length)));
+
 async function detectText(run: Run, text: string): Promise<Entity[]> {
-  const results = await Promise.all(chunkText(text).map((c) => detectChunk(run, c)));
+  const results = await Promise.all(chunkText(text, run.chunkChars).map((c) => detectChunk(run, c)));
   const seen = new Set<string>();
   return results.flat().filter((e) => {
     const k = `${e.type}\u0000${e.text}`;
@@ -248,7 +253,7 @@ async function detectText(run: Run, text: string): Promise<Entity[]> {
 }
 
 // Preview-only batch mode for benchmarks: many texts in one request, a few at a time.
-async function detectBatch(env: Env, texts: unknown[], model: string, options?: object): Promise<Response> {
+async function detectBatch(env: Env, texts: unknown[], model: string, options?: object, chunkChars?: number): Promise<Response> {
   const out: unknown[] = new Array(texts.length);
   let next = 0;
   const worker = async () => {
@@ -259,7 +264,7 @@ async function detectBatch(env: Env, texts: unknown[], model: string, options?: 
       const started = Date.now();
       try {
         if (typeof text !== 'string' || text.length > MAX_CHARS) throw new Error('invalid text');
-        out[i] = { entities: await detectText({ env, model, usage, extra: options, waits: [5000, 10000, 20000, 30000] }, text), ms: Date.now() - started, usage };
+        out[i] = { entities: await detectText({ env, model, usage, extra: options, chunkChars, waits: [5000, 10000, 20000, 30000] }, text), ms: Date.now() - started, usage };
       } catch (err) {
         out[i] = { error: String(err), usage };
       }
@@ -286,8 +291,8 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const trials = env.MODEL_TRIALS === '1';
   const trial = trials && typeof requested === 'string' && /^(@cf\/)?[\w.-]+\/[\w.-]+$/.test(requested);
   const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
-  const extra = trials && options && typeof options === 'object' ? options : undefined;
-  if (trials && Array.isArray(texts) && texts.length <= 50) return detectBatch(env, texts, model, extra);
+  const { chunkChars, ...extra } = trials && options && typeof options === 'object' ? (options as { chunkChars?: number }) : {};
+  if (trials && Array.isArray(texts) && texts.length <= 50) return detectBatch(env, texts, model, extra, chunkChars);
 
   if (typeof text !== 'string' || !text.trim()) return json({ entities: [] });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long for AI mode (max ${MAX_CHARS} characters).` }, 413);
@@ -300,7 +305,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const started = Date.now();
   try {
     const entities = await detectText(
-      trial ? { env, model, usage, raw, extra } : { env, model, usage, fallback: env.FALLBACK_MODEL || FALLBACK_MODEL },
+      trial ? { env, model, usage, raw, extra, chunkChars } : { env, model, usage, fallback: env.FALLBACK_MODEL || FALLBACK_MODEL },
       text,
     );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
