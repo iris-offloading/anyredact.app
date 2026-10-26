@@ -84,6 +84,9 @@ textarea, select {
 .status { margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .status.error { border-color: #e03131; color: #e03131; }
 .warn { margin-bottom: 0; }
+.consent { margin: 12px 0 4px; padding: 12px; border: 2px solid var(--accent); border-radius: 10px; display: grid; gap: 8px; }
+.consent p { margin: 0; font-size: 0.92rem; }
+.consent .row { margin: 0; font-size: 0.85rem; color: var(--muted); }
 .warn-text { margin: 0 0 10px; }
 .warn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 

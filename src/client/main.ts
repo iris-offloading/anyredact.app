@@ -80,6 +80,9 @@ class App {
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
   private aiError: string | null = null;
+  // Nothing leaves the browser until the user agrees, per file (or always, if they ticked that box).
+  private consent: 'ask' | 'yes' | 'no' = 'ask';
+  private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   private terms = '';
   private style: RedactStyle = 'block';
@@ -175,11 +178,13 @@ class App {
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
+    this.consentBox = h('div', { className: 'consent', hidden: true });
 
     const panel = h(
       'aside',
       { className: 'panel' },
       h('div', { className: 'panel-head' }, this.docName, reset),
+      this.consentBox,
       h('h3', {}, 'Look for'),
       typeBoxes,
       h('h3', {}, 'Always redact'),
@@ -241,6 +246,8 @@ class App {
     this.boxes = [];
     this.aiEntities = null;
     this.aiError = null;
+    this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
+    this.consentBox.hidden = true;
     this.overrides.clear();
     this.editors = [];
     this.preview.replaceChildren();
@@ -259,8 +266,10 @@ class App {
       .filter(Boolean)
       .map((text) => ({ text, type: 'custom' as EntityType }));
 
-    // Ask the model once per document; pattern rules run alongside it as a safety net.
-    if (!this.aiEntities && !this.aiError) {
+    // Ask the model once per document, and only after the user agreed to send
+    // the text; pattern rules run alongside it as a safety net.
+    if (this.consent === 'ask') this.askConsent(doc);
+    if (this.consent === 'yes' && !this.aiEntities && !this.aiError) {
       const text = doc.units.map((u) => u.text).join('\n\n');
       if (text.trim()) {
         this.say('Finding names, addresses and other personal details…');
@@ -299,6 +308,8 @@ class App {
     this.findings = findings;
     this.warn.hidden = true;
     if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
+    else if (this.consent === 'no') this.say('Using the built-in rules only. Nothing was sent to our server, but names and addresses are easy to miss this way. Review carefully.');
+    else if (this.consent === 'ask') this.say('Your file has not left this device. The list shows what the built-in rules found so far.');
     else this.say('');
     this.renderList();
     this.refreshPreview();
@@ -446,7 +457,7 @@ class App {
     let checkNote = '';
     try {
       // Ask a second model whether anything sensitive is still readable before handing over the file.
-      if (!skipCheck) {
+      if (!skipCheck && this.consent === 'yes') {
         this.say('Checking the redacted file for anything left…');
         try {
           const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
@@ -466,6 +477,7 @@ class App {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
+      if (this.consent !== 'yes') checkNote = ' The AI check was skipped because nothing is sent to our server, so review the file carefully.';
       this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`);
     } catch (err) {
       console.error(err);
@@ -474,6 +486,30 @@ class App {
       this.busy = false;
       this.download.disabled = false;
     }
+  }
+
+  private askConsent(doc: LoadedDoc) {
+    if (!this.consentBox.hidden) return;
+    const text = doc.units.map((u) => u.text).join(' ');
+    const words = text.split(/\s+/).filter(Boolean).length;
+    if (!words) {
+      this.consentBox.hidden = true;
+      return;
+    }
+    const always = h('input', { type: 'checkbox' });
+    const choose = (answer: 'yes' | 'no') => {
+      if (answer === 'yes' && always.checked) store.set('ai-consent', 'always');
+      this.consent = answer;
+      this.consentBox.hidden = true;
+      this.analyze();
+    };
+    this.consentBox.replaceChildren(
+      h('p', {}, h('strong', {}, 'Nothing has been sent yet. '), `To find names, addresses and other personal details, AnyRedact sends the text it read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare. The file itself stays here, and nothing is stored.`),
+      h('button', { type: 'button', className: 'btn primary', textContent: 'Find personal info with AI', onclick: () => choose('yes') }),
+      h('button', { type: 'button', className: 'btn ghost', textContent: 'Use built-in rules only', onclick: () => choose('no') }),
+      h('label', { className: 'row' }, always, 'Always use AI on this device'),
+    );
+    this.consentBox.hidden = false;
   }
 
   private warnLeft(left: string[]) {

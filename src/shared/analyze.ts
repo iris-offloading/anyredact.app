@@ -9,6 +9,8 @@ export interface Term {
 }
 
 const CONTACT_TYPES = new Set<EntityType>(['phone', 'email', 'url', 'address']);
+// Types the AI may mark as an organisation's: contact details plus company registration and VAT numbers.
+const ORG_TYPES = new Set<EntityType>([...CONTACT_TYPES, 'id']);
 
 export interface UnitSpan extends Span {
   unitId: string;
@@ -41,11 +43,11 @@ export function analyzeUnits(
   }
   const ai = opts.ai?.filter((e) => plausibleEntity(e.text, e.type));
   if (ai) {
-    const orgOwned = new Set(ai.filter((e) => e.owner === 'organization' && CONTACT_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
+    const orgOwned = new Set(ai.filter((e) => e.owner === 'organization' && ORG_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
     for (let s of findTerms(text, ai, 'ai')) {
       // Models sometimes call an SSN/ITIN-shaped number a phone number.
       if (s.type === 'phone' && /^\d{3}[- ]\d{2}[- ]\d{4}$/.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
-      if (CONTACT_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };
+      if (ORG_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };
       spans.push(s);
     }
     names.push(...ai.filter((e) => e.type === 'name').map((e) => e.text));

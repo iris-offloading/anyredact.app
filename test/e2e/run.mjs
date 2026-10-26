@@ -17,6 +17,8 @@ await import('./fixtures.mjs').catch(() => {}); // fixtures.mjs writes into argv
 const browser = await chromium.launch();
 const page = await browser.newPage({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
 const errors = [];
+const apiCalls = [];
+page.on('request', (r) => r.url().includes('/api/') && apiCalls.push(r.url()));
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 let failed = 0;
@@ -33,7 +35,7 @@ async function run(slug, file, wait = 'label.finding') {
 }
 
 async function download(name) {
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('button.primary')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.panel > button.primary')]);
   const p = fx(name);
   await dl.saveAs(p);
   return { path: p, filename: dl.suggestedFilename() };
@@ -106,8 +108,12 @@ async function download(name) {
     sent = JSON.parse(route.request().postData() || '{}').text;
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
   });
+  apiCalls.length = 0;
   await run('redact-text', fx('sample.txt'));
-  await page.click('button.primary');
+  check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
+  await page.click('text=Find personal info with AI');
+  await page.waitForSelector('.consent', { state: 'hidden' });
+  await page.click('.panel > button.primary');
   await page.waitForSelector('.warn-text');
   const warning = await page.textContent('.warn-text');
   check(/names may still be readable/.test(warning) && !/phone/.test(warning), `check warning: ${warning}`);
@@ -124,6 +130,8 @@ async function download(name) {
   await page.screenshot({ path: fx('home.png'), fullPage: true });
   await page.setInputFiles('#file-input', fx('sample.txt'));
   await page.waitForSelector('label.finding');
+  await page.click('text=Find personal info with AI');
+  await page.waitForFunction(() => /built-in rules only/i.test(document.querySelector('.status')?.textContent ?? ''));
   const status = await page.textContent('.status');
   check(/built-in rules only/i.test(status), `ai fallback status: ${status}`);
 }
