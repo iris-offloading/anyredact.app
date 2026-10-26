@@ -22,7 +22,7 @@ const CORE = new Set(
   api_key user_name`.split(/\s+/).filter(Boolean),
 );
 // The app's default "Look for" types (DEFAULT_TYPES in src/client/main.ts).
-const APP_TYPES = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'other'];
+const APP_TYPES = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'date', 'card', 'iban', 'ip', 'other'];
 // Workers AI prices in USD per million tokens [input, output], as quoted on the dashboard.
 const PRICES = {
   '@cf/deepseek-ai/deepseek-v4.1-flash-1017': [0.3, 1.2],
@@ -73,7 +73,7 @@ function covered(gold, ranges) {
 }
 
 async function run(base, spec, file, limit) {
-  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const { analyzeUnits, startsTicked } = await import('../src/shared/analyze.ts');
   const brace = spec.indexOf('{');
   const model = brace < 0 ? spec : spec.slice(0, brace);
   const options = brace < 0 ? undefined : JSON.parse(spec.slice(brace));
@@ -117,7 +117,7 @@ async function run(base, spec, file, limit) {
       ms += r.ms ?? 0;
       const aiRanges = r.entities.flatMap((e) => occurrences(doc.text, e.text));
       const appSpans = analyzeUnits([{ id: 'u', text: doc.text }], { types: APP_TYPES, ai: r.entities })
-        .filter((s) => APP_TYPES.includes(s.type) && !s.publicHint);
+        .filter((s) => APP_TYPES.includes(s.type) && startsTicked(s));
       const appRanges = appSpans.map((s) => [s.start, s.end]);
       for (const g of doc.spans) {
         const label = CORE.has(g.label) ? g.label : `(optional) ${g.label}`;

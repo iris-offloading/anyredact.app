@@ -12,6 +12,15 @@ const CONTACT_TYPES = new Set<EntityType>(['phone', 'email', 'url', 'address']);
 // Types the AI may mark as an organisation's: contact details plus company registration and VAT numbers.
 const ORG_TYPES = new Set<EntityType>([...CONTACT_TYPES, 'id']);
 
+/**
+ * Whether a finding starts ticked. Public contacts start unticked, and so do
+ * dates only the date rule matched: the AI reports birth dates and other
+ * personal dates, while the rule also matches every invoice and letter date.
+ */
+export function startsTicked(s: Span): boolean {
+  return !s.publicHint && !(s.type === 'date' && s.source === 'pattern');
+}
+
 export interface UnitSpan extends Span {
   unitId: string;
 }

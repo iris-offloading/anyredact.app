@@ -259,6 +259,8 @@ export function dedupe(spans: Span[]): Span[] {
         }
         // Keep a public hint from a duplicate of the same text (e.g. the AI saying a rule match is a company's).
         else if (s.publicHint && !cover.publicHint) cover.publicHint = s.publicHint;
+        // Remember that the AI found it too: a date the AI reports is a personal one.
+        if (s.source === 'ai' && cover.source === 'pattern') cover.source = 'ai';
       }
       continue;
     }

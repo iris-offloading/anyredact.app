@@ -1,4 +1,4 @@
-import { analyzeUnits } from '../shared/analyze.ts';
+import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
 import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
@@ -19,7 +19,7 @@ ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
 
 // What the "Look for" chips offer. AI and pattern findings are both filtered by these.
 const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
-const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'other'];
+const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'date', 'card', 'iban', 'ip', 'other'];
 // Picture regions are opt-in: plenty of people want faces left visible.
 const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
 // Each page is one AI request, so very long PDFs only get the local pass after this.
@@ -339,7 +339,7 @@ class App {
         type: s.type,
         source: s.source,
         text: unit.text.slice(s.start, s.end),
-        enabled: this.overrides.get(key) ?? !s.publicHint,
+        enabled: this.overrides.get(key) ?? startsTicked(s),
         publicHint: s.publicHint,
         page: unit.page,
         rects: unit.rectsFor?.(s.start, s.end) ?? [],

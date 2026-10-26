@@ -116,3 +116,10 @@ test('the AI type wins over a rule match of the same text', async () => {
   const spans = analyzeUnits([{ id: 'u', text }], { types: ['phone', 'card'], ai: [{ text: '3022 3330 5753', type: 'card' }] });
   assert.deepEqual(spans.map((s) => [s.type, s.publicHint]), [['card', undefined]]);
 });
+
+test('dates the AI reports start ticked, dates only the rule matched do not', async () => {
+  const { analyzeUnits, startsTicked } = await import('../src/shared/analyze.ts');
+  const text = 'Invoice date 12.10.2026. Patient born 01.03.1956.';
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['date'], ai: [{ text: '01.03.1956', type: 'date' }] });
+  assert.deepEqual(spans.map((s) => [text.slice(s.start, s.end), startsTicked(s)]), [['12.10.2026', false], ['01.03.1956', true]]);
+});
