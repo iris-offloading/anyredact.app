@@ -64,3 +64,11 @@ test('rewriteSegments redacts across run boundaries', () => {
   assert.deepEqual(rewriteSegments(pieces, [span], 'block'), ['Call ██', '████', '██ today']);
   assert.deepEqual(rewriteSegments(pieces, [span], 'label'), ['Call [PHONE]', '', ' today']);
 });
+
+test('service and helpline numbers are flagged as probably public', () => {
+  const hints = (text: string) => detectPatterns(text, ['phone']).map((s) => [text.slice(s.start, s.end), s.publicHint]);
+  assert.deepEqual(hints('Freephone 0800 123 4567'), [['0800 123 4567', 'Toll-free or service number']]);
+  assert.deepEqual(hints('Call 1-800-555-0199 today'), [['1-800-555-0199', 'Toll-free or service number']]);
+  assert.deepEqual(hints('Helpline: 020 7946 0958'), [['020 7946 0958', 'Looks like a helpline']]);
+  assert.deepEqual(hints('My mobile is 07700 900123'), [['07700 900123', undefined]]);
+});

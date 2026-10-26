@@ -49,6 +49,7 @@ async function download(name) {
   const { path: p, filename } = await download('out.txt');
   const txt = readFileSync(p, 'utf8');
   check(filename === 'sample-redacted.txt', `text filename ${filename}`);
+  check(txt.includes('Next steps') && txt.includes('0800 123 4567'), 'text keeps headings and helpline numbers');
   check(!/jane|415|0199|10\.0\.0/i.test(txt), `text output: ${JSON.stringify(txt)}`);
 }
 

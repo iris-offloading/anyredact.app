@@ -300,7 +300,8 @@ class App {
         type: s.type,
         source: s.source,
         text: unit.text.slice(s.start, s.end),
-        enabled: this.overrides.get(key) ?? true,
+        enabled: this.overrides.get(key) ?? !s.publicHint,
+        publicHint: s.publicHint,
         page: unit.page,
         rects: unit.rectsFor?.(s.start, s.end) ?? [],
       };
@@ -340,7 +341,7 @@ class App {
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
         const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? ` · p${f.page + 1}` : '';
-        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', {}, (f.source === 'ai' ? 'AI' : '') + where));
+        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, (f.publicHint ? 'public? ' : '') + (f.source === 'ai' ? 'AI' : '') + where));
         row.addEventListener('mouseenter', () => this.focus(f));
         return row;
       });

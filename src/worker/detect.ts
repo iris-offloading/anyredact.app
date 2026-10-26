@@ -20,7 +20,7 @@ const SYSTEM_PROMPT = `You find personally identifiable and sensitive informatio
 Return every exact substring of the input that should be redacted, copied character for character, each distinct string once.
 Types: name (people's names), address (street addresses, postal codes with city), email, phone, id (passport, licence, tax, account, patient, employee, case or national ID numbers), date (birth dates and other personal dates), org (employers, schools, hospitals tied to a person), card (payment cards), iban (bank accounts), url (personal links), other (anything else sensitive such as health details, signatures, usernames or passwords).
 Be thorough with names: include every private person mentioned anywhere (headers, greetings, signatures, tables, lists, quoted emails), in every form that appears, such as "Jane Doe", "Doe, Jane", "J. Doe", "Ms. Doe", "Jane" and "DOE". Names from any language or culture count.
-Do not return labels such as "Name:", generic words, or well-known public figures mentioned in passing. If nothing is sensitive return an empty list.`;
+Do not return labels such as "Name:", headings, generic words, well-known public figures mentioned in passing, or the contact details of businesses and public services (helplines, office numbers and addresses). If nothing is sensitive return an empty list.`;
 
 const SCHEMA = {
   type: 'object',

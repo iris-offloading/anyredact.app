@@ -1,4 +1,4 @@
-import { dedupe, detectPatterns, findTerms, type EntityType, type Span } from './detect.ts';
+import { dedupe, detectPatterns, findTerms, phonePublicHint, type EntityType, type Span } from './detect.ts';
 import { detectNames, nameVariants } from './names.ts';
 
 export interface Term {
@@ -36,7 +36,10 @@ export function analyzeUnits(
     names.push(...found.map((s) => text.slice(s.start, s.end)));
   }
   if (opts.ai) {
-    spans.push(...findTerms(text, opts.ai, 'ai'));
+    for (const s of findTerms(text, opts.ai, 'ai')) {
+      const hint = s.type === 'phone' ? phonePublicHint(text, s.start, text.slice(s.start, s.end)) : undefined;
+      spans.push(hint ? { ...s, publicHint: hint } : s);
+    }
     names.push(...opts.ai.filter((e) => e.type === 'name').map((e) => e.text));
   }
   // Once a name is known, catch every other mention of it, including first or last name alone.

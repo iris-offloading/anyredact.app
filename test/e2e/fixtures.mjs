@@ -25,4 +25,4 @@ zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="
 <w:p><w:del w:id="1" w:author="Bob Author"><w:r><w:delText>old ssn 123-45-6789</w:delText></w:r></w:del></w:p>
 </w:body></w:document>`);
 writeFileSync(`${out}/sample.docx`, await zip.generateAsync({ type: 'nodebuffer' }));
-writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\n');
+writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\nNext steps\nHelpline: 0800 123 4567\n');

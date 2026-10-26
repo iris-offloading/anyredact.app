@@ -46,6 +46,29 @@ const STOP = new Set(
     .filter(Boolean),
 );
 
+// Ordinary words that often start a line or heading ("Next steps", "Your
+// account"). A candidate name starting with one is rejected; later in a name
+// they end it. Names that are also words, like Will or May, are left out.
+// Compared in lower case.
+const COMMON = new Set(
+  `about above account action actions additional address advice after again agenda all also amount an and answer
+  answers any appeal application apply are as ask at attached attendees available back background balance be
+  before below benefit benefits bill both but by call can cannot case change changes check claim click close
+  complete confirm contact continue copy could current customer date day days deadline details do does done
+  download due each email end enter even every example extra fee fees fill find first follow following for form
+  forms free from full further general get go guide have help her here his how however if important in income
+  information instructions introduction is it its just keep last later learn letter line list location log make
+  many minutes more most must my name need new next no not note notes notice now number of office on once
+  online only open or order other our out over overview page paid part pay payment payments people period
+  personal phone please post previous print process read reason record reference register remember renew
+  report request required review same save section see send service services should sign since so some start
+  statement status step steps still submit summary support take tax terms than that the their them then there
+  these they this those through time to today total under until update upload use using visit was we website
+  what when where which while who why with within without write year years yes you your yours`
+    .split(/\s+/)
+    .filter(Boolean),
+);
+
 // Common given names that are rarely ordinary words, from many languages.
 const FIRST_NAMES = new Set(
   `aaron abdul abigail adam adrian ahmed aisha alan albert alejandro alex alexander alexandra alexis ali alice alicia
@@ -73,10 +96,11 @@ const FIRST_NAMES = new Set(
 function trimName(raw: string): string {
   const words = raw.split(/[ \t]+/);
   const kept: string[] = [];
+  if (COMMON.has(words[0]?.replace(/[.,]$/, '').toLowerCase())) return '';
   for (const w of words) {
     const bare = w.replace(/[.,]$/, '');
     if (ORG.has(bare)) return '';
-    if (STOP.has(bare)) break;
+    if (STOP.has(bare) || COMMON.has(bare.toLowerCase())) break;
     kept.push(w);
   }
   return kept.join(' ').replace(/[.,]$/, '');
@@ -135,7 +159,7 @@ export function nameVariants(names: Iterable<string>): string[] {
     // "DOE, JANE" → also "JANE DOE" parts.
     for (const part of clean.split(/[\s,]+/)) {
       const bare = part.replace(/\.$/, '');
-      if (bare.length >= 3 && /^\p{Lu}/u.test(bare) && !STOP.has(bare) && !ORG.has(bare)) {
+      if (bare.length >= 3 && /^\p{Lu}/u.test(bare) && !STOP.has(bare) && !ORG.has(bare) && !COMMON.has(bare.toLowerCase())) {
         out.add(bare);
         out.add(bare.toUpperCase());
       }

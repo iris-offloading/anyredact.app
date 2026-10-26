@@ -22,6 +22,8 @@ export interface Span {
   end: number;
   type: EntityType;
   source: 'pattern' | 'ai' | 'term';
+  /** Set when the match is probably not personal (e.g. a public helpline), so it starts unticked. */
+  publicHint?: string;
 }
 
 export const ENTITY_LABELS: Record<EntityType, string> = {
@@ -47,10 +49,26 @@ export const PATTERN_TYPES: EntityType[] = ['name', 'email', 'phone', 'ssn', 'ca
 /** Separator between digit groups: spaces, a dot or dash, and at most one line break. */
 const SEP = String.raw`(?:[ \t]*[.-][ \t]*(?:\r?\n[ \t]*)?|[ \t]+(?:\r?\n[ \t]*)?|\r?\n[ \t]*)`;
 
+// Free or non-geographic prefixes used by businesses and public services:
+// UK 0800/0808/0300/03xx/084x/087x, US/Canada toll-free 8xx, Australia 1300/1800.
+const SERVICE_PREFIX = /^(?:\+44|0)?(?:80[08]|3\d\d|84\d|87\d)|^(?:\+?1)?\(?8(?:00|33|44|55|66|77|88)\)?|^(?:\+61)?1[38]00/;
+const SERVICE_WORDS = /\b(?:helpline|hotline|freephone|textphone|relay uk|call us|contact us|customer (?:service|support|care)|enquiries|inquiries|switchboard|reception|main office|head office|support line|advice line|information line|emergency services)\b/i;
+
+/** Flags phone numbers that look like a public or business line rather than a person's. */
+export function phonePublicHint(text: string, start: number, match: string): string | undefined {
+  const compact = match.replace(/[\s().-]/g, '');
+  if (SERVICE_PREFIX.test(compact)) return 'Toll-free or service number';
+  const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+  const before = text.slice(Math.max(lineStart, start - 80), start);
+  if (SERVICE_WORDS.test(before)) return 'Looks like a helpline';
+  return undefined;
+}
+
 interface Rule {
   type: EntityType;
   re: RegExp;
   validate?: (match: string) => boolean;
+  publicHint?: (text: string, start: number, match: string) => string | undefined;
 }
 
 const digits = (s: string) => s.replace(/\D/g, '');
@@ -96,10 +114,11 @@ const RULES: Rule[] = [
   { type: 'ip', re: /\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b/g },
   {
     type: 'phone',
-    // Optional country code, optional area code in parentheses, then 2-4 digit groups.
+    // Optional country code, optional area code in parentheses, then digit groups.
     // Groups may be split across a line break (wrapped text, PDF lines, OCR).
+    // Never stop part-way through a longer number such as a reference.
     re: new RegExp(
-      String.raw`(?:\+\d{1,3}${SEP}?)?(?:\(\d{1,4}\)${SEP}?)?(?<![\d+])\d{2,5}(?:${SEP}\d{2,4}){1,4}\b|\+\d{8,15}\b`,
+      String.raw`(?:\+\d{1,3}${SEP}?|(?<![\d.-])1[ .-])?(?:\(\d{1,4}\)${SEP}?)?(?<![\d+])\d{2,5}(?:${SEP}\d{2,6}){1,4}\b(?![.-]?\d)|\+\d{8,15}\b`,
       'g',
     ),
     validate: (m) => {
@@ -113,6 +132,7 @@ const RULES: Rule[] = [
       if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(flat)) return false;
       return true;
     },
+    publicHint: phonePublicHint,
   },
   {
     type: 'date',
@@ -131,7 +151,8 @@ export function detectPatterns(text: string, enabled: Iterable<EntityType> = PAT
       const value = m[0];
       if (rule.validate && !rule.validate(value)) continue;
       const start = m.index!;
-      spans.push({ start, end: start + value.length, type: rule.type, source: 'pattern' });
+      const hint = rule.publicHint?.(text, start, value);
+      spans.push({ start, end: start + value.length, type: rule.type, source: 'pattern', ...(hint && { publicHint: hint }) });
     }
   }
   return dedupe(spans);

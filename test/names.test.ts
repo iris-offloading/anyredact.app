@@ -64,3 +64,11 @@ test('phone split across two paragraphs is redacted in both', () => {
   const got = found(['Phone: 415-555-', '0132 (mobile)']).filter(([t]) => t === 'phone');
   assert.deepEqual(got, [['phone', '415-555-'], ['phone', '0132']]);
 });
+
+test('headings are not names', () => {
+  assert.deepEqual(found(['Thanks', 'Next steps', 'Contact: Your adviser']), []);
+});
+
+test('a phone pattern never matches part of a longer number', () => {
+  assert.deepEqual(found(['Ref 0208-177-2901267']), []);
+});

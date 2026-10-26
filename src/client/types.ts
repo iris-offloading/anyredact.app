@@ -32,6 +32,7 @@ export interface Finding {
   source: Span['source'];
   text: string;
   enabled: boolean;
+  publicHint?: string;
   page?: number;
   rects: Rect[];
 }
