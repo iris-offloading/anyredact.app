@@ -17,6 +17,9 @@ await import('./fixtures.mjs').catch(() => {}); // fixtures.mjs writes into argv
 const browser = await chromium.launch();
 const page = await browser.newPage({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
 const errors = [];
+const apiCalls = [];
+// Only requests that carry document content count; /api/quota sends just the browser ID.
+page.on('request', (r) => /\/api\/(detect|check)/.test(r.url()) && apiCalls.push(r.url()));
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 let failed = 0;
@@ -33,7 +36,7 @@ async function run(slug, file, wait = 'label.finding') {
 }
 
 async function download(name) {
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('button.primary')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.panel > button.primary')]);
   const p = fx(name);
   await dl.saveAs(p);
   return { path: p, filename: dl.suggestedFilename() };
@@ -49,7 +52,8 @@ async function download(name) {
   const { path: p, filename } = await download('out.txt');
   const txt = readFileSync(p, 'utf8');
   check(filename === 'sample-redacted.txt', `text filename ${filename}`);
-  check(!/jane|415|10\.0\.0/i.test(txt), `text output: ${JSON.stringify(txt)}`);
+  check(txt.includes('Next steps') && txt.includes('0800 123 4567'), 'text keeps headings and helpline numbers');
+  check(!/jane|415|0199|10\.0\.0/i.test(txt), `text output: ${JSON.stringify(txt)}`);
 }
 
 // DOCX
@@ -63,6 +67,7 @@ async function download(name) {
   const rels = await zip.file('word/_rels/document.xml.rels').async('string');
   const core = await zip.file('docProps/core.xml').async('string');
   check(!doc.includes('bob@') && !doc.includes('corp.io') && !doc.includes('123-45') && doc.includes('Contact: '), 'docx body redacted, formatting text kept');
+  check(!/Gonzalez|0132|0199/.test(doc) && doc.includes('<w:br/>'), 'docx name and wrapped phones redacted, line break kept');
   check(!doc.includes('Bob Author') && !core.includes('Bob Author'), 'docx authors removed');
   check(!rels.includes('mailto'), 'docx hyperlink target removed');
 }
@@ -97,15 +102,62 @@ async function download(name) {
   check(filename === 'sample-redacted.png', `image filename ${filename}`);
 }
 
-// Home page and AI mode fallback without an AI binding
+// Final check: a warning stops the download until the user chooses
+{
+  let sent = '';
+  await page.route('**/api/check', (route) => {
+    sent = JSON.parse(route.request().postData() || '{}').text;
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
+  });
+  apiCalls.length = 0;
+  await run('redact-text', fx('sample.txt'));
+  check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
+  await page.click('text=Find personal info with AI');
+  await page.waitForSelector('.consent', { state: 'hidden' });
+  await page.click('.panel > button.primary');
+  await page.waitForSelector('.warn-text');
+  const warning = await page.textContent('.warn-text');
+  check(/names may still be readable/.test(warning) && !/phone/.test(warning), `check warning: ${warning}`);
+  check(sent.includes('████') && !sent.includes('jane@example.com'), 'check gets masked text only');
+  await page.screenshot({ path: fx('check.png') });
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('text=Download anyway')]);
+  check(dl.suggestedFilename() === 'sample-redacted.txt', 'download anyway works');
+  await page.unroute('**/api/check');
+}
+
+// Picture redaction: off by default, local pass first, server pass only after consent
+{
+  const visionCalls = [];
+  await page.route('**/api/vision', (route) => {
+    visionCalls.push(JSON.parse(route.request().postData() || '{}'));
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ regions: [{ kind: 'plate', box: [100, 100, 300, 200] }] }) });
+  });
+  await page.route('**/api/detect', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities: [] }) }));
+  await run('redact-image', fx('sample.png'));
+  const pictureChips = page.locator('label.chip', { hasText: 'Number plates' });
+  check((await pictureChips.count()) === 1 && !(await pictureChips.locator('input').isChecked()), 'picture options shown and off by default');
+  await pictureChips.click();
+  await page.waitForFunction(() => !/Looking for faces/.test(document.querySelector('.status')?.textContent ?? ''), null, { timeout: 60_000 });
+  check(visionCalls.length === 0, 'no picture sent before consent');
+  await page.click('text=Find personal info with AI');
+  await page.waitForSelector('label.finding:has-text("Number plate 1")', { timeout: 30_000 });
+  check(visionCalls.length === 1 && /^data:image\/jpeg;base64,/.test(visionCalls[0].image) && visionCalls[0].kinds.join() === 'plate', 'picture sent after consent with the ticked kinds');
+  await page.screenshot({ path: fx('pictures.png') });
+  await pictureChips.click(); // leave the option off for later tests
+  await page.unroute('**/api/vision');
+  await page.unroute('**/api/detect');
+}
+
+// Home page, and the fallback when the AI binding is missing
 {
   await page.goto(BASE);
   await page.screenshot({ path: fx('home.png'), fullPage: true });
-  await page.check('input[value="ai"]');
   await page.setInputFiles('#file-input', fx('sample.txt'));
   await page.waitForSelector('label.finding');
+  await page.click('text=Find personal info with AI');
+  await page.waitForFunction(() => /built-in rules only/i.test(document.querySelector('.status')?.textContent ?? ''));
   const status = await page.textContent('.status');
-  check(/private-mode results/i.test(status), `ai fallback status: ${status}`);
+  check(/built-in rules only/i.test(status), `ai fallback status: ${status}`);
 }
 
 check(errors.filter((e) => !/api\/detect|503/.test(e)).length === 0, `no page errors ${JSON.stringify(errors)}`);

@@ -51,3 +51,124 @@ test('chunks long text on whitespace', () => {
   assert.equal(chunks.join(''), text);
   assert.ok(chunks.every((c) => c.length <= 1000));
 });
+
+test('drops field labels and digit-less numbers', async () => {
+  const res = await worker.fetch(
+    post({ text: 'SSN: 123-45-6789 ITIN: none' }),
+    env({ entities: [{ text: 'SSN', type: 'other' }, { text: 'ITIN', type: 'id' }, { text: '123-45-6789', type: 'ssn' }] }),
+  );
+  assert.deepEqual(await res.json(), { entities: [{ text: '123-45-6789', type: 'ssn' }] });
+});
+
+test('reads Clef yes-probabilities in any answer shape', async () => {
+  const { yesProbability } = await import('../src/worker/check.ts');
+  assert.equal(yesProbability({ type: 'noul', noul: 0.97 }), 0.97);
+  assert.equal(yesProbability({ probability: 0.2 }), 0.2);
+  assert.equal(yesProbability(0.5), 0.5);
+  assert.equal(yesProbability({}), null);
+});
+
+test('check returns per-category risks', async () => {
+  const e = {
+    ASSETS: { fetch: async () => new Response('asset') } as unknown as Fetcher,
+    AI: { run: async () => ({ answers: { name: { type: 'noul', noul: 0.9 }, contact: { type: 'noul', noul: 0.1 } } }) } as unknown as Ai,
+  };
+  const req = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: 'Hi Jane, ████' }), headers: { origin: 'https://anyredact.app' } });
+  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 } });
+  const empty = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: '████ \n ██' }), headers: { origin: 'https://anyredact.app' } });
+  assert.deepEqual(await (await worker.fetch(empty, e)).json(), { risks: {} });
+});
+
+test('keeps the organisation owner on contact details', async () => {
+  const res = await worker.fetch(
+    post({ text: 'Call 0800 123 4567 or Jane on 07700 900461' }),
+    env({ entities: [{ text: '0800 123 4567', type: 'phone', owner: 'organization' }, { text: '07700 900461', type: 'phone', owner: 'person' }] }),
+  );
+  assert.deepEqual(await res.json(), {
+    entities: [
+      { text: '0800 123 4567', type: 'phone', owner: 'organization' },
+      { text: '07700 900461', type: 'phone' },
+    ],
+  });
+});
+
+test('retries when Workers AI rate-limits the model', async () => {
+  const { runWithRetry } = await import('../src/worker/detect.ts');
+  let calls = 0;
+  const value = await runWithRetry(async () => {
+    if (++calls < 3) throw new Error('AiError: 3021: rate limiting: inference request per min rate reached');
+    return 'ok';
+  }, [1, 1]);
+  assert.equal(value, 'ok');
+  await assert.rejects(runWithRetry(async () => { throw new Error('other'); }, [1]), /other/);
+});
+
+test('falls back to another model while the default one is rate limited', async () => {
+  const models: string[] = [];
+  const e = env(null);
+  e.AI = {
+    run: async (model: string) => {
+      models.push(model);
+      if (model.includes('deepseek')) throw new Error('AiError: 3021: rate limiting: inference request per min rate reached');
+      return { response: { entities: [{ text: 'John Smith', type: 'name', owner: 'person' }] } };
+    },
+  } as unknown as Ai;
+  const res = await worker.fetch(post({ text: 'Patient John Smith' }), e);
+  const body = (await res.json()) as { entities: { text: string }[] };
+  assert.deepEqual(body.entities.map((x) => x.text), ['John Smith']);
+  assert.equal(models.filter((m) => m.includes('deepseek')).length, 3);
+  assert.ok(models.at(-1)!.includes('nemotron'));
+});
+
+// In-memory stand-in for the Quota Durable Object namespace.
+async function quotaNamespace() {
+  const { Quota } = await import('../src/worker/quota.ts');
+  const objects = new Map<string, InstanceType<typeof Quota>>();
+  return {
+    idFromName: (name: string) => name,
+    get: (name: string) => {
+      if (!objects.has(name)) {
+        const data = new Map<string, unknown>();
+        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v) };
+        objects.set(name, new Quota({ storage } as unknown as DurableObjectState));
+      }
+      const obj = objects.get(name)!;
+      return { fetch: (url: string, init: RequestInit) => obj.fetch(new Request(url, init)) };
+    },
+  } as unknown as DurableObjectNamespace;
+}
+
+test('free allowance is enforced per browser, with a larger shared IP allowance', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '30' };
+  const req = (device: string, text: string) =>
+    new Request('https://anyredact.app/api/detect', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9' },
+    });
+  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e);
+  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 20, limit: 30 });
+  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e)).status, 402);
+  // Another browser on the same IP still has its own allowance...
+  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(25)), e)).status, 200);
+  // ...until the IP allowance (5x) runs out.
+  // IP used: 20 + 25 + 4 x 25 = 145 of 150, so 10 more characters don't fit.
+  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(25)), e);
+  const res = await worker.fetch(req('device-gggg', 'x'.repeat(10)), e);
+  assert.equal(res.status, 402);
+  assert.equal(((await res.json()) as { code: string }).code, 'quota');
+});
+
+test('vision regions are validated and scaled to thousandths', async () => {
+  const { parseRegions } = await import('../src/worker/vision.ts');
+  const out = parseRegions(
+    'Here: {"items":[{"kind":"face","box":[10,20,110,220]},{"kind":"plate","box":[0.1,0.2,0.3,0.4]},{"kind":"dog","box":[1,2,3,4]},{"kind":"face","box":[5,5]},{"kind":"face","box":[900,900,1200,950]}]}',
+    ['face', 'plate'],
+  );
+  assert.deepEqual(out, [
+    { kind: 'face', box: [10, 20, 110, 220] },
+    { kind: 'plate', box: [100, 200, 300, 400] },
+    { kind: 'face', box: [900, 900, 1000, 950] },
+  ]);
+  assert.deepEqual(parseRegions('not json', ['face']), []);
+});

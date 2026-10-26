@@ -64,3 +64,62 @@ test('rewriteSegments redacts across run boundaries', () => {
   assert.deepEqual(rewriteSegments(pieces, [span], 'block'), ['Call ██', '████', '██ today']);
   assert.deepEqual(rewriteSegments(pieces, [span], 'label'), ['Call [PHONE]', '', ' today']);
 });
+
+test('service and helpline numbers are flagged as probably public', () => {
+  const hints = (text: string) => detectPatterns(text, ['phone']).map((s) => [text.slice(s.start, s.end), s.publicHint]);
+  assert.deepEqual(hints('Freephone 0800 123 4567'), [['0800 123 4567', 'Toll-free or service number']]);
+  assert.deepEqual(hints('Call 1-800-555-0199 today'), [['1-800-555-0199', 'Toll-free or service number']]);
+  assert.deepEqual(hints('Helpline: 020 7946 0958'), [['020 7946 0958', 'Looks like a helpline']]);
+  assert.deepEqual(hints('International callers: 1-267-941-1000'), [['1-267-941-1000', 'Looks like a helpline']]);
+  assert.deepEqual(hints('My mobile is 07700 900123'), [['07700 900123', undefined]]);
+});
+
+test('company letterhead contacts start as public, personal ones do not', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = [
+    'CZ.NIC, z.s.p.o     IČ 67985726     T +420 222 745 111     kontakt@nic.cz',
+    'Milešovská 1136/5, 130 00 Prague 3     DIČ CZ67985726     M +420 731 657 660     www.nic.cz',
+    '',
+    'Dear Jan, call me on +420 602 123 456 or write to jan.novak@seznam.cz.',
+  ].join('\n');
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['name', 'email', 'phone'], ai: [] });
+  const hint = (v: string) => spans.find((s) => text.slice(s.start, s.end) === v)?.publicHint;
+  assert.ok(hint('+420 222 745 111'), 'switchboard');
+  assert.ok(hint('+420 731 657 660'), 'letterhead mobile');
+  assert.ok(hint('kontakt@nic.cz'), 'generic mailbox');
+  assert.equal(hint('+420 602 123 456'), undefined);
+  assert.equal(hint('jan.novak@seznam.cz'), undefined);
+});
+
+test('AI organisation owner marks a contact public everywhere it appears', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = 'Write to j.smith@acme.example today.\nAgain: j.smith@acme.example';
+  const spans = analyzeUnits([{ id: 'u', text }], {
+    types: ['email'],
+    ai: [{ text: 'j.smith@acme.example', type: 'email', owner: 'organization' }],
+  });
+  assert.equal(spans.length, 2);
+  assert.ok(spans.every((s) => s.publicHint));
+});
+
+test('a company named far away in the same paragraph does not make an address public', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = `Die XY GmbH ist diesen Risiken ausgesetzt, ${'durch eine breite Kundenstruktur, '.repeat(3)}etwa durch Kieran Wilson, wohnhaft in der 30 Stretto Dandolo, Apt. 34.`;
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['address'], ai: [{ text: '30 Stretto Dandolo, Apt. 34', type: 'address' }] });
+  assert.equal(spans.length, 1);
+  assert.equal(spans[0].publicHint, undefined);
+});
+
+test('the AI type wins over a rule match of the same text', async () => {
+  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+  const text = 'Credit Card Number: 3022 3330 5753';
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['phone', 'card'], ai: [{ text: '3022 3330 5753', type: 'card' }] });
+  assert.deepEqual(spans.map((s) => [s.type, s.publicHint]), [['card', undefined]]);
+});
+
+test('dates the AI reports start ticked, dates only the rule matched do not', async () => {
+  const { analyzeUnits, startsTicked } = await import('../src/shared/analyze.ts');
+  const text = 'Invoice date 12.10.2026. Patient born 01.03.1956.';
+  const spans = analyzeUnits([{ id: 'u', text }], { types: ['date'], ai: [{ text: '01.03.1956', type: 'date' }] });
+  assert.deepEqual(spans.map((s) => [text.slice(s.start, s.end), startsTicked(s)]), [['12.10.2026', false], ['01.03.1956', true]]);
+});

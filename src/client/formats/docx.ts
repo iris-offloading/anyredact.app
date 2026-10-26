@@ -6,6 +6,12 @@ const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const TEXT_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
 // Text-bearing elements: visible text, deleted (tracked) text and field codes such as HYPERLINK "mailto:…".
 const TEXT_TAGS = new Set(['t', 'delText', 'instrText']);
+// Run-level breaks become whitespace in the detection text so words and numbers don't run together.
+const BREAKS: Record<string, string> = { br: '\n', cr: '\n', tab: '\t' };
+
+function textOf(el: Element): string {
+  return TEXT_TAGS.has(el.localName) ? (el.textContent ?? '') : BREAKS[el.localName];
+}
 
 interface Para {
   unit: Unit;
@@ -34,7 +40,8 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
     parts.set(name, xml);
     const byPara = new Map<Element, Element[]>();
     for (const el of Array.from(xml.getElementsByTagNameNS(W, '*'))) {
-      if (!TEXT_TAGS.has(el.localName)) continue;
+      const isBreak = el.localName in BREAKS && el.parentElement?.localName === 'r';
+      if (!TEXT_TAGS.has(el.localName) && !isBreak) continue;
       const p = ownParagraph(el);
       if (!p) continue;
       if (!byPara.has(p)) byPara.set(p, []);
@@ -42,7 +49,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
     }
     let i = 0;
     for (const nodes of byPara.values()) {
-      const original = nodes.map((n) => n.textContent ?? '');
+      const original = nodes.map(textOf);
       const text = original.join('');
       if (!text.trim()) continue;
       paras.push({ unit: { id: `${name}#${i++}`, text }, nodes, original });
@@ -67,7 +74,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
         for (const f of spans) redacted.add(f.text);
         const next = spans.length ? rewriteSegments(p.original, spans, style) : p.original;
         p.nodes.forEach((n, i) => {
-          if (n.textContent === next[i]) return;
+          if (!TEXT_TAGS.has(n.localName) || n.textContent === next[i]) return;
           n.textContent = next[i];
           if (n.localName !== 'instrText') n.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
         });

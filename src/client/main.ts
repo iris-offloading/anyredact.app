@@ -1,10 +1,14 @@
-import { dedupe, detectPatterns, ENTITY_LABELS, findTerms, PATTERN_TYPES, type EntityType, type Span } from '../shared/detect.ts';
-import { detectWithAi, type AiEntity } from './ai.ts';
+import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
+import { h } from './dom.ts';
+import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
+import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts';
+import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
+import { pagesFor } from '../shared/pricing.ts';
 import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
+import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
-type Mode = 'private' | 'ai';
 
 const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
@@ -15,7 +19,13 @@ const ACCEPT: Record<Kind | 'all', string> = {
 };
 ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
 
-const DEFAULT_TYPES: EntityType[] = ['email', 'phone', 'ssn', 'card', 'iban', 'ip'];
+// What the "Look for" chips offer. AI and pattern findings are both filtered by these.
+const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
+const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'date', 'card', 'iban', 'ip', 'other'];
+// Picture regions are opt-in: plenty of people want faces left visible.
+const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
+// Each page is one AI request, so very long PDFs only get the local pass after this.
+const MAX_AI_PICTURE_PAGES = 30;
 
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
@@ -42,16 +52,6 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
   }
 }
 
-const h = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> & Record<string, unknown> = {}, ...children: (Node | string)[]) => {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (k.startsWith('data-') || k.startsWith('aria-') || k === 'for') el.setAttribute(k, String(v));
-    else (el as unknown as Record<string, unknown>)[k] = v;
-  }
-  el.append(...children);
-  return el;
-};
-
 const store = {
   get(k: string) {
     try {
@@ -76,9 +76,22 @@ class App {
   private aiEntities: AiEntity[] | null = null;
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
-  private mode: Mode = store.get('anyredact.mode') === 'ai' ? 'ai' : 'private';
+  private aiError: string | null = null;
+  // Nothing leaves the browser until the user agrees, per file (or always, if they ticked that box).
+  private consent: 'ask' | 'yes' | 'no' = 'ask';
+  private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   private terms = '';
+  private visualKinds = new Set<VisualKind>();
+  // Per page, and the kinds they were computed for.
+  // Hits found so far per page, and the kinds already looked for, so ticking
+  // another kind only looks for that one and unticking needs no new pass.
+  private visualLocal = pictureCache();
+  private visualAi = pictureCache();
+  // Picture passes run one at a time, so a second analyze() sees the first one's results.
+  private pictureQueue: Promise<unknown> = Promise.resolve();
+  private visualError: string | null = null;
+  private pictureBox: HTMLElement;
   private style: RedactStyle = 'block';
   private busy = false;
 
@@ -90,6 +103,7 @@ class App {
   private notes: HTMLElement;
   private docName: HTMLElement;
   private download: HTMLButtonElement;
+  private warn: HTMLElement;
   private styleRow: HTMLElement;
   private fileInput: HTMLInputElement;
 
@@ -130,17 +144,6 @@ class App {
       }),
     );
 
-    const modeBox = h('fieldset', { className: 'mode' }, h('legend', {}, 'Detection mode'));
-    const modes: [Mode, string, string][] = [
-      ['private', 'Private', 'Runs entirely in your browser. Finds emails, phone numbers, card and bank numbers, IDs and more.'],
-      ['ai', 'AI-assisted', 'Also finds names, addresses and other context. Sends the extracted text (never the file) to our server; nothing is stored.'],
-    ];
-    for (const [value, title, desc] of modes) {
-      const input = h('input', { type: 'radio', name: 'mode', value, checked: this.mode === value });
-      input.addEventListener('change', () => this.setMode(value));
-      modeBox.append(h('label', { className: 'mode-opt' }, input, h('span', {}, h('strong', {}, title), h('small', {}, desc))));
-    }
-
     this.intake = h('div', { className: 'intake' }, drop, paste);
     this.status = h('div', { className: 'status', role: 'status', 'aria-live': 'polite', hidden: true });
 
@@ -149,7 +152,7 @@ class App {
     const reset = h('button', { type: 'button', className: 'btn ghost', textContent: 'New file', onclick: () => this.reset() });
 
     const typeBoxes = h('div', { className: 'types' });
-    for (const t of PATTERN_TYPES) {
+    for (const t of CHIP_TYPES) {
       const cb = h('input', { type: 'checkbox', checked: this.types.has(t) });
       cb.addEventListener('change', () => {
         cb.checked ? this.types.add(t) : this.types.delete(t);
@@ -157,6 +160,25 @@ class App {
       });
       typeBoxes.append(h('label', { className: 'chip' }, cb, ENTITY_LABELS[t]));
     }
+
+    const saved = (store.get('picture-kinds') || '').split(',');
+    for (const k of VISUAL_KINDS) if (saved.includes(k)) this.visualKinds.add(k);
+    const pictureChips = h('div', { className: 'types' });
+    for (const k of VISUAL_KINDS) {
+      const cb = h('input', { type: 'checkbox', checked: this.visualKinds.has(k) });
+      cb.addEventListener('change', () => {
+        cb.checked ? this.visualKinds.add(k) : this.visualKinds.delete(k);
+        store.set('picture-kinds', [...this.visualKinds].join(','));
+        this.analyze();
+      });
+      pictureChips.append(h('label', { className: 'chip' }, cb, VISUAL_LABELS[k]));
+    }
+    this.pictureBox = h(
+      'div',
+      { hidden: true },
+      h('h3', {}, 'In pictures'),
+      pictureChips,
+    );
 
     const termsArea = h('textarea', { rows: 3, placeholder: 'One per line, e.g. a name or project', 'aria-label': 'Words to always redact' });
     let termTimer = 0;
@@ -179,27 +201,32 @@ class App {
     this.styleRow = h('label', { className: 'row' }, 'Style ', styleSel);
 
     this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
+    this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
+    this.consentBox = h('div', { className: 'consent', hidden: true });
 
     const panel = h(
       'aside',
       { className: 'panel' },
       h('div', { className: 'panel-head' }, this.docName, reset),
+      this.consentBox,
       h('h3', {}, 'Look for'),
       typeBoxes,
+      this.pictureBox,
       h('h3', {}, 'Always redact'),
       termsArea,
       h('h3', {}, 'Found'),
       this.list,
       this.styleRow,
       this.download,
+      this.warn,
       this.notes,
     );
     this.preview = h('div', { className: 'preview' });
     this.workspace = h('div', { className: 'workspace', hidden: true }, panel, this.preview);
 
-    root.append(modeBox, this.intake, this.status, this.workspace);
+    root.append(this.intake, this.status, this.workspace);
     document.addEventListener('paste', (e) => {
       if (this.doc || (e.target as HTMLElement)?.closest?.('textarea,input')) return;
       const f = e.clipboardData?.files[0];
@@ -215,12 +242,6 @@ class App {
     this.status.classList.toggle('error', error);
   }
 
-  private setMode(m: Mode) {
-    this.mode = m;
-    store.set('anyredact.mode', m);
-    if (this.doc) this.analyze();
-  }
-
   async open(file: File) {
     if (this.busy) return;
     if (file.size > 100 * 1024 * 1024) return this.say('That file is over 100 MB, which is too large to process in the browser.', true);
@@ -231,6 +252,7 @@ class App {
       this.doc = await load(file, (m) => this.say(m));
       this.docName.textContent = file.name;
       this.styleRow.hidden = this.doc.kind === 'pdf' || this.doc.kind === 'image';
+      this.pictureBox.hidden = !this.doc.pages.length;
       this.notes.replaceChildren(...this.doc.notes.map((n) => h('li', {}, n)));
       this.intake.hidden = true;
       this.workspace.hidden = false;
@@ -251,6 +273,12 @@ class App {
     this.findings = [];
     this.boxes = [];
     this.aiEntities = null;
+    this.aiError = null;
+    this.visualLocal = pictureCache();
+    this.visualAi = pictureCache();
+    this.visualError = null;
+    this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
+    this.consentBox.hidden = true;
     this.overrides.clear();
     this.editors = [];
     this.preview.replaceChildren();
@@ -269,44 +297,128 @@ class App {
       .filter(Boolean)
       .map((text) => ({ text, type: 'custom' as EntityType }));
 
-    if (this.mode === 'ai' && !this.aiEntities) {
+    // Ask the model once per document, and only after the user agreed to send
+    // the text; pattern rules run alongside it as a safety net.
+    if (this.consent === 'ask') this.askConsent(doc);
+    if (this.consent === 'yes' && !this.aiEntities && !this.aiError) {
       const text = doc.units.map((u) => u.text).join('\n\n');
       if (text.trim()) {
-        this.say('Asking the AI model to look for names, addresses and other details…');
+        this.say('Finding names, addresses and other personal details…');
         try {
           this.aiEntities = await detectWithAi(text);
         } catch (err) {
-          this.say(`${err instanceof Error ? err.message : 'AI detection failed.'} Showing private-mode results.`, true);
+          this.aiError =
+            err instanceof QuotaError
+              ? `${err.message} They reset tomorrow, or you can buy more under Account.`
+              : err instanceof Error
+                ? err.message
+                : 'AI detection failed.';
         }
       }
       if (this.doc !== doc) return;
     }
 
-    const findings: Finding[] = [];
-    for (const unit of doc.units) {
-      let spans: Span[] = [...findTerms(unit.text, terms), ...detectPatterns(unit.text, this.types)];
-      if (this.mode === 'ai' && this.aiEntities) spans.push(...findTerms(unit.text, this.aiEntities, 'ai'));
-      spans = dedupe(spans);
-      for (const s of spans) {
-        const key = `${unit.id}:${s.start}:${s.end}`;
-        findings.push({
+    const byId = new Map(doc.units.map((u) => [u.id, u]));
+    const spans = analyzeUnits(doc.units, {
+      types: this.types,
+      terms,
+      ai: this.aiEntities,
+    }).filter((s) => s.type === 'custom' || this.types.has(s.type));
+    const findings: Finding[] = spans.map((s) => {
+      const unit = byId.get(s.unitId)!;
+      const key = `${unit.id}:${s.start}:${s.end}`;
+      return {
+        key,
+        unitId: unit.id,
+        start: s.start,
+        end: s.end,
+        type: s.type,
+        source: s.source,
+        text: unit.text.slice(s.start, s.end),
+        enabled: this.overrides.get(key) ?? startsTicked(s),
+        publicHint: s.publicHint,
+        page: unit.page,
+        rects: unit.rectsFor?.(s.start, s.end) ?? [],
+      };
+    });
+    const pictures = await this.pictureFindings(doc);
+    if (this.doc !== doc) return;
+    this.findings = [...findings, ...pictures];
+    this.warn.hidden = true;
+    if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
+    else if (this.visualError) this.say(this.visualError, true);
+    else if (this.consent === 'no') this.say('Using the built-in rules only. Nothing was sent to our server, but names and addresses are easy to miss this way. Review carefully.');
+    else if (this.consent === 'ask') this.say('The list shows what the built-in rules found so far.');
+    else this.say('');
+    this.renderList();
+    this.refreshPreview();
+  }
+
+  /** Faces, screens, signs and plates on page bitmaps, when the visitor ticked any. */
+  private pictureFindings(doc: LoadedDoc): Promise<Finding[]> {
+    const run = this.pictureQueue.then(() => this.findPictures(doc));
+    this.pictureQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async findPictures(doc: LoadedDoc): Promise<Finding[]> {
+    const kinds = new Set(this.visualKinds);
+    // A queued pass for a file that has since been replaced must not fill the new file's caches.
+    if (this.doc !== doc) return [];
+    if (!kinds.size || !doc.pages.length) return [];
+    this.visualError = null;
+    const local = missingKinds(this.visualLocal, kinds);
+    if (local.size) {
+      this.say('Looking for faces and screens on this device…');
+      try {
+        const found: VisualHit[][] = [];
+        for (const p of doc.pages) found[p.index] = await detectVisual(p.canvas, local);
+        if (this.doc !== doc) return [];
+        addHits(this.visualLocal, local, found);
+      } catch (err) {
+        console.warn(err);
+        this.visualError = 'The on-device picture detector could not start in this browser.';
+      }
+    }
+    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, kinds) : new Set<VisualKind>();
+    if (ai.size) {
+      const pages = doc.pages.slice(0, MAX_AI_PICTURE_PAGES);
+      try {
+        const found: VisualHit[][] = [];
+        for (const p of pages) {
+          this.say(pages.length > 1 ? `Checking pictures with AI… page ${p.index + 1} of ${pages.length}` : 'Checking the picture with AI…');
+          found[p.index] = await detectVisualAi(p.canvas, ai);
+          if (this.doc !== doc) return [];
+        }
+        addHits(this.visualAi, ai, found);
+      } catch (err) {
+        console.warn(err);
+        this.visualError = `${err instanceof Error ? err.message : 'Picture detection failed.'} Showing what this device found; review the pictures carefully.`;
+      }
+    }
+    const out: Finding[] = [];
+    const counts = new Map<VisualKind, number>();
+    for (const p of doc.pages) {
+      const merged = mergeHits([...(this.visualLocal.hits[p.index] ?? []), ...(this.consent === 'yes' ? (this.visualAi.hits[p.index] ?? []) : [])]);
+      for (const hit of merged.filter((x) => kinds.has(x.kind)).sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x)) {
+        const n = (counts.get(hit.kind) ?? 0) + 1;
+        counts.set(hit.kind, n);
+        const key = `picture:${p.index}:${hit.kind}:${Math.round(hit.rect.x)}:${Math.round(hit.rect.y)}`;
+        out.push({
           key,
-          unitId: unit.id,
-          start: s.start,
-          end: s.end,
-          type: s.type,
-          source: s.source,
-          text: unit.text.slice(s.start, s.end),
+          unitId: 'pictures',
+          start: 0,
+          end: 0,
+          type: hit.kind,
+          source: 'visual',
+          text: `${ENTITY_LABELS[hit.kind]} ${n}`,
           enabled: this.overrides.get(key) ?? true,
-          page: unit.page,
-          rects: unit.rectsFor?.(s.start, s.end) ?? [],
+          page: p.index,
+          rects: [hit.rect],
         });
       }
     }
-    this.findings = findings;
-    if (!this.status.classList.contains('error')) this.say('');
-    this.renderList();
-    this.refreshPreview();
+    return out;
   }
 
   private toggle(keys: string[], on: boolean) {
@@ -337,8 +449,8 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? ` · p${f.page + 1}` : '';
-        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', {}, (f.source === 'ai' ? 'AI' : '') + where));
+        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? `, p${f.page + 1}` : '';
+        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, (f.publicHint ? 'public? ' : '') + (f.source === 'ai' ? 'AI' : '') + where));
         row.addEventListener('mouseenter', () => this.focus(f));
         return row;
       });
@@ -426,7 +538,7 @@ class App {
       for (const f of (byUnit.get(u.id) ?? []).sort((a, b) => a.start - b.start)) {
         if (f.start < pos) continue;
         el.append(u.text.slice(pos, f.start));
-        const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]} · click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, u.text.slice(f.start, f.end));
+        const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, u.text.slice(f.start, f.end));
         mark.addEventListener('click', () => this.toggle([f.key], !f.enabled));
         el.append(mark);
         pos = f.end;
@@ -442,13 +554,27 @@ class App {
     );
   }
 
-  private async export() {
+  private async export(skipCheck = false) {
     const doc = this.doc;
     if (!doc || this.busy) return;
     this.busy = true;
     this.download.disabled = true;
-    this.say('Preparing your redacted file…');
+    this.warn.hidden = true;
+    let checkNote = '';
     try {
+      // Ask a second model whether anything sensitive is still readable before handing over the file.
+      if (!skipCheck && this.consent === 'yes') {
+        this.say('Checking the redacted file for anything left…');
+        try {
+          const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
+          if (this.doc !== doc) return;
+          if (left.length) return this.warnLeft(left);
+        } catch (err) {
+          console.warn(err);
+          checkNote = ' The final check could not run, so review the file carefully.';
+        }
+      }
+      this.say('Preparing your redacted file…');
       const { blob, filename } = await doc.exportFile(this.findings, this.boxes, this.style);
       const url = URL.createObjectURL(blob);
       const a = h('a', { href: url, download: filename });
@@ -457,7 +583,8 @@ class App {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
-      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}. Open it and check before sharing.`);
+      if (this.consent !== 'yes') checkNote = ' The AI check was skipped because nothing is sent to our server, so review the file carefully.';
+      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`);
     } catch (err) {
       console.error(err);
       this.say(err instanceof Error ? err.message : 'Export failed.', true);
@@ -466,7 +593,83 @@ class App {
       this.download.disabled = false;
     }
   }
+
+  private askConsent(doc: LoadedDoc) {
+    if (!this.consentBox.hidden) return;
+    const text = doc.units.map((u) => u.text).join(' ');
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const pictures = this.visualKinds.size > 0 && doc.pages.length > 0;
+    if (!words && !pictures) {
+      this.consentBox.hidden = true;
+      return;
+    }
+    const always = h('input', { type: 'checkbox' });
+    const choose = (answer: 'yes' | 'no') => {
+      if (answer === 'yes' && always.checked) store.set('ai-consent', 'always');
+      this.consent = answer;
+      this.consentBox.hidden = true;
+      this.analyze();
+    };
+    this.consentBox.replaceChildren(
+      h(
+        'p',
+        {},
+        h('strong', {}, 'Nothing has been sent yet. '),
+        words ? `To find names, addresses and other personal details, AnyRedact sends the text read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare.` : '',
+        pictures ? ` With picture redaction on, it also sends the page image${doc.pages.length > 1 ? 's' : ''}.` : '',
+      ),
+      h('button', { type: 'button', className: 'btn primary', textContent: 'Find personal info with AI', onclick: () => choose('yes') }),
+      h('button', { type: 'button', className: 'btn ghost', textContent: 'Use built-in rules only', onclick: () => choose('no') }),
+      h('label', { className: 'row' }, always, 'Always use AI on this device'),
+    );
+    this.consentBox.hidden = false;
+    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
+    freePagesLeft().then((left) => {
+      if (left === null || this.doc !== doc || this.consentBox.hidden) return;
+      this.consentBox.append(
+        h('p', { className: 'hint' }, left >= pages ? `Uses about ${pages} credit${pages === 1 ? '' : 's'} of ${left} left today.` : `Needs about ${pages} credit${pages === 1 ? '' : 's'}; ${left} left today.`),
+      );
+    });
+  }
+
+  private warnLeft(left: string[]) {
+    const list = left.map((k) => CHECK_LABELS[k]);
+    const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
+    this.say('');
+    this.warn.replaceChildren(
+      h('p', { className: 'warn-text' }, `The final check thinks some ${what} may still be readable. Look through the preview, tick anything that was missed, or select the text and redact it.`),
+      h(
+        'div',
+        { className: 'warn-actions' },
+        h('button', { type: 'button', className: 'btn', textContent: 'Keep reviewing', onclick: () => (this.warn.hidden = true) }),
+        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true) }),
+      ),
+    );
+    this.warn.hidden = false;
+    this.warn.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 const root = document.getElementById('tool');
 if (root) new App(root);
+
+// Picture hits per page, and the kinds already looked for, so ticking another
+// kind only looks for that one and unticking needs no new pass. A failed pass
+// records nothing, so the next analyze tries again.
+interface PictureCache {
+  kinds: Set<VisualKind>;
+  hits: VisualHit[][];
+}
+
+function pictureCache(): PictureCache {
+  return { kinds: new Set(), hits: [] };
+}
+
+function missingKinds(cache: PictureCache, kinds: Set<VisualKind>) {
+  return new Set([...kinds].filter((k) => !cache.kinds.has(k)));
+}
+
+function addHits(cache: PictureCache, kinds: Set<VisualKind>, found: VisualHit[][]) {
+  kinds.forEach((k) => cache.kinds.add(k));
+  found.forEach((hits, page) => (cache.hits[page] ??= []).push(...hits));
+}

@@ -1,8 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "anyredact",
+  "name": "anyredact-app",
   "main": "src/worker/index.ts",
   "compatibility_date": "2025-09-01",
+  // Wrangler builds the site before every dev, deploy and versions upload, so
+  // Workers Builds works even when the dashboard build command is left empty.
+  "build": { "command": "npm run build", "watch_dir": ["src", "scripts", "static"] },
   "observability": { 
     "logs": { "enabled": true }, 
     "traces": { "enabled": true }, 
@@ -15,10 +18,32 @@
     "not_found_handling": "404-page"
   },
   "ai": { "binding": "AI" },
+  // Free daily AI allowance per browser and per IP (src/worker/quota.ts).
+  "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Quota"] }],
+  "vars": { "FREE_CHARS_PER_DAY": "100000", "EMAIL_FROM": "sign-in@anyredact.app" },
+  // Accounts and paid page balances (migrations/). Secrets set in the dashboard:
+  // STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+  // Sign-in links go out through Cloudflare Email Service (needs anyredact.app onboarded).
+  "send_email": [{ "name": "EMAIL" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "anyredact", "database_id": "3dac13f1-b620-4fb7-be0d-95fe9ca963a7" }],
   // Per-IP limit on /api/detect. namespace_id is any account-unique integer.
   "ratelimits": [
     { "name": "DETECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }
   ],
+  // Preview deployments (pull request builds) need their own bindings. They get a
+  // separate rate-limit namespace so previews don't share production's counters.
+  "previews": {
+    "ai": { "binding": "AI" },
+    // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
+    "vars": { "MODEL_TRIALS": "1", "FREE_CHARS_PER_DAY": "100000", "EMAIL_FROM": "sign-in@anyredact.app" },
+    "send_email": [{ "name": "EMAIL" }],
+    "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "76fdd406-5e72-4528-8702-d04104d017e5" }],
+    "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
+    "ratelimits": [
+      { "name": "DETECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
+    ]
+  },
   // `npm run dev:local` runs without a Cloudflare login: no AI binding, so
   // AI-assisted mode reports itself unavailable while private mode works.
   "env": {
