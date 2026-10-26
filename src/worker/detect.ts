@@ -12,6 +12,7 @@ export interface Env extends QuotaEnv, BillingEnv {
   AI?: Ai;
   DETECT_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
   AI_MODEL?: string;
+  FALLBACK_MODEL?: string;
   VISION_MODEL?: string;
   // Set only on preview deployments: lets a request pick the model, for benchmarking.
   MODEL_TRIALS?: string;
@@ -20,10 +21,16 @@ export interface Env extends QuotaEnv, BillingEnv {
 // Chosen by scripts/bench-models.mjs: found 83 of 84 expected values over two
 // runs, against 64 for Llama 3.3 70B and 78 for gpt-oss-120b, and was the fastest.
 const DEFAULT_MODEL = '@cf/deepseek-ai/deepseek-v4.1-flash-1017';
+// DeepSeek allows 20 requests a minute (50 with AI Gateway credits). When it is
+// still rate limited after the retries, a chunk goes to this model instead: on
+// 300 finance documents it found 82% of values against DeepSeek's 86%, and it
+// allows 300 requests a minute.
+const FALLBACK_MODEL = '@cf/nvidia/nemotron-3-120b-a12b';
 // Reasoning models spend their whole token budget thinking unless told not to.
 const MODEL_OPTIONS: Record<string, object> = {
   '@cf/deepseek-ai/deepseek-v4.1-flash-1017': { chat_template_kwargs: { thinking: false } },
   '@cf/openai/gpt-oss-120b': { reasoning_effort: 'low' },
+  '@cf/nvidia/nemotron-3-120b-a12b': { chat_template_kwargs: { enable_thinking: false } },
 };
 export const MAX_CHARS = 60_000;
 // Smaller chunks make the model list entities more thoroughly.
@@ -167,18 +174,30 @@ async function detectClairic(env: Env, chunk: string, model: string, usage: Usag
 
 // Workers AI caps requests per minute per model (error 3021). Back off and retry
 // rather than failing a document because of a short burst.
+const isRateLimit = (err: unknown) => /\b3021\b|rate limit/i.test(String(err));
+
 export async function runWithRetry<T>(call: () => Promise<T>, waits = [1500, 4000]): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await call();
     } catch (err) {
-      if (attempt >= waits.length || !/\b3021\b|rate limit/i.test(String(err))) throw err;
+      if (attempt >= waits.length || !isRateLimit(err)) throw err;
       await new Promise((r) => setTimeout(r, waits[attempt]));
     }
   }
 }
 
-async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object, waits?: number[]): Promise<Entity[]> {
+async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object, waits?: number[], fallback?: string): Promise<Entity[]> {
+  try {
+    return await runModel(env, chunk, model, usage, raw, extra, waits);
+  } catch (err) {
+    if (!fallback || fallback === model || !isRateLimit(err)) throw err;
+    console.warn(`${model} rate limited, using ${fallback}`);
+    return runModel(env, chunk, fallback, usage, raw, extra);
+  }
+}
+
+async function runModel(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object, waits?: number[]): Promise<Entity[]> {
   if (model.endsWith('/clairic')) return detectClairic(env, chunk, model, usage, raw);
   // Partner models (e.g. openai/…) go through AI Gateway with OpenAI's own
   // parameters: max_completion_tokens, a named strict schema, default temperature.
@@ -207,8 +226,8 @@ export function json(body: unknown, status = 200) {
   });
 }
 
-async function detectText(env: Env, text: string, model: string, usage: Usage, raw?: unknown[], options?: object, waits?: number[]): Promise<Entity[]> {
-  const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, options, waits)));
+async function detectText(env: Env, text: string, model: string, usage: Usage, raw?: unknown[], options?: object, waits?: number[], fallback?: string): Promise<Entity[]> {
+  const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, options, waits, fallback)));
   const seen = new Set<string>();
   return results.flat().filter((e) => {
     const k = `${e.type}\u0000${e.text}`;
@@ -287,7 +306,8 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const raw: unknown[] | undefined = trial ? [] : undefined;
   const started = Date.now();
   try {
-    const entities = await detectText(env, text, model, usage, raw, trial ? extra : undefined);
+    const fallback = trial ? undefined : env.FALLBACK_MODEL || FALLBACK_MODEL;
+    const entities = await detectText(env, text, model, usage, raw, trial ? extra : undefined, undefined, fallback);
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
     return json({ entities, quota: quota.state });
   } catch (err) {

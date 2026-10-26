@@ -103,6 +103,23 @@ test('retries when Workers AI rate-limits the model', async () => {
   await assert.rejects(runWithRetry(async () => { throw new Error('other'); }, [1]), /other/);
 });
 
+test('falls back to another model while the default one is rate limited', async () => {
+  const models: string[] = [];
+  const e = env(null);
+  e.AI = {
+    run: async (model: string) => {
+      models.push(model);
+      if (model.includes('deepseek')) throw new Error('AiError: 3021: rate limiting: inference request per min rate reached');
+      return { response: { entities: [{ text: 'John Smith', type: 'name', owner: 'person' }] } };
+    },
+  } as unknown as Ai;
+  const res = await worker.fetch(post({ text: 'Patient John Smith' }), e);
+  const body = (await res.json()) as { entities: { text: string }[] };
+  assert.deepEqual(body.entities.map((x) => x.text), ['John Smith']);
+  assert.equal(models.filter((m) => m.includes('deepseek')).length, 3);
+  assert.ok(models.at(-1)!.includes('nemotron'));
+});
+
 // In-memory stand-in for the Quota Durable Object namespace.
 async function quotaNamespace() {
   const { Quota } = await import('../src/worker/quota.ts');
