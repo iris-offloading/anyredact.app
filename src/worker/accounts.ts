@@ -26,7 +26,6 @@ export interface User {
 const SESSION_DAYS = 30;
 const LOGIN_MINUTES = 15;
 
-
 export function randomToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -52,7 +51,6 @@ const redirect = (location: string, cookies: string[] = []) => {
   for (const c of cookies) headers.append('set-cookie', c);
   return new Response(null, { status: 302, headers });
 };
-
 
 export async function currentUser(request: Request, env: AccountsEnv): Promise<User | null> {
   const token = cookie(request, 'session');

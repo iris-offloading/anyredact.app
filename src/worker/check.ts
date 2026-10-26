@@ -1,4 +1,5 @@
-import { MAX_CHARS, runWithRetry, type Env } from './detect.ts';
+import { MAX_CHARS } from '../shared/pricing.ts';
+import { runWithRetry, type Env } from './detect.ts';
 import { json, readAiPost } from './http.ts';
 
 // Final check before download: the browser sends the document text with every

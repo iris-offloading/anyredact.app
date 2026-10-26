@@ -13,7 +13,13 @@ export function json(body: unknown, status = 200, cookies: string[] = []) {
 /** True when a browser sent the request from another site. */
 export function crossOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
-  return !!origin && new URL(origin).host !== new URL(request.url).host;
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== new URL(request.url).host;
+  } catch {
+    // "null" (sandboxed frames, file:// pages) or garbage: not this site.
+    return true;
+  }
 }
 
 export interface Limiter {
@@ -35,7 +41,9 @@ export async function readAiPost(request: Request, env: { AI?: unknown; DETECT_L
   if (await rateLimited(request, env.DETECT_LIMITER)) return json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
   try {
     const body = await request.json();
-    if (body && typeof body === 'object') return body as Record<string, unknown>;
-  } catch {}
-  return json({ error: 'Invalid JSON' }, 400);
+    // Valid JSON that isn't an object carries no fields; each route answers it as empty input.
+    return body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  } catch {
+    return json({ error: 'Invalid JSON' }, 400);
+  }
 }

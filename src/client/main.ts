@@ -52,7 +52,6 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
   }
 }
 
-
 const store = {
   get(k: string) {
     try {
@@ -87,8 +86,10 @@ class App {
   // Per page, and the kinds they were computed for.
   // Hits found so far per page, and the kinds already looked for, so ticking
   // another kind only looks for that one and unticking needs no new pass.
-  private visualLocal = { kinds: new Set<VisualKind>(), hits: [] as VisualHit[][] };
-  private visualAi = { kinds: new Set<VisualKind>(), hits: [] as VisualHit[][] };
+  private visualLocal = pictureCache();
+  private visualAi = pictureCache();
+  // Picture passes run one at a time, so a second analyze() sees the first one's results.
+  private pictureQueue: Promise<unknown> = Promise.resolve();
   private visualError: string | null = null;
   private pictureBox: HTMLElement;
   private style: RedactStyle = 'block';
@@ -273,8 +274,8 @@ class App {
     this.boxes = [];
     this.aiEntities = null;
     this.aiError = null;
-    this.visualLocal = { kinds: new Set(), hits: [] };
-    this.visualAi = { kinds: new Set(), hits: [] };
+    this.visualLocal = pictureCache();
+    this.visualAi = pictureCache();
     this.visualError = null;
     this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
     this.consentBox.hidden = true;
@@ -354,34 +355,42 @@ class App {
   }
 
   /** Faces, screens, signs and plates on page bitmaps, when the visitor ticked any. */
-  private async pictureFindings(doc: LoadedDoc): Promise<Finding[]> {
-    const kinds = this.visualKinds;
+  private pictureFindings(doc: LoadedDoc): Promise<Finding[]> {
+    const run = this.pictureQueue.then(() => this.findPictures(doc));
+    this.pictureQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async findPictures(doc: LoadedDoc): Promise<Finding[]> {
+    const kinds = new Set(this.visualKinds);
+    // A queued pass for a file that has since been replaced must not fill the new file's caches.
+    if (this.doc !== doc) return [];
     if (!kinds.size || !doc.pages.length) return [];
-    const missing = (cache: { kinds: Set<VisualKind> }) => new Set([...kinds].filter((k) => !cache.kinds.has(k)));
     this.visualError = null;
-    const local = missing(this.visualLocal);
+    const local = missingKinds(this.visualLocal, kinds);
     if (local.size) {
       this.say('Looking for faces and screens on this device…');
-      const { hits } = this.visualLocal;
-      local.forEach((k) => this.visualLocal.kinds.add(k));
       try {
-        for (const p of doc.pages) (hits[p.index] ??= []).push(...(await detectVisual(p.canvas, local)));
+        const found: VisualHit[][] = [];
+        for (const p of doc.pages) found[p.index] = await detectVisual(p.canvas, local);
+        if (this.doc !== doc) return [];
+        addHits(this.visualLocal, local, found);
       } catch (err) {
         console.warn(err);
         this.visualError = 'The on-device picture detector could not start in this browser.';
       }
     }
-    const ai = this.consent === 'yes' ? missing(this.visualAi) : new Set<VisualKind>();
+    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, kinds) : new Set<VisualKind>();
     if (ai.size) {
-      const { hits } = this.visualAi;
-      ai.forEach((k) => this.visualAi.kinds.add(k));
       const pages = doc.pages.slice(0, MAX_AI_PICTURE_PAGES);
       try {
+        const found: VisualHit[][] = [];
         for (const p of pages) {
           this.say(pages.length > 1 ? `Checking pictures with AI… page ${p.index + 1} of ${pages.length}` : 'Checking the picture with AI…');
-          (hits[p.index] ??= []).push(...(await detectVisualAi(p.canvas, ai)));
+          found[p.index] = await detectVisualAi(p.canvas, ai);
           if (this.doc !== doc) return [];
         }
+        addHits(this.visualAi, ai, found);
       } catch (err) {
         console.warn(err);
         this.visualError = `${err instanceof Error ? err.message : 'Picture detection failed.'} Showing what this device found; review the pictures carefully.`;
@@ -643,3 +652,24 @@ class App {
 
 const root = document.getElementById('tool');
 if (root) new App(root);
+
+// Picture hits per page, and the kinds already looked for, so ticking another
+// kind only looks for that one and unticking needs no new pass. A failed pass
+// records nothing, so the next analyze tries again.
+interface PictureCache {
+  kinds: Set<VisualKind>;
+  hits: VisualHit[][];
+}
+
+function pictureCache(): PictureCache {
+  return { kinds: new Set(), hits: [] };
+}
+
+function missingKinds(cache: PictureCache, kinds: Set<VisualKind>) {
+  return new Set([...kinds].filter((k) => !cache.kinds.has(k)));
+}
+
+function addHits(cache: PictureCache, kinds: Set<VisualKind>, found: VisualHit[][]) {
+  kinds.forEach((k) => cache.kinds.add(k));
+  found.forEach((hits, page) => (cache.hits[page] ??= []).push(...hits));
+}

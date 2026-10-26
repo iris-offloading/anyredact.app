@@ -113,7 +113,9 @@ function crop(src: HTMLCanvasElement, r: Rect): HTMLCanvasElement {
     c.width = w;
     c.height = h;
   }
-  c.getContext('2d')!.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, w, h);
+  const ctx = c.getContext('2d')!;
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, w, h);
   return c;
 }
 

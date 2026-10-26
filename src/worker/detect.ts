@@ -33,7 +33,6 @@ const MODEL_OPTIONS: Record<string, object> = {
   '@cf/openai/gpt-oss-120b': { reasoning_effort: 'low' },
   '@cf/nvidia/nemotron-3-120b-a12b': { chat_template_kwargs: { enable_thinking: false } },
 };
-export { MAX_CHARS };
 // Smaller chunks make the model list entities more thoroughly.
 const CHUNK_CHARS = 3_000;
 
@@ -236,7 +235,6 @@ async function runModel(run: Run, chunk: string): Promise<Entity[]> {
   usage.completion_tokens = (usage.completion_tokens ?? 0) + (result?.usage?.completion_tokens ?? 0);
   return parseEntities(responseContent(result), chunk);
 }
-
 
 async function detectText(run: Run, text: string): Promise<Entity[]> {
   const results = await Promise.all(chunkText(text).map((c) => detectChunk(run, c)));

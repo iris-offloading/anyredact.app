@@ -11,7 +11,6 @@ export interface BillingEnv extends AccountsEnv {
   STRIPE_WEBHOOK_SECRET?: string;
 }
 
-
 /** Flattens nested params into Stripe's form encoding: a[b][0][c]=x. */
 export function stripeForm(params: Record<string, unknown>, prefix = '', out = new URLSearchParams()): URLSearchParams {
   for (const [k, v] of Object.entries(params)) {

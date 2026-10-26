@@ -14,7 +14,6 @@ interface Me {
   error?: string;
 }
 
-
 const root = document.getElementById('account')!;
 const status = h('p', { className: 'status', role: 'status', hidden: true });
 const say = (msg: string, error = false) => {
