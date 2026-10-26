@@ -1,8 +1,9 @@
 import { plausibleEntity } from '../shared/detect.ts';
-import { pagesFor } from '../shared/pricing.ts';
+import { MAX_CHARS, pagesFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
 import { spendPaidPages, type BillingEnv } from './billing.ts';
 import { chargeQuota, type QuotaEnv, type QuotaState } from './quota.ts';
+import { json, readAiPost } from './http.ts';
 
 // AI detection endpoint. The browser sends the text it extracted from a file
 // and gets back the sensitive substrings; nothing is stored.
@@ -32,7 +33,7 @@ const MODEL_OPTIONS: Record<string, object> = {
   '@cf/openai/gpt-oss-120b': { reasoning_effort: 'low' },
   '@cf/nvidia/nemotron-3-120b-a12b': { chat_template_kwargs: { enable_thinking: false } },
 };
-export const MAX_CHARS = 60_000;
+export { MAX_CHARS };
 // Smaller chunks make the model list entities more thoroughly.
 const CHUNK_CHARS = 3_000;
 
@@ -156,7 +157,22 @@ const CLAIRIC_FIELDS: Record<Entity['type'], string> = {
   other: 'Other sensitive values: usernames, passwords, session tokens, API keys, IP addresses, health conditions and medications of a person.',
 };
 
-async function detectClairic(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[]): Promise<Entity[]> {
+/** One detection request: which model, plus what the benchmarks and the rate-limit fallback need. */
+interface Run {
+  env: Env;
+  model: string;
+  usage: Usage;
+  /** Collects raw model responses (trials only). */
+  raw?: unknown[];
+  /** Extra model options (trials only). */
+  extra?: object;
+  /** Retry waits after a rate limit. */
+  waits?: number[];
+  /** Model to use when the main one is still rate limited after the retries. */
+  fallback?: string;
+}
+
+async function detectClairic({ env, model, usage, raw }: Run, chunk: string): Promise<Entity[]> {
   const fields = Object.fromEntries(
     Object.entries(CLAIRIC_FIELDS).map(([type, instructions]) => [type, { type: 'list', items: 'text', instructions }]),
   );
@@ -187,18 +203,20 @@ export async function runWithRetry<T>(call: () => Promise<T>, waits = [1500, 400
   }
 }
 
-async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object, waits?: number[], fallback?: string): Promise<Entity[]> {
+async function detectChunk(run: Run, chunk: string): Promise<Entity[]> {
   try {
-    return await runModel(env, chunk, model, usage, raw, extra, waits);
+    return await runModel(run, chunk);
   } catch (err) {
+    const { model, fallback } = run;
     if (!fallback || fallback === model || !isRateLimit(err)) throw err;
     console.warn(`${model} rate limited, using ${fallback}`);
-    return runModel(env, chunk, fallback, usage, raw, extra);
+    return runModel({ ...run, model: fallback, waits: undefined }, chunk);
   }
 }
 
-async function runModel(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object, waits?: number[]): Promise<Entity[]> {
-  if (model.endsWith('/clairic')) return detectClairic(env, chunk, model, usage, raw);
+async function runModel(run: Run, chunk: string): Promise<Entity[]> {
+  const { env, model, usage, raw, extra, waits } = run;
+  if (model.endsWith('/clairic')) return detectClairic(run, chunk);
   // Partner models (e.g. openai/…) go through AI Gateway with OpenAI's own
   // parameters: max_completion_tokens, a named strict schema, default temperature.
   const partner = !model.startsWith('@cf/');
@@ -219,15 +237,9 @@ async function runModel(env: Env, chunk: string, model: string, usage: Usage, ra
   return parseEntities(responseContent(result), chunk);
 }
 
-export function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
 
-async function detectText(env: Env, text: string, model: string, usage: Usage, raw?: unknown[], options?: object, waits?: number[], fallback?: string): Promise<Entity[]> {
-  const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, options, waits, fallback)));
+async function detectText(run: Run, text: string): Promise<Entity[]> {
+  const results = await Promise.all(chunkText(text).map((c) => detectChunk(run, c)));
   const seen = new Set<string>();
   return results.flat().filter((e) => {
     const k = `${e.type}\u0000${e.text}`;
@@ -249,7 +261,7 @@ async function detectBatch(env: Env, texts: unknown[], model: string, options?: 
       const started = Date.now();
       try {
         if (typeof text !== 'string' || text.length > MAX_CHARS) throw new Error('invalid text');
-        out[i] = { entities: await detectText(env, text, model, usage, undefined, options, [5000, 10000, 20000, 30000]), ms: Date.now() - started, usage };
+        out[i] = { entities: await detectText({ env, model, usage, extra: options, waits: [5000, 10000, 20000, 30000] }, text), ms: Date.now() - started, usage };
       } catch (err) {
         out[i] = { error: String(err), usage };
       }
@@ -270,26 +282,9 @@ export async function chargeUsage(request: Request, env: Env, chars: number): Pr
 }
 
 export async function handleDetect(request: Request, env: Env): Promise<Response> {
-  if (!env.AI) return json({ error: 'AI detection is not configured on this server.' }, 503);
-  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-  const origin = request.headers.get('origin');
-  if (origin && new URL(origin).host !== new URL(request.url).host) return json({ error: 'Forbidden' }, 403);
-
-  if (env.DETECT_LIMITER) {
-    const key = request.headers.get('cf-connecting-ip') || 'anon';
-    const { success } = await env.DETECT_LIMITER.limit({ key });
-    if (!success) return json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
-  }
-
-  let text: unknown;
-  let texts: unknown;
-  let requested: unknown;
-  let options: unknown;
-  try {
-    ({ text, texts, model: requested, options } = (await request.json()) as { text?: unknown; texts?: unknown; model?: unknown; options?: unknown });
-  } catch {
-    return json({ error: 'Invalid JSON' }, 400);
-  }
+  const body = await readAiPost(request, env, 'AI detection is not configured on this server.');
+  if (body instanceof Response) return body;
+  const { text, texts, model: requested, options } = body;
   const trials = env.MODEL_TRIALS === '1';
   const trial = trials && typeof requested === 'string' && /^(@cf\/)?[\w.-]+\/[\w.-]+$/.test(requested);
   const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
@@ -306,8 +301,10 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const raw: unknown[] | undefined = trial ? [] : undefined;
   const started = Date.now();
   try {
-    const fallback = trial ? undefined : env.FALLBACK_MODEL || FALLBACK_MODEL;
-    const entities = await detectText(env, text, model, usage, raw, trial ? extra : undefined, undefined, fallback);
+    const entities = await detectText(
+      trial ? { env, model, usage, raw, extra } : { env, model, usage, fallback: env.FALLBACK_MODEL || FALLBACK_MODEL },
+      text,
+    );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
     return json({ entities, quota: quota.state });
   } catch (err) {

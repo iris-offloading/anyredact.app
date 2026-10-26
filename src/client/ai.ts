@@ -1,4 +1,5 @@
 import type { EntityType } from '../shared/detect.ts';
+import { MAX_CHARS, PAGE_CHARS } from '../shared/pricing.ts';
 
 export interface AiEntity {
   text: string;
@@ -17,6 +18,19 @@ export function deviceId(): string {
   }
 }
 
+/** POSTs JSON to a metered API route; a 402 becomes a QuotaError. */
+export async function postApi<T>(path: string, body: unknown, failure: string): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-device-id': deviceId() },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.");
+  if (!res.ok) throw new Error(data.error || `${failure} (${res.status}).`);
+  return data;
+}
+
 export class QuotaError extends Error {
   constructor(message: string) {
     super(message);
@@ -29,14 +43,14 @@ export async function freePagesLeft(): Promise<number | null> {
   try {
     const res = await fetch('/api/quota', { headers: { 'x-device-id': deviceId() } });
     const { quota } = (await res.json()) as { quota?: { used: number; limit: number } | null };
-    return quota ? Math.max(0, Math.floor((quota.limit - quota.used) / 3000)) : null;
+    return quota ? Math.max(0, Math.floor((quota.limit - quota.used) / PAGE_CHARS)) : null;
   } catch {
     return null;
   }
 }
 
-// Stays under the Worker's per-request limit (MAX_CHARS in src/worker/detect.ts).
-const BATCH_CHARS = 50_000;
+// Stays under the Worker's per-request limit.
+const BATCH_CHARS = MAX_CHARS - 10_000;
 
 function batches(text: string): string[] {
   const out: string[] = [];
@@ -54,14 +68,7 @@ function batches(text: string): string[] {
 }
 
 async function detectBatch(text: string): Promise<AiEntity[]> {
-  const res = await fetch('/api/detect', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-device-id': deviceId() },
-    body: JSON.stringify({ text }),
-  });
-  const data = (await res.json().catch(() => ({}))) as { entities?: AiEntity[]; error?: string };
-  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.");
-  if (!res.ok) throw new Error(data.error || `AI detection failed (${res.status}).`);
+  const data = await postApi<{ entities?: AiEntity[] }>('/api/detect', { text }, 'AI detection failed');
   return data.entities ?? [];
 }
 

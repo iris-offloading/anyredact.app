@@ -4,16 +4,13 @@
 // first, then packs, which never expire.
 import { PRODUCTS, type Product } from '../shared/pricing.ts';
 import { currentUser, type AccountsEnv, type User } from './accounts.ts';
+import { crossOrigin, hex, json, now } from './http.ts';
 
 export interface BillingEnv extends AccountsEnv {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
 }
 
-const now = () => Math.floor(Date.now() / 1000);
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
 /** Flattens nested params into Stripe's form encoding: a[b][0][c]=x. */
 export function stripeForm(params: Record<string, unknown>, prefix = '', out = new URLSearchParams()): URLSearchParams {
@@ -53,7 +50,7 @@ export async function verifyStripeSignature(body: string, header: string | null,
   if (!t || !signatures.length || Math.abs(now() - t) > toleranceSec) return false;
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${body}`));
-  const expected = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const expected = hex(mac);
   return signatures.some((s) => s.length === expected.length && [...s].every((c, i) => c === expected[i]));
 }
 
@@ -129,8 +126,7 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
     return json({ received: true });
   }
 
-  const reqOrigin = request.headers.get('origin');
-  if (reqOrigin && new URL(reqOrigin).host !== url.host) return json({ error: 'Forbidden' }, 403);
+  if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
   const user = await currentUser(request, env);
   if (!user) return json({ error: 'Please sign in first.' }, 401);
 

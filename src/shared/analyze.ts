@@ -1,4 +1,4 @@
-import { contactPublicHint, dedupe, detectPatterns, findTerms, plausibleEntity, type EntityType, type Span } from './detect.ts';
+import { contactPublicHint, dedupe, SSN_SHAPE, detectPatterns, findTerms, plausibleEntity, type EntityType, type Span } from './detect.ts';
 import { detectNames, nameVariants } from './names.ts';
 
 export interface Term {
@@ -55,7 +55,7 @@ export function analyzeUnits(
     const orgOwned = new Set(ai.filter((e) => e.owner === 'organization' && ORG_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
     for (let s of findTerms(text, ai, 'ai')) {
       // Models sometimes call an SSN/ITIN-shaped number a phone number.
-      if (s.type === 'phone' && /^\d{3}[- ]\d{2}[- ]\d{4}$/.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
+      if (s.type === 'phone' && SSN_SHAPE.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
       if (ORG_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };
       spans.push(s);
     }
@@ -83,7 +83,15 @@ export function analyzeUnits(
 
   const out: UnitSpan[] = [];
   for (const s of merged) {
-    for (let i = 0; i < units.length; i++) {
+    // Binary search for the unit holding the span's start, then walk forward.
+    let lo = 0;
+    let hi = units.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid] <= s.start) lo = mid;
+      else hi = mid - 1;
+    }
+    for (let i = lo; i < units.length && starts[i] < s.end; i++) {
       const uStart = starts[i];
       const uEnd = uStart + units[i].text.length;
       const a = Math.max(s.start, uStart);

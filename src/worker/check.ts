@@ -1,4 +1,5 @@
-import { json, MAX_CHARS, runWithRetry, type Env } from './detect.ts';
+import { MAX_CHARS, runWithRetry, type Env } from './detect.ts';
+import { json, readAiPost } from './http.ts';
 
 // Final check before download: the browser sends the document text with every
 // redaction already masked (█), and a decision model estimates, per category,
@@ -39,23 +40,9 @@ export function yesProbability(answer: unknown): number | null {
 }
 
 export async function handleCheck(request: Request, env: Env): Promise<Response> {
-  if (!env.AI) return json({ error: 'The final check is not configured on this server.' }, 503);
-  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-  const origin = request.headers.get('origin');
-  if (origin && new URL(origin).host !== new URL(request.url).host) return json({ error: 'Forbidden' }, 403);
-
-  if (env.DETECT_LIMITER) {
-    const key = request.headers.get('cf-connecting-ip') || 'anon';
-    const { success } = await env.DETECT_LIMITER.limit({ key });
-    if (!success) return json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
-  }
-
-  let text: unknown;
-  try {
-    ({ text } = (await request.json()) as { text?: unknown });
-  } catch {
-    return json({ error: 'Invalid JSON' }, 400);
-  }
+  const body = await readAiPost(request, env, 'The final check is not configured on this server.');
+  if (body instanceof Response) return body;
+  const { text } = body;
   if (typeof text !== 'string' || !text.replace(/[█\s]/g, '')) return json({ risks: {} });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long to check (max ${MAX_CHARS} characters).` }, 413);
 

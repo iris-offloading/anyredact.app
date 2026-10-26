@@ -3,6 +3,8 @@
 // allowance in src/worker/quota.ts. Code and the database still call them pages.
 
 export const PAGE_CHARS = 3_000;
+// Most characters one AI request may carry.
+export const MAX_CHARS = 60_000;
 
 export interface Product {
   id: string;

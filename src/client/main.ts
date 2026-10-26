@@ -1,8 +1,10 @@
 import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
+import { h } from './dom.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
 import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
+import { pagesFor } from '../shared/pricing.ts';
 import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
@@ -50,15 +52,6 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
   }
 }
 
-const h = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> & Record<string, unknown> = {}, ...children: (Node | string)[]) => {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (k.startsWith('data-') || k.startsWith('aria-') || k === 'for') el.setAttribute(k, String(v));
-    else (el as unknown as Record<string, unknown>)[k] = v;
-  }
-  el.append(...children);
-  return el;
-};
 
 const store = {
   get(k: string) {
@@ -92,8 +85,10 @@ class App {
   private terms = '';
   private visualKinds = new Set<VisualKind>();
   // Per page, and the kinds they were computed for.
-  private visualLocal: { kinds: string; hits: VisualHit[][] } | null = null;
-  private visualAi: { kinds: string; hits: VisualHit[][] } | null = null;
+  // Hits found so far per page, and the kinds already looked for, so ticking
+  // another kind only looks for that one and unticking needs no new pass.
+  private visualLocal = { kinds: new Set<VisualKind>(), hits: [] as VisualHit[][] };
+  private visualAi = { kinds: new Set<VisualKind>(), hits: [] as VisualHit[][] };
   private visualError: string | null = null;
   private pictureBox: HTMLElement;
   private style: RedactStyle = 'block';
@@ -278,8 +273,8 @@ class App {
     this.boxes = [];
     this.aiEntities = null;
     this.aiError = null;
-    this.visualLocal = null;
-    this.visualAi = null;
+    this.visualLocal = { kinds: new Set(), hits: [] };
+    this.visualAi = { kinds: new Set(), hits: [] };
     this.visualError = null;
     this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
     this.consentBox.hidden = true;
@@ -362,38 +357,40 @@ class App {
   private async pictureFindings(doc: LoadedDoc): Promise<Finding[]> {
     const kinds = this.visualKinds;
     if (!kinds.size || !doc.pages.length) return [];
-    const key = [...kinds].sort().join(',');
+    const missing = (cache: { kinds: Set<VisualKind> }) => new Set([...kinds].filter((k) => !cache.kinds.has(k)));
     this.visualError = null;
-    if (this.visualLocal?.kinds !== key) {
+    const local = missing(this.visualLocal);
+    if (local.size) {
       this.say('Looking for faces and screens on this device…');
-      const hits: VisualHit[][] = [];
+      const { hits } = this.visualLocal;
+      local.forEach((k) => this.visualLocal.kinds.add(k));
       try {
-        for (const p of doc.pages) hits[p.index] = await detectVisual(p.canvas, kinds);
+        for (const p of doc.pages) (hits[p.index] ??= []).push(...(await detectVisual(p.canvas, local)));
       } catch (err) {
         console.warn(err);
         this.visualError = 'The on-device picture detector could not start in this browser.';
       }
-      this.visualLocal = { kinds: key, hits };
     }
-    if (this.consent === 'yes' && this.visualAi?.kinds !== key) {
-      const hits: VisualHit[][] = [];
+    const ai = this.consent === 'yes' ? missing(this.visualAi) : new Set<VisualKind>();
+    if (ai.size) {
+      const { hits } = this.visualAi;
+      ai.forEach((k) => this.visualAi.kinds.add(k));
       const pages = doc.pages.slice(0, MAX_AI_PICTURE_PAGES);
       try {
         for (const p of pages) {
           this.say(pages.length > 1 ? `Checking pictures with AI… page ${p.index + 1} of ${pages.length}` : 'Checking the picture with AI…');
-          hits[p.index] = await detectVisualAi(p.canvas, kinds);
+          (hits[p.index] ??= []).push(...(await detectVisualAi(p.canvas, ai)));
           if (this.doc !== doc) return [];
         }
       } catch (err) {
         console.warn(err);
         this.visualError = `${err instanceof Error ? err.message : 'Picture detection failed.'} Showing what this device found; review the pictures carefully.`;
       }
-      this.visualAi = { kinds: key, hits };
     }
     const out: Finding[] = [];
     const counts = new Map<VisualKind, number>();
     for (const p of doc.pages) {
-      const merged = mergeHits([...(this.visualLocal?.hits[p.index] ?? []), ...(this.consent === 'yes' ? (this.visualAi?.hits[p.index] ?? []) : [])]);
+      const merged = mergeHits([...(this.visualLocal.hits[p.index] ?? []), ...(this.consent === 'yes' ? (this.visualAi.hits[p.index] ?? []) : [])]);
       for (const hit of merged.filter((x) => kinds.has(x.kind)).sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x)) {
         const n = (counts.get(hit.kind) ?? 0) + 1;
         counts.set(hit.kind, n);
@@ -617,7 +614,7 @@ class App {
       h('label', { className: 'row' }, always, 'Always use AI on this device'),
     );
     this.consentBox.hidden = false;
-    const pages = (words ? Math.max(1, Math.ceil(text.length / 3000)) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
+    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
     freePagesLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
       this.consentBox.append(

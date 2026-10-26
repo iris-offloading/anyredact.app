@@ -1,7 +1,8 @@
 // Cloudflare Worker entry. Only the default export may live here: workerd
 // rejects other named exports from the main module.
 import { handleCheck } from './check.ts';
-import { handleDetect, json, type Env } from './detect.ts';
+import { handleDetect, type Env } from './detect.ts';
+import { json } from './http.ts';
 import { handleAccounts } from './accounts.ts';
 import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';

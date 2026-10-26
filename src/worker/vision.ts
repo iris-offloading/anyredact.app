@@ -3,7 +3,8 @@
 // small, turned and partly hidden faces it misses. Only used when the visitor
 // turned picture redaction on and agreed to send the file.
 import { PAGE_CHARS } from '../shared/pricing.ts';
-import { chargeUsage, json, responseContent, runWithRetry, type Env } from './detect.ts';
+import { chargeUsage, responseContent, runWithRetry, type Env } from './detect.ts';
+import { json, readAiPost } from './http.ts';
 
 // Chosen on sample photos: found small and turned faces that Gemma 4 and
 // Llama 4 Scout missed, and is not limited to 20 requests a minute like the
@@ -60,22 +61,9 @@ export function parseRegions(content: unknown, kinds: VisionKind[]): Region[] {
 }
 
 export async function handleVision(request: Request, env: Env): Promise<Response> {
-  if (!env.AI) return json({ error: 'AI detection is not configured on this server.' }, 503);
-  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-  const origin = request.headers.get('origin');
-  if (origin && new URL(origin).host !== new URL(request.url).host) return json({ error: 'Forbidden' }, 403);
-  if (env.DETECT_LIMITER) {
-    const { success } = await env.DETECT_LIMITER.limit({ key: request.headers.get('cf-connecting-ip') || 'anon' });
-    if (!success) return json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
-  }
-
-  let image: unknown;
-  let requested: unknown;
-  try {
-    ({ image, kinds: requested } = (await request.json()) as { image?: unknown; kinds?: unknown });
-  } catch {
-    return json({ error: 'Invalid JSON' }, 400);
-  }
+  const body = await readAiPost(request, env, 'AI detection is not configured on this server.');
+  if (body instanceof Response) return body;
+  const { image, kinds: requested } = body;
   const kinds = (Array.isArray(requested) ? requested : []).filter((k): k is VisionKind => typeof k === 'string' && k in VISION_KINDS);
   if (!kinds.length) return json({ regions: [] });
   if (typeof image !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(image)) return json({ error: 'Expected an image data URL.' }, 400);

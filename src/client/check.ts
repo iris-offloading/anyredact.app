@@ -1,4 +1,5 @@
-import { deviceId } from './ai.ts';
+import { MAX_CHARS } from '../shared/pricing.ts';
+import { postApi } from './ai.ts';
 import type { Finding, ManualBox, Rect, Unit } from './types.ts';
 
 // Final check before download: what would still be readable in the output is
@@ -46,14 +47,8 @@ export function remainingText(units: Unit[], findings: Finding[], boxes: ManualB
 /** Returns the categories that are likely still readable, most likely first. */
 export async function checkRemaining(text: string): Promise<string[]> {
   if (!text.replace(/[█\s]/g, '')) return [];
-  const res = await fetch('/api/check', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-device-id': deviceId() },
-    // The Worker accepts up to 60,000 characters; longer documents are checked from the start.
-    body: JSON.stringify({ text: text.slice(0, 60_000) }),
-  });
-  const data = (await res.json().catch(() => ({}))) as { risks?: Record<string, number>; error?: string };
-  if (!res.ok) throw new Error(data.error || `The final check failed (${res.status}).`);
+  // Longer documents are checked from the start.
+  const data = await postApi<{ risks?: Record<string, number> }>('/api/check', { text: text.slice(0, MAX_CHARS) }, 'The final check failed');
   return Object.entries(data.risks ?? {})
     .filter(([k, p]) => p >= RISK_THRESHOLD && k in CHECK_LABELS)
     .sort((a, b) => b[1] - a[1])

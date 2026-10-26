@@ -76,6 +76,8 @@ export function phonePublicHint(text: string, start: number, match: string): str
 // Same-line signs that a contact detail belongs to an organisation: company
 // registration and VAT numbers, legal forms and web addresses, as in letterheads and footers.
 const ORG_CONTEXT = /(?:^|[^\p{L}])(?:IČO?|DIČ|VAT(?: (?:No|Reg))?|USt-?IdNr|Steuernummer|HRB|SIRE[NT]|TVA|KvK|BTW|NIF|CIF|P\.? ?IVA|Reg(?:istration)?\.? ?No|Company (?:No|Number|Reg)|ABN|ACN|EIN)\b|www\.|\b(?:s\.r\.o\.|z\.s\.p\.o\.?|a\.s\.|GmbH|AG|Ltd|LLC|LLP|PLC|Inc\.?|Corp\.?|S\.A\.|SAS|SARL|S\.p\.A\.|S\.r\.l\.|B\.V\.|N\.V\.|Oy|AB|ApS|Sp\. z o\.o\.)(?![\p{L}])/u;
+/** A US SSN or ITIN: 3-2-4 digits. */
+export const SSN_SHAPE = /^\d{3}[- ]\d{2}[- ]\d{4}$/;
 const ORG_WINDOW = 80;
 // Mailboxes that belong to a team or company rather than a person.
 const GENERIC_MAILBOX = /^(?:info|kontakt|contact|contacto|contatto|office|kancelar|support|help|hello|hi|sales|admin|enquiries|inquiries|service|customerservice|noreply|no-reply|press|media|hr|jobs|careers|billing|invoices?|accounts|mail|team|reception|post|postmaster|webmaster|privacy|dpo|legal|marketing|orders|booking|bookings)(?:[._-][a-z]+)?@/i;
@@ -165,7 +167,7 @@ const RULES: Rule[] = [
       const n = digits(m).length;
       if (n < 7 || n > 15) return false;
       // 3-2-4 grouping is an SSN/ITIN/EIN shape, not a phone number.
-      if (/^\d{3}[- ]\d{2}[- ]\d{4}$/.test(m.trim())) return false;
+      if (SSN_SHAPE.test(m.trim())) return false;
       // One wrapped line is plausible; numbers spread over several lines are likely a table.
       if ((m.match(/\n/g) ?? []).length > 1) return false;
       // Skip things that look like dates.

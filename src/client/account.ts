@@ -1,4 +1,5 @@
 import { PRODUCTS, price } from '../shared/pricing.ts';
+import { h } from './dom.ts';
 
 // The /account page: sign in, see balances, buy the monthly plan or packs.
 
@@ -13,15 +14,6 @@ interface Me {
   error?: string;
 }
 
-const h = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> & Record<string, unknown> = {}, ...children: (Node | string)[]) => {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (k.startsWith('data-') || k.startsWith('aria-') || k === 'for') el.setAttribute(k, String(v));
-    else (el as unknown as Record<string, unknown>)[k] = v;
-  }
-  el.append(...children);
-  return el;
-};
 
 const root = document.getElementById('account')!;
 const status = h('p', { className: 'status', role: 'status', hidden: true });

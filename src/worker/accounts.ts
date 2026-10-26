@@ -1,10 +1,11 @@
 // Sign-in for paying users: an emailed link (via Cloudflare Email Service) or Google. Free use
 // needs no account. Sessions are random tokens in an HttpOnly cookie; only
 // their SHA-256 hashes are stored.
+import { crossOrigin, hex, json, now, rateLimited, type Limiter } from './http.ts';
 
 export interface AccountsEnv {
   DB?: D1Database;
-  DETECT_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
+  DETECT_LIMITER?: Limiter;
   EMAIL?: { send(message: { from: string; to: string; subject: string; text: string }): Promise<{ messageId: string }> };
   EMAIL_FROM?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -25,7 +26,6 @@ export interface User {
 const SESSION_DAYS = 30;
 const LOGIN_MINUTES = 15;
 
-const now = () => Math.floor(Date.now() / 1000);
 
 export function randomToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -33,8 +33,7 @@ export function randomToken(): string {
 }
 
 export async function sha256(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
 }
 
 function cookie(request: Request, name: string): string | null {
@@ -54,11 +53,6 @@ const redirect = (location: string, cookies: string[] = []) => {
   return new Response(null, { status: 302, headers });
 };
 
-const json = (body: unknown, status = 200, cookies: string[] = []) => {
-  const headers = new Headers({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  for (const c of cookies) headers.append('set-cookie', c);
-  return new Response(JSON.stringify(body), { status, headers });
-};
 
 export async function currentUser(request: Request, env: AccountsEnv): Promise<User | null> {
   const token = cookie(request, 'session');
@@ -138,12 +132,8 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
   }
 
   if (path === '/auth/email' && request.method === 'POST') {
-    const reqOrigin = request.headers.get('origin');
-    if (reqOrigin && new URL(reqOrigin).host !== url.host) return json({ error: 'Forbidden' }, 403);
-    if (env.DETECT_LIMITER) {
-      const { success } = await env.DETECT_LIMITER.limit({ key: `login:${request.headers.get('cf-connecting-ip') || 'anon'}` });
-      if (!success) return json({ error: 'Too many requests. Please wait a minute.' }, 429);
-    }
+    if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
+    if (await rateLimited(request, env.DETECT_LIMITER, 'login:')) return json({ error: 'Too many requests. Please wait a minute.' }, 429);
     const { email } = (await request.json().catch(() => ({}))) as { email?: unknown };
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) return json({ error: 'Please enter a valid email address.' }, 400);
     return sendLoginEmail(env, origin, email.trim().toLowerCase());
