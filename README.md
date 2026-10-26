@@ -44,7 +44,7 @@ npm run deploy
 
 Wrangler runs `npm run build` itself before dev, deploy and preview uploads (see `build` in `wrangler.jsonc`), so Workers Builds needs no build command. Pull request previews use the `previews` bindings.
 
-The Workers AI model defaults to `@cf/meta/llama-3.3-70b-instruct-fp8-fast` and can be overridden with an `AI_MODEL` variable.
+The Workers AI model defaults to `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (with thinking off) and can be overridden with an `AI_MODEL` variable. To compare models, run `node scripts/bench-models.mjs <preview-url> <model>...` against a preview deployment; previews accept a `model` in `/api/detect` requests and list the available models at `/api/models`.
 
 ## Roadmap
 

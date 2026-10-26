@@ -12,7 +12,14 @@ export interface Env {
   MODEL_TRIALS?: string;
 }
 
-const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// Chosen by scripts/bench-models.mjs: found 83 of 84 expected values over two
+// runs, against 64 for Llama 3.3 70B and 78 for gpt-oss-120b, and was the fastest.
+const DEFAULT_MODEL = '@cf/deepseek-ai/deepseek-v4.1-flash-1017';
+// Reasoning models spend their whole token budget thinking unless told not to.
+const MODEL_OPTIONS: Record<string, object> = {
+  '@cf/deepseek-ai/deepseek-v4.1-flash-1017': { chat_template_kwargs: { thinking: false } },
+  '@cf/openai/gpt-oss-120b': { reasoning_effort: 'low' },
+};
 export const MAX_CHARS = 60_000;
 // Smaller chunks make the model list entities more thoroughly.
 const CHUNK_CHARS = 3_000;
@@ -160,6 +167,7 @@ async function detectChunk(env: Env, chunk: string, model: string, usage: Usage,
     response_format: { type: 'json_schema', json_schema: SCHEMA },
     max_tokens: 4096,
     temperature: 0,
+    ...MODEL_OPTIONS[model],
     ...extra,
   } as never)) as { usage?: Usage };
   raw?.push(result);
