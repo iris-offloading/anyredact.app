@@ -43,6 +43,7 @@ await cp(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'), path.join(dist,
 await cp(path.join(root, 'static'), dist, { recursive: true });
 const css = await readFile(path.join(root, 'static/styles.css'));
 const cssHash = (await import('node:crypto')).createHash('sha256').update(css).digest('hex').slice(0, 8);
+const themeHash = (await import('node:crypto')).createHash('sha256').update(await readFile(path.join(root, 'static/theme.js'))).digest('hex').slice(0, 8);
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const url = (slug) => `${SITE.origin}/${slug}`;
@@ -54,6 +55,7 @@ function nav(current) {
   return `<header class="site-header"><div class="wrap">
   <a class="logo" href="/"><img class="logo-mark" src="/favicon.svg" width="26" height="26" alt="">AnyRedact</a>
   <nav aria-label="Tools">${links}</nav>
+  <button type="button" class="theme-toggle" hidden></button>
 </div></header>`;
 }
 
@@ -115,6 +117,7 @@ function layout(page, main) {
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles.css?v=${cssHash}">
+<script src="/theme.js?v=${themeHash}"></script>
 ${page.jsonLd === false ? '' : `<script type="application/ld+json">${jsonLd(page)}</script>`}
 ${page.tool ? `<script type="module" src="${appSrc}"></script>` : ''}
 ${page.script ? `<script type="module" src="${page.script}"></script>` : ''}

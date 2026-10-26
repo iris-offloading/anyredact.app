@@ -11,8 +11,9 @@
   --radius: 12px;
   color-scheme: light;
 }
+/* Dark colours follow the system unless the header toggle picked a theme (static/theme.js). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #111318;
     --surface: #1a1d24;
     --text: #eceef2;
@@ -24,6 +25,18 @@
     --mark-off: #5c3d1e;
     color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+  --bg: #111318;
+  --surface: #1a1d24;
+  --text: #eceef2;
+  --muted: #9aa1ad;
+  --line: #2c303a;
+  --accent: #f06595;
+  --accent-ink: #111318;
+  --mark-on: #000000;
+  --mark-off: #5c3d1e;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -48,6 +61,12 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
 .site-header nav a { text-decoration: none; padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 0.95rem; }
 .site-header nav a:hover { color: var(--text); background: var(--bg); }
 .site-header nav a[aria-current='page'] { color: var(--text); background: var(--bg); font-weight: 600; }
+.theme-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; cursor: pointer; }
+.theme-toggle:hover { color: var(--text); background: var(--bg); }
+@media (max-width: 640px) {
+  .theme-toggle { order: 1; }
+  .site-header nav { order: 2; }
+}
 
 .hero { padding-top: 40px; padding-bottom: 12px; text-align: center; }
 .hero h1 { font-size: clamp(1.9rem, 4vw, 2.8rem); margin: 0 0 12px; }
