@@ -1,0 +1,29 @@
+{
+  "name": "anyredact",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "npm run build && wrangler dev",
+    "dev:local": "npm run build && wrangler dev --env local",
+    "deploy": "npm run build && wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/worker/tsconfig.json",
+    "test": "node --test --experimental-strip-types --no-warnings test/*.test.ts",
+    "test:e2e": "node test/e2e/run.mjs e2e-out"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "4.10.38",
+    "tesseract.js": "5.1.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261026.1",
+    "@types/node": "22.10.7",
+    "esbuild": "0.24.2",
+    "typescript": "5.7.3",
+    "wrangler": "4.140.0"
+  }
+}

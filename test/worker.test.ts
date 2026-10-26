@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { chunkText, type Env } from '../src/worker/detect.ts';
+import entry from '../src/worker/index.ts';
+
+const worker = { fetch: (req: Request, e: Env) => entry.fetch(req as Parameters<typeof entry.fetch>[0], e) };
+
+function env(response: unknown): Env {
+  return {
+    ASSETS: { fetch: async () => new Response('asset') } as unknown as Fetcher,
+    AI: { run: async () => ({ response }) } as unknown as Ai,
+  };
+}
+
+const post = (body: unknown) =>
+  new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify(body), headers: { origin: 'https://anyredact.app' } });
+
+test('returns only entities that occur in the text', async () => {
+  const res = await worker.fetch(
+    post({ text: 'Patient John Smith lives at 1 Main St.' }),
+    env({ entities: [{ text: 'John Smith', type: 'name' }, { text: 'Jane Roe', type: 'name' }, { text: '1 Main St', type: 'address' }] }),
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), {
+    entities: [
+      { text: 'John Smith', type: 'name' },
+      { text: '1 Main St', type: 'address' },
+    ],
+  });
+});
+
+test('parses string responses and unknown types', async () => {
+  const res = await worker.fetch(post({ text: 'id AB-123' }), env('```json\n{"entities":[{"text":"AB-123","type":"weird"}]}\n```'));
+  assert.deepEqual(await res.json(), { entities: [{ text: 'AB-123', type: 'other' }] });
+});
+
+test('rejects cross-origin and oversize requests', async () => {
+  const cross = new Request('https://anyredact.app/api/detect', { method: 'POST', body: '{}', headers: { origin: 'https://evil.example' } });
+  assert.equal((await worker.fetch(cross, env({}))).status, 403);
+  assert.equal((await worker.fetch(post({ text: 'x'.repeat(70_000) }), env({}))).status, 413);
+});
+
+test('serves assets for other paths', async () => {
+  const res = await worker.fetch(new Request('https://anyredact.app/redact-pdf'), env({}));
+  assert.equal(await res.text(), 'asset');
+});
+
+test('chunks long text on whitespace', () => {
+  const text = 'word '.repeat(3000);
+  const chunks = chunkText(text, 1000);
+  assert.equal(chunks.join(''), text);
+  assert.ok(chunks.every((c) => c.length <= 1000));
+});
