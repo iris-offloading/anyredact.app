@@ -1,9 +1,10 @@
 import { plausibleEntity } from '../shared/detect.ts';
+import { chargeQuota, type QuotaEnv } from './quota.ts';
 
 // AI detection endpoint. The browser sends the text it extracted from a file
 // and gets back the sensitive substrings; nothing is stored.
 
-export interface Env {
+export interface Env extends QuotaEnv {
   ASSETS: Fetcher;
   AI?: Ai;
   DETECT_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
@@ -262,13 +263,18 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   if (typeof text !== 'string' || !text.trim()) return json({ entities: [] });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long for AI mode (max ${MAX_CHARS} characters).` }, 413);
 
+  const quota = await chargeQuota(request, env, text.length);
+  if (quota.exceeded) {
+    return json({ error: "You've used today's free AI allowance.", code: 'quota', quota: quota.state }, 402);
+  }
+
   const usage: Usage = {};
   const raw: unknown[] | undefined = trial ? [] : undefined;
   const started = Date.now();
   try {
     const entities = await detectText(env, text, model, usage, raw, trial ? extra : undefined);
-    if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw });
-    return json({ entities });
+    if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
+    return json({ entities, quota: quota.state });
   } catch (err) {
     console.error('detect failed', err);
     if (trial) return json({ error: String(err), model }, 502);

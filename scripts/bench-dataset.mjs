@@ -91,8 +91,8 @@ async function run(base, spec, file, limit) {
   const misses = [];
   let ms = 0;
 
-  for (let i = 0; i < data.length; i += 25) {
-    const batch = data.slice(i, i + 25);
+  for (let i = 0; i < data.length; i += 10) {
+    const batch = data.slice(i, i + 10);
     let body;
     for (let t = 0; t < 5; t++) {
       const res = await fetch(new URL('/api/detect', base), {
@@ -137,7 +137,7 @@ async function run(base, spec, file, limit) {
       }
     });
     const cost = (tokensIn * pin + tokensOut * pout) / 1e6;
-    console.error(`${Math.min(i + 25, data.length)}/${data.length} docs, $${cost.toFixed(3)}`);
+    console.error(`${Math.min(i + 10, data.length)}/${data.length} docs, ${errors} errors, $${cost.toFixed(3)}`);
   }
 
   const sum = (pred) => Object.entries(stats).filter(([l]) => pred(l)).reduce((a, [, s]) => ({ total: a.total + s.total, ai: a.ai + s.ai, app: a.app + s.app }), { total: 0, ai: 0, app: 0 });

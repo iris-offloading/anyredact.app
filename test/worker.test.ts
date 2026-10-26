@@ -102,3 +102,42 @@ test('retries when Workers AI rate-limits the model', async () => {
   assert.equal(value, 'ok');
   await assert.rejects(runWithRetry(async () => { throw new Error('other'); }, [1]), /other/);
 });
+
+// In-memory stand-in for the Quota Durable Object namespace.
+async function quotaNamespace() {
+  const { Quota } = await import('../src/worker/quota.ts');
+  const objects = new Map<string, InstanceType<typeof Quota>>();
+  return {
+    idFromName: (name: string) => name,
+    get: (name: string) => {
+      if (!objects.has(name)) {
+        const data = new Map<string, unknown>();
+        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v) };
+        objects.set(name, new Quota({ storage } as unknown as DurableObjectState));
+      }
+      const obj = objects.get(name)!;
+      return { fetch: (url: string, init: RequestInit) => obj.fetch(new Request(url, init)) };
+    },
+  } as unknown as DurableObjectNamespace;
+}
+
+test('free allowance is enforced per browser, with a larger shared IP allowance', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '30' };
+  const req = (device: string, text: string) =>
+    new Request('https://anyredact.app/api/detect', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9' },
+    });
+  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e);
+  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 20, limit: 30 });
+  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e)).status, 402);
+  // Another browser on the same IP still has its own allowance...
+  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(25)), e)).status, 200);
+  // ...until the IP allowance (5x) runs out.
+  // IP used: 20 + 25 + 4 x 25 = 145 of 150, so 10 more characters don't fit.
+  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(25)), e);
+  const res = await worker.fetch(req('device-gggg', 'x'.repeat(10)), e);
+  assert.equal(res.status, 402);
+  assert.equal(((await res.json()) as { code: string }).code, 'quota');
+});

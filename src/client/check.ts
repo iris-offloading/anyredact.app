@@ -1,3 +1,4 @@
+import { deviceId } from './ai.ts';
 import type { Finding, ManualBox, Rect, Unit } from './types.ts';
 
 // Final check before download: what would still be readable in the output is
@@ -47,7 +48,7 @@ export async function checkRemaining(text: string): Promise<string[]> {
   if (!text.replace(/[█\s]/g, '')) return [];
   const res = await fetch('/api/check', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-device-id': deviceId() },
     // The Worker accepts up to 60,000 characters; longer documents are checked from the start.
     body: JSON.stringify({ text: text.slice(0, 60_000) }),
   });

@@ -1,6 +1,6 @@
 import { analyzeUnits } from '../shared/analyze.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
-import { detectWithAi, type AiEntity } from './ai.ts';
+import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
@@ -276,7 +276,12 @@ class App {
         try {
           this.aiEntities = await detectWithAi(text);
         } catch (err) {
-          this.aiError = err instanceof Error ? err.message : 'AI detection failed.';
+          this.aiError =
+            err instanceof QuotaError
+              ? `${err.message} It resets tomorrow, and paid plans are coming soon.`
+              : err instanceof Error
+                ? err.message
+                : 'AI detection failed.';
         }
       }
       if (this.doc !== doc) return;
@@ -510,6 +515,13 @@ class App {
       h('label', { className: 'row' }, always, 'Always use AI on this device'),
     );
     this.consentBox.hidden = false;
+    const pages = Math.max(1, Math.ceil(text.length / 3000));
+    freePagesLeft().then((left) => {
+      if (left === null || this.doc !== doc || this.consentBox.hidden) return;
+      this.consentBox.append(
+        h('p', { className: 'hint' }, left >= pages ? `Free today: about ${left} page${left === 1 ? '' : 's'} of AI detection left. This file uses about ${pages}.` : `This file needs about ${pages} page${pages === 1 ? '' : 's'} of AI detection and you have about ${left} left today. The built-in rules are always free.`),
+      );
+    });
   }
 
   private warnLeft(left: string[]) {

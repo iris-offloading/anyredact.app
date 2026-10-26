@@ -18,6 +18,10 @@
     "not_found_handling": "404-page"
   },
   "ai": { "binding": "AI" },
+  // Free daily AI allowance per browser and per IP (src/worker/quota.ts).
+  "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Quota"] }],
+  "vars": { "FREE_CHARS_PER_DAY": "100000" },
   // Per-IP limit on /api/detect. namespace_id is any account-unique integer.
   "ratelimits": [
     { "name": "DETECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }
@@ -27,7 +31,8 @@
   "previews": {
     "ai": { "binding": "AI" },
     // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
-    "vars": { "MODEL_TRIALS": "1" },
+    "vars": { "MODEL_TRIALS": "1", "FREE_CHARS_PER_DAY": "100000" },
+    "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
     "ratelimits": [
       { "name": "DETECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
     ]

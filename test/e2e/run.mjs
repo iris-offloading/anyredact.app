@@ -18,7 +18,8 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
 const errors = [];
 const apiCalls = [];
-page.on('request', (r) => r.url().includes('/api/') && apiCalls.push(r.url()));
+// Only requests that carry document content count; /api/quota sends just the browser ID.
+page.on('request', (r) => /\/api\/(detect|check)/.test(r.url()) && apiCalls.push(r.url()));
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 let failed = 0;
