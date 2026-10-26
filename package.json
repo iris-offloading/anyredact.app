@@ -25,7 +25,7 @@
     "@cloudflare/workers-types": "5.20261026.1",
     "@types/node": "22.10.7",
     "esbuild": "0.24.2",
-    "sharp": "0.34.5",
+    "sharp": "0.35.4",
     "typescript": "5.7.3",
     "wrangler": "4.140.0"
   }
