@@ -29,9 +29,9 @@ export default {
     // Preview-only raw model call, for trying inputs such as images before building on them.
     if (url.pathname === '/api/trial' && request.method === 'POST' && env.MODEL_TRIALS === '1' && env.AI) {
       if (env.DETECT_LIMITER && !(await env.DETECT_LIMITER.limit({ key: `trial:${request.headers.get('cf-connecting-ip')}` })).success) return json({ error: 'rate limited' }, 429);
-      const { model, input } = (await request.json()) as { model: string; input: Record<string, unknown> };
+      const { model, input, options } = (await request.json()) as { model: string; input: Record<string, unknown>; options?: Record<string, unknown> };
       try {
-        return json({ result: await env.AI.run(model as never, input as never) });
+        return json({ result: await env.AI.run(model as never, input as never, options as never) });
       } catch (err) {
         return json({ error: String(err) }, 500);
       }
