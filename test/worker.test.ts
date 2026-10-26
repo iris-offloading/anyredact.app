@@ -59,3 +59,22 @@ test('drops field labels and digit-less numbers', async () => {
   );
   assert.deepEqual(await res.json(), { entities: [{ text: '123-45-6789', type: 'ssn' }] });
 });
+
+test('reads Clef yes-probabilities in any answer shape', async () => {
+  const { yesProbability } = await import('../src/worker/check.ts');
+  assert.equal(yesProbability({ type: 'noul', noul: 0.97 }), 0.97);
+  assert.equal(yesProbability({ probability: 0.2 }), 0.2);
+  assert.equal(yesProbability(0.5), 0.5);
+  assert.equal(yesProbability({}), null);
+});
+
+test('check returns per-category risks', async () => {
+  const e = {
+    ASSETS: { fetch: async () => new Response('asset') } as unknown as Fetcher,
+    AI: { run: async () => ({ answers: { name: { type: 'noul', noul: 0.9 }, contact: { type: 'noul', noul: 0.1 } } }) } as unknown as Ai,
+  };
+  const req = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: 'Hi Jane, ████' }), headers: { origin: 'https://anyredact.app' } });
+  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 } });
+  const empty = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: '████ \n ██' }), headers: { origin: 'https://anyredact.app' } });
+  assert.deepEqual(await (await worker.fetch(empty, e)).json(), { risks: {} });
+});

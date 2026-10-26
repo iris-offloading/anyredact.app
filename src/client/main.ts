@@ -1,6 +1,7 @@
 import { analyzeUnits } from '../shared/analyze.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
 import { detectWithAi, type AiEntity } from './ai.ts';
+import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import type { Finding, LoadedDoc, ManualBox, RedactStyle } from './types.ts';
 
@@ -92,6 +93,7 @@ class App {
   private notes: HTMLElement;
   private docName: HTMLElement;
   private download: HTMLButtonElement;
+  private warn: HTMLElement;
   private styleRow: HTMLElement;
   private fileInput: HTMLInputElement;
 
@@ -170,6 +172,7 @@ class App {
     this.styleRow = h('label', { className: 'row' }, 'Style ', styleSel);
 
     this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
+    this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
 
@@ -185,6 +188,7 @@ class App {
       this.list,
       this.styleRow,
       this.download,
+      this.warn,
       this.notes,
     );
     this.preview = h('div', { className: 'preview' });
@@ -293,6 +297,7 @@ class App {
       };
     });
     this.findings = findings;
+    this.warn.hidden = true;
     if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
     else this.say('');
     this.renderList();
@@ -432,13 +437,27 @@ class App {
     );
   }
 
-  private async export() {
+  private async export(skipCheck = false) {
     const doc = this.doc;
     if (!doc || this.busy) return;
     this.busy = true;
     this.download.disabled = true;
-    this.say('Preparing your redacted file…');
+    this.warn.hidden = true;
+    let checkNote = '';
     try {
+      // Ask a second model whether anything sensitive is still readable before handing over the file.
+      if (!skipCheck) {
+        this.say('Checking the redacted file for anything left…');
+        try {
+          const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
+          if (this.doc !== doc) return;
+          if (left.length) return this.warnLeft(left);
+        } catch (err) {
+          console.warn(err);
+          checkNote = ' The final check could not run, so review the file carefully.';
+        }
+      }
+      this.say('Preparing your redacted file…');
       const { blob, filename } = await doc.exportFile(this.findings, this.boxes, this.style);
       const url = URL.createObjectURL(blob);
       const a = h('a', { href: url, download: filename });
@@ -447,7 +466,7 @@ class App {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
-      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}. Open it and check before sharing.`);
+      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`);
     } catch (err) {
       console.error(err);
       this.say(err instanceof Error ? err.message : 'Export failed.', true);
@@ -455,6 +474,23 @@ class App {
       this.busy = false;
       this.download.disabled = false;
     }
+  }
+
+  private warnLeft(left: string[]) {
+    const list = left.map((k) => CHECK_LABELS[k]);
+    const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
+    this.say('');
+    this.warn.replaceChildren(
+      h('p', { className: 'warn-text' }, `The final check thinks some ${what} may still be readable. Look through the preview, tick anything that was missed, or select the text and redact it.`),
+      h(
+        'div',
+        { className: 'warn-actions' },
+        h('button', { type: 'button', className: 'btn', textContent: 'Keep reviewing', onclick: () => (this.warn.hidden = true) }),
+        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true) }),
+      ),
+    );
+    this.warn.hidden = false;
+    this.warn.scrollIntoView({ block: 'nearest' });
   }
 }
 

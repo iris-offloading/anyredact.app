@@ -99,6 +99,25 @@ async function download(name) {
   check(filename === 'sample-redacted.png', `image filename ${filename}`);
 }
 
+// Final check: a warning stops the download until the user chooses
+{
+  let sent = '';
+  await page.route('**/api/check', (route) => {
+    sent = JSON.parse(route.request().postData() || '{}').text;
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
+  });
+  await run('redact-text', fx('sample.txt'));
+  await page.click('button.primary');
+  await page.waitForSelector('.warn-text');
+  const warning = await page.textContent('.warn-text');
+  check(/names may still be readable/.test(warning) && !/phone/.test(warning), `check warning: ${warning}`);
+  check(sent.includes('████') && !sent.includes('jane@example.com'), 'check gets masked text only');
+  await page.screenshot({ path: fx('check.png') });
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('text=Download anyway')]);
+  check(dl.suggestedFilename() === 'sample-redacted.txt', 'download anyway works');
+  await page.unroute('**/api/check');
+}
+
 // Home page, and the fallback when the AI binding is missing
 {
   await page.goto(BASE);

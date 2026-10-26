@@ -25,7 +25,7 @@ export function yesProbability(answer: unknown): number | null {
   if (typeof answer === 'boolean') return answer ? 1 : 0;
   const a = answer as Record<string, unknown> | null;
   if (!a || typeof a !== 'object') return null;
-  for (const k of ['probability', 'p_yes', 'p', 'score', 'value']) {
+  for (const k of ['noul', 'probability', 'p_yes', 'p', 'score', 'value']) {
     const v = a[k];
     if (typeof v === 'number') return v;
     if (typeof v === 'boolean') return v ? 1 : 0;

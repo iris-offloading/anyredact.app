@@ -145,7 +145,7 @@ export const HOME = {
     privacyFaq,
     {
       q: 'How does detection work?',
-      a: 'The text in your file is checked by a language model running on Cloudflare Workers AI, which recognises names, addresses and other context-dependent details. Checksum-verified rules for card numbers, IBANs and similar run alongside it. You review every finding before downloading.',
+      a: 'The text in your file is checked by a language model running on Cloudflare Workers AI, which recognises names, addresses and other context-dependent details. Checksum-verified rules for card numbers, IBANs and similar run alongside it. You review every finding, and before the download a second model checks the redacted result for anything that was missed.',
     },
     {
       q: 'Which file types are supported?',
