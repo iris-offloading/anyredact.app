@@ -52,7 +52,7 @@ const SEP = String.raw`(?:[ \t]*[.-][ \t]*(?:\r?\n[ \t]*)?|[ \t]+(?:\r?\n[ \t]*)
 // Free or non-geographic prefixes used by businesses and public services:
 // UK 0800/0808/0300/03xx/084x/087x, US/Canada toll-free 8xx, Australia 1300/1800.
 const SERVICE_PREFIX = /^(?:\+44|0)?(?:80[08]|3\d\d|84\d|87\d)|^(?:\+?1)?\(?8(?:00|33|44|55|66|77|88)\)?|^(?:\+61)?1[38]00/;
-const SERVICE_WORDS = /\b(?:helpline|hotline|freephone|textphone|relay uk|call us|contact us|customer (?:service|support|care)|enquiries|inquiries|switchboard|reception|main office|head office|support line|advice line|information line|emergency services)\b/i;
+const SERVICE_WORDS = /\b(?:helpline|hotline|freephone|textphone|relay uk|call us|contact us|customer (?:service|support|care)|enquiries|inquiries|switchboard|reception|main office|head office|support line|advice line|information line|emergency services|callers|tty|tdd|toll[- ]free|questions|for (?:more )?information|for help|assistance)\b/i;
 
 /** Flags phone numbers that look like a public or business line rather than a person's. */
 export function phonePublicHint(text: string, start: number, match: string): string | undefined {
