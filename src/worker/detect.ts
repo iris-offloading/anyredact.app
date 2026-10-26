@@ -117,7 +117,7 @@ export function responseContent(result: unknown): unknown {
   return undefined;
 }
 
-async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[]): Promise<Entity[]> {
+async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object): Promise<Entity[]> {
   const result = (await env.AI!.run(model as Parameters<Ai['run']>[0], {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -126,6 +126,7 @@ async function detectChunk(env: Env, chunk: string, model: string, usage: Usage,
     response_format: { type: 'json_schema', json_schema: SCHEMA },
     max_tokens: 4096,
     temperature: 0,
+    ...extra,
   } as never)) as { usage?: Usage };
   raw?.push(result);
   usage.prompt_tokens = (usage.prompt_tokens ?? 0) + (result?.usage?.prompt_tokens ?? 0);
@@ -154,8 +155,9 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
 
   let text: unknown;
   let requested: unknown;
+  let options: unknown;
   try {
-    ({ text, model: requested } = (await request.json()) as { text?: unknown; model?: unknown });
+    ({ text, model: requested, options } = (await request.json()) as { text?: unknown; model?: unknown; options?: unknown });
   } catch {
     return json({ error: 'Invalid JSON' }, 400);
   }
@@ -168,7 +170,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const raw: unknown[] | undefined = trial ? [] : undefined;
   const started = Date.now();
   try {
-    const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw)));
+    const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage, raw, trial && options && typeof options === 'object' ? options : undefined)));
     const seen = new Set<string>();
     const entities = results.flat().filter((e) => {
       const k = `${e.type}\u0000${e.text}`;

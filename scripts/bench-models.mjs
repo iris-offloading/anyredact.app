@@ -6,6 +6,7 @@
 // For each model it reports recall (expected values found), false positives
 // (values that must not be redacted), speed and token usage.
 
+// A model may carry extra run options as JSON: '@cf/x/y{"reasoning_effort":"low"}'.
 const [base, ...models] = process.argv.slice(2);
 if (!base || !models.length) {
   console.error('usage: node scripts/bench-models.mjs <preview-url> <model> [model...]');
@@ -119,12 +120,15 @@ For questions about this form, call HR Support on 0800 123 4567.`,
   },
 ];
 
-async function run(model, c) {
+async function run(spec, c) {
+  const brace = spec.indexOf('{');
+  const model = brace < 0 ? spec : spec.slice(0, brace);
+  const options = brace < 0 ? undefined : JSON.parse(spec.slice(brace));
   const started = Date.now();
   const res = await fetch(new URL('/api/detect', base), {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: new URL(base).origin },
-    body: JSON.stringify({ text: c.text, model }),
+    body: JSON.stringify({ text: c.text, model, options }),
   });
   const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
   return { ...body, status: res.status, wall: Date.now() - started };
