@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "anyredact",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2025-09-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "ai": { "binding": "AI" },
+  // Per-IP limit on /api/detect. namespace_id is any account-unique integer.
+  "ratelimits": [
+    { "name": "DETECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }
+  ],
+  // `npm run dev:local` runs without a Cloudflare login: no AI binding, so
+  // AI-assisted mode reports itself unavailable while private mode works.
+  "env": {
+    "local": {}
+  }
+}
