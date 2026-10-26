@@ -117,7 +117,41 @@ export function responseContent(result: unknown): unknown {
   return undefined;
 }
 
+// Clairic is an extraction model: instead of a prompt it takes typed fields
+// and returns list items with their offsets into the text.
+const CLAIRIC_FIELDS: Record<Entity['type'], string> = {
+  name: 'Every name of a private person, in each form it appears (full name, "Doe, Jane", first name only, surname only, initials with surname). Not businesses, public figures or job titles.',
+  address: 'Street addresses and postal addresses of private people, as written.',
+  email: 'Email addresses.',
+  phone: 'Phone and fax numbers of private people. Not helplines, toll-free or office numbers of businesses and public services.',
+  ssn: 'US Social Security numbers and ITINs (the number only).',
+  id: 'Passport, licence, tax, account, patient, employee, case, policy, PIN, national ID and other personal identifier numbers (the number only, never the label).',
+  date: 'Birth dates and other dates tied to a private person.',
+  org: 'Employers, schools and hospitals tied to a private person.',
+  card: 'Payment card numbers.',
+  iban: 'IBANs and bank account numbers.',
+  url: 'Personal links and profile URLs.',
+  other: 'Other sensitive values: usernames, passwords, session tokens, API keys, IP addresses, health conditions and medications of a person.',
+};
+
+async function detectClairic(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[]): Promise<Entity[]> {
+  const fields = Object.fromEntries(
+    Object.entries(CLAIRIC_FIELDS).map(([type, instructions]) => [type, { type: 'list', items: 'text', instructions }]),
+  );
+  const result = (await env.AI!.run(model as Parameters<Ai['run']>[0], { model: 'clairic', state: chunk, fields } as never)) as {
+    answers?: Record<string, { value?: unknown }>;
+    usage?: { input_tokens?: number; prompt_tokens?: number };
+  };
+  raw?.push(result);
+  usage.prompt_tokens = (usage.prompt_tokens ?? 0) + (result?.usage?.input_tokens ?? result?.usage?.prompt_tokens ?? 0);
+  const entities = Object.entries(result?.answers ?? {}).flatMap(([type, a]) =>
+    Array.isArray(a?.value) ? a.value.filter((v) => typeof v === 'string').map((text) => ({ text, type })) : [],
+  );
+  return parseEntities({ entities }, chunk);
+}
+
 async function detectChunk(env: Env, chunk: string, model: string, usage: Usage, raw?: unknown[], extra?: object): Promise<Entity[]> {
+  if (model.endsWith('/clairic')) return detectClairic(env, chunk, model, usage, raw);
   const result = (await env.AI!.run(model as Parameters<Ai['run']>[0], {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
