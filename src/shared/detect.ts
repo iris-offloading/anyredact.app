@@ -29,7 +29,7 @@ export interface Span {
 export const ENTITY_LABELS: Record<EntityType, string> = {
   email: 'Email',
   phone: 'Phone',
-  ssn: 'SSN',
+  ssn: 'SSN / ITIN',
   card: 'Card number',
   iban: 'IBAN / bank',
   ip: 'IP address',
@@ -104,7 +104,9 @@ export function validIban(raw: string): boolean {
 const RULES: Rule[] = [
   { type: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   { type: 'url', re: /\bhttps?:\/\/[^\s<>"')\]]*[^\s<>"')\].,;:!?]/g },
-  { type: 'ssn', re: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g },
+  { type: 'ssn', re: /\b(?!000|666|9\d\d)\d{3}[- ](?!00)\d{2}[- ](?!0000)\d{4}\b/g },
+  // US ITIN: 9XX-7X-XXXX style, middle group 50-65, 70-88, 90-92 or 94-99.
+  { type: 'ssn', re: /\b9\d{2}[- ](?:5\d|6[0-5]|7\d|8[0-8]|9[0-24-9])[- ]\d{4}\b/g },
   { type: 'card', re: /\b\d(?:[ -]?(?:\r?\n[ \t]*)?\d){12,18}\b/g, validate: luhn },
   { type: 'iban', re: /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, validate: validIban },
   {
@@ -124,6 +126,8 @@ const RULES: Rule[] = [
     validate: (m) => {
       const n = digits(m).length;
       if (n < 7 || n > 15) return false;
+      // 3-2-4 grouping is an SSN/ITIN/EIN shape, not a phone number.
+      if (/^\d{3}[- ]\d{2}[- ]\d{4}$/.test(m.trim())) return false;
       // One wrapped line is plausible; numbers spread over several lines are likely a table.
       if ((m.match(/\n/g) ?? []).length > 1) return false;
       // Skip things that look like dates.
@@ -181,6 +185,26 @@ export function findTerms(
     }
   }
   return spans;
+}
+
+// Field labels a model sometimes returns as if they were the sensitive value.
+const LABEL_WORDS = new Set([
+  'ssn', 'itin', 'ein', 'tin', 'ssn/itin', 'itin/ssn', 'ssn or itin', 'dob', 'date of birth', 'name', 'full name',
+  'first name', 'last name', 'address', 'phone', 'phone number', 'telephone', 'mobile', 'email', 'e-mail', 'id',
+  'id number', 'account', 'account number', 'policy number', 'member id', 'patient id', 'passport',
+  'passport number', 'license', 'licence', "driver's license", 'social security number', 'tax id',
+  'taxpayer identification number', 'individual taxpayer identification number', 'signature', 'n/a', 'none',
+  'redacted',
+]);
+
+/** Rejects values a model returned that can't be the sensitive data itself. */
+export function plausibleEntity(text: string, type: EntityType): boolean {
+  const t = text.trim();
+  if (t.length < 2) return false;
+  if (LABEL_WORDS.has(t.toLowerCase().replace(/[:#.]+$/, '').trim())) return false;
+  // Numbers must contain digits.
+  if (['phone', 'ssn', 'card', 'iban', 'ip', 'id'].includes(type) && !/\d/.test(t)) return false;
+  return true;
 }
 
 /** Drops spans fully contained in an earlier-listed span; keeps partial overlaps. */

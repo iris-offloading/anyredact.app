@@ -1,4 +1,4 @@
-import { dedupe, detectPatterns, findTerms, phonePublicHint, type EntityType, type Span } from './detect.ts';
+import { dedupe, detectPatterns, findTerms, phonePublicHint, plausibleEntity, type EntityType, type Span } from './detect.ts';
 import { detectNames, nameVariants } from './names.ts';
 
 export interface Term {
@@ -35,19 +35,33 @@ export function analyzeUnits(
     spans.push(...found);
     names.push(...found.map((s) => text.slice(s.start, s.end)));
   }
-  if (opts.ai) {
-    for (const s of findTerms(text, opts.ai, 'ai')) {
+  const ai = opts.ai?.filter((e) => plausibleEntity(e.text, e.type));
+  if (ai) {
+    for (let s of findTerms(text, ai, 'ai')) {
+      // Models sometimes call an SSN/ITIN-shaped number a phone number.
+      if (s.type === 'phone' && /^\d{3}[- ]\d{2}[- ]\d{4}$/.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
       const hint = s.type === 'phone' ? phonePublicHint(text, s.start, text.slice(s.start, s.end)) : undefined;
       spans.push(hint ? { ...s, publicHint: hint } : s);
     }
-    names.push(...opts.ai.filter((e) => e.type === 'name').map((e) => e.text));
+    names.push(...ai.filter((e) => e.type === 'name').map((e) => e.text));
   }
   // Once a name is known, catch every other mention of it, including first or last name alone.
   const variants = nameVariants(names).map((t) => ({ text: t, type: 'name' as EntityType }));
   spans.push(...findTerms(text, variants, 'pattern', true));
 
+  // The same number should be treated the same everywhere: if any mention looks
+  // like a public line (e.g. next to "Helpline"), flag every mention of it.
+  const merged = dedupe(spans);
+  const phoneKey = (s: Span) => text.slice(s.start, s.end).replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  const publicPhones = new Map<string, string>();
+  for (const s of merged) if (s.type === 'phone' && s.publicHint) publicPhones.set(phoneKey(s), s.publicHint);
+  for (const s of merged) {
+    const hint = s.type === 'phone' && !s.publicHint ? publicPhones.get(phoneKey(s)) : undefined;
+    if (hint) s.publicHint = hint;
+  }
+
   const out: UnitSpan[] = [];
-  for (const s of dedupe(spans)) {
+  for (const s of merged) {
     for (let i = 0; i < units.length; i++) {
       const uStart = starts[i];
       const uEnd = uStart + units[i].text.length;

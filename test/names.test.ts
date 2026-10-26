@@ -72,3 +72,22 @@ test('headings are not names', () => {
 test('a phone pattern never matches part of a longer number', () => {
   assert.deepEqual(found(['Ref 0208-177-2901267']), []);
 });
+
+test('ITINs are SSN-type, never phones', () => {
+  assert.deepEqual(found(['ITIN: 912-78-1234, SSN 123-45-6789']), [['ssn', '912-78-1234'], ['ssn', '123-45-6789']]);
+});
+
+test('AI field labels are not redacted', () => {
+  const units = [{ id: '0', text: 'Enter your SSN or ITIN here: 912-78-1234' }];
+  const got = analyzeUnits(units, {
+    types: [],
+    ai: [{ text: 'SSN', type: 'id' }, { text: 'ITIN', type: 'other' }, { text: '912-78-1234', type: 'phone' }],
+  }).map((s) => [s.type, units[0].text.slice(s.start, s.end)]);
+  assert.deepEqual(got, [['ssn', '912-78-1234']]);
+});
+
+test('a number flagged public once is flagged everywhere', () => {
+  const units = [{ id: '0', text: 'Call 1-267-941-1000.' }, { id: '1', text: 'Helpline 267-941-1000' }];
+  const got = analyzeUnits(units, { types: ['phone'] }).map((s) => Boolean(s.publicHint));
+  assert.deepEqual(got, [true, true]);
+});

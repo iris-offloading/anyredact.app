@@ -1,6 +1,7 @@
-// Cloudflare Worker: serves the static site (via the ASSETS binding) and the
-// AI-assisted detection endpoint. Uploaded files never reach this Worker; the
-// browser only sends extracted text when the user opts into AI mode.
+import { plausibleEntity } from '../shared/detect.ts';
+
+// AI detection endpoint. The browser sends the text it extracted from a file
+// and gets back the sensitive substrings; nothing is stored.
 
 export interface Env {
   ASSETS: Fetcher;
@@ -14,13 +15,13 @@ export const MAX_CHARS = 60_000;
 // Smaller chunks make the model list entities more thoroughly.
 const CHUNK_CHARS = 3_000;
 
-export const AI_TYPES = ['name', 'address', 'email', 'phone', 'id', 'date', 'org', 'card', 'iban', 'url', 'other'] as const;
+export const AI_TYPES = ['name', 'address', 'email', 'phone', 'ssn', 'id', 'date', 'org', 'card', 'iban', 'url', 'other'] as const;
 
 const SYSTEM_PROMPT = `You find personally identifiable and sensitive information in documents so it can be redacted.
 Return every exact substring of the input that should be redacted, copied character for character, each distinct string once.
-Types: name (people's names), address (street addresses, postal codes with city), email, phone, id (passport, licence, tax, account, patient, employee, case or national ID numbers), date (birth dates and other personal dates), org (employers, schools, hospitals tied to a person), card (payment cards), iban (bank accounts), url (personal links), other (anything else sensitive such as health details, signatures, usernames or passwords).
+Types: name (people's names), ssn (US Social Security numbers and ITINs), address (street addresses, postal codes with city), email, phone, id (passport, licence, tax, account, patient, employee, case or national ID numbers), date (birth dates and other personal dates), org (employers, schools, hospitals tied to a person), card (payment cards), iban (bank accounts), url (personal links), other (anything else sensitive such as health details, signatures, usernames or passwords).
 Be thorough with names: include every private person mentioned anywhere (headers, greetings, signatures, tables, lists, quoted emails), in every form that appears, such as "Jane Doe", "Doe, Jane", "J. Doe", "Ms. Doe", "Jane" and "DOE". Names from any language or culture count.
-Do not return labels such as "Name:", headings, generic words, well-known public figures mentioned in passing, or the contact details of businesses and public services (helplines, office numbers and addresses). If nothing is sensitive return an empty list.`;
+Return the values, never field labels or acronyms such as "Name:", "SSN" or "ITIN". Do not return headings, generic words, well-known public figures mentioned in passing, or the contact details of businesses and public services (helplines, office numbers and addresses). If nothing is sensitive return an empty list.`;
 
 const SCHEMA = {
   type: 'object',
@@ -80,8 +81,9 @@ function parseEntities(raw: unknown, source: string): Entity[] {
     if (!e || typeof e.text !== 'string') continue;
     const text = e.text.trim();
     // Only keep strings that actually occur, so the model cannot invent content.
-    if (text.length < 2 || !source.includes(text)) continue;
+    if (!source.includes(text)) continue;
     const type = (AI_TYPES as readonly string[]).includes(e.type) ? e.type : 'other';
+    if (!plausibleEntity(text, type)) continue;
     out.push({ text, type });
   }
   return out;

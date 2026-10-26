@@ -51,3 +51,11 @@ test('chunks long text on whitespace', () => {
   assert.equal(chunks.join(''), text);
   assert.ok(chunks.every((c) => c.length <= 1000));
 });
+
+test('drops field labels and digit-less numbers', async () => {
+  const res = await worker.fetch(
+    post({ text: 'SSN: 123-45-6789 ITIN: none' }),
+    env({ entities: [{ text: 'SSN', type: 'other' }, { text: 'ITIN', type: 'id' }, { text: '123-45-6789', type: 'ssn' }] }),
+  );
+  assert.deepEqual(await res.json(), { entities: [{ text: '123-45-6789', type: 'ssn' }] });
+});
