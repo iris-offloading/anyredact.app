@@ -26,6 +26,8 @@
   // separate rate-limit namespace so previews don't share production's counters.
   "previews": {
     "ai": { "binding": "AI" },
+    // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
+    "vars": { "MODEL_TRIALS": "1" },
     "ratelimits": [
       { "name": "DETECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
     ]

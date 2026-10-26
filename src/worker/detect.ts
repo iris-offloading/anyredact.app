@@ -8,6 +8,8 @@ export interface Env {
   AI?: Ai;
   DETECT_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
   AI_MODEL?: string;
+  // Set only on preview deployments: lets a request pick the model, for benchmarking.
+  MODEL_TRIALS?: string;
 }
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -89,17 +91,45 @@ function parseEntities(raw: unknown, source: string): Entity[] {
   return out;
 }
 
-async function detectChunk(env: Env, chunk: string): Promise<Entity[]> {
-  const result = (await env.AI!.run((env.AI_MODEL || DEFAULT_MODEL) as Parameters<Ai['run']>[0], {
+interface Usage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+}
+
+// Models answer in different shapes: Workers AI `response`, OpenAI-style
+// `choices`, or Responses-API `output` (gpt-oss).
+export function responseContent(result: unknown): unknown {
+  const r = result as {
+    response?: unknown;
+    choices?: { message?: { content?: unknown } }[];
+    output?: { type?: string; content?: { type?: string; text?: string }[] }[];
+  };
+  if (r?.response !== undefined && r.response !== null) return r.response;
+  const choice = r?.choices?.[0]?.message?.content;
+  if (choice !== undefined) return choice;
+  if (Array.isArray(r?.output)) {
+    return r.output
+      .filter((o) => o.type === 'message')
+      .flatMap((o) => o.content ?? [])
+      .map((c) => c.text ?? '')
+      .join('');
+  }
+  return undefined;
+}
+
+async function detectChunk(env: Env, chunk: string, model: string, usage: Usage): Promise<Entity[]> {
+  const result = (await env.AI!.run(model as Parameters<Ai['run']>[0], {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: chunk },
     ],
     response_format: { type: 'json_schema', json_schema: SCHEMA },
-    max_tokens: 2048,
+    max_tokens: 4096,
     temperature: 0,
-  } as never)) as { response?: unknown };
-  return parseEntities(result?.response, chunk);
+  } as never)) as { usage?: Usage };
+  usage.prompt_tokens = (usage.prompt_tokens ?? 0) + (result?.usage?.prompt_tokens ?? 0);
+  usage.completion_tokens = (usage.completion_tokens ?? 0) + (result?.usage?.completion_tokens ?? 0);
+  return parseEntities(responseContent(result), chunk);
 }
 
 export function json(body: unknown, status = 200) {
@@ -122,16 +152,21 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   }
 
   let text: unknown;
+  let requested: unknown;
   try {
-    ({ text } = (await request.json()) as { text?: unknown });
+    ({ text, model: requested } = (await request.json()) as { text?: unknown; model?: unknown });
   } catch {
     return json({ error: 'Invalid JSON' }, 400);
   }
   if (typeof text !== 'string' || !text.trim()) return json({ entities: [] });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long for AI mode (max ${MAX_CHARS} characters).` }, 413);
 
+  const trial = env.MODEL_TRIALS === '1' && typeof requested === 'string' && requested.startsWith('@cf/');
+  const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
+  const usage: Usage = {};
+  const started = Date.now();
   try {
-    const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c)));
+    const results = await Promise.all(chunkText(text).map((c) => detectChunk(env, c, model, usage)));
     const seen = new Set<string>();
     const entities = results.flat().filter((e) => {
       const k = `${e.type}\u0000${e.text}`;
@@ -139,9 +174,11 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
       seen.add(k);
       return true;
     });
+    if (trial) return json({ entities, model, ms: Date.now() - started, usage });
     return json({ entities });
   } catch (err) {
     console.error('detect failed', err);
+    if (trial) return json({ error: String(err), model }, 502);
     return json({ error: 'AI detection is unavailable right now.' }, 502);
   }
 }
