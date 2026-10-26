@@ -158,3 +158,11 @@ mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e85
 .site-footer ul { list-style: none; padding: 0; margin: 0; }
 .site-footer li { margin-bottom: 4px; }
 .site-footer strong { color: var(--text); }
+.plans { margin: 16px 0 32px; }
+.plan { gap: 10px; }
+.plan .plan-price { font-size: 1.4rem; font-weight: 700; color: var(--text); }
+.signin { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.signin input { flex: 1; min-width: 200px; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); }
+.signin .btn.primary { width: auto; }
+.btn.google { display: inline-block; text-decoration: none; }
+.btn.google[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }

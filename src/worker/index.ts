@@ -2,6 +2,8 @@
 // rejects other named exports from the main module.
 import { handleCheck } from './check.ts';
 import { handleDetect, json, type Env } from './detect.ts';
+import { handleAccounts } from './accounts.ts';
+import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';
 
 // Durable Object class for the free daily allowance; workerd allows class exports.
@@ -12,6 +14,8 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/detect') return handleDetect(request, env);
     if (url.pathname === '/api/check') return handleCheck(request, env);
+    const account = (await handleAccounts(request, env, url)) ?? (await handleBilling(request, env, url));
+    if (account) return account;
     if (url.pathname === '/api/quota') return json({ quota: await quotaStatus(request, env) });
     if (url.pathname === '/api/health') return json({ ok: true });
     // Preview-only model catalogue, for picking models to benchmark.

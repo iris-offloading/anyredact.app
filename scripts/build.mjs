@@ -18,7 +18,7 @@ const pdfjsVersion = require('pdfjs-dist/package.json').version;
 const pdfWorker = `/assets/pdf.worker-${pdfjsVersion}.min.mjs`;
 
 const result = await build({
-  entryPoints: { app: path.join(root, 'src/client/main.ts') },
+  entryPoints: { app: path.join(root, 'src/client/main.ts'), account: path.join(root, 'src/client/account.ts') },
   outdir: path.join(dist, 'assets'),
   bundle: true,
   splitting: true,
@@ -32,8 +32,12 @@ const result = await build({
   define: { __PDF_WORKER_SRC__: JSON.stringify(pdfWorker) },
   logLevel: 'warning',
 });
-const appJs = Object.entries(result.metafile.outputs).find(([, o]) => o.entryPoint)[0];
-const appSrc = '/' + path.relative(dist, path.join(root, appJs)).split(path.sep).join('/');
+const entrySrc = (name) => {
+  const out = Object.entries(result.metafile.outputs).find(([, o]) => o.entryPoint?.endsWith(`src/client/${name}.ts`))[0];
+  return '/' + path.relative(dist, path.join(root, out)).split(path.sep).join('/');
+};
+const appSrc = entrySrc('main');
+const accountSrc = entrySrc('account');
 
 await cp(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'), path.join(dist, pdfWorker));
 await cp(path.join(root, 'static'), dist, { recursive: true });
@@ -58,7 +62,7 @@ function footer() {
   return `<footer class="site-footer"><div class="wrap">
   <div><strong>AnyRedact</strong><p>${esc(SITE.tagline)}. Free to use.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
-  <div><h2>About</h2><ul><li><a href="/privacy">Privacy</a></li></ul></div>
+  <div><h2>About</h2><ul><li><a href="/account">Plans and account</a></li><li><a href="/privacy">Privacy</a></li></ul></div>
 </div></footer>`;
 }
 
@@ -113,6 +117,7 @@ function layout(page, main) {
 <link rel="stylesheet" href="/styles.css?v=${cssHash}">
 ${page.jsonLd === false ? '' : `<script type="application/ld+json">${jsonLd(page)}</script>`}
 ${page.tool ? `<script type="module" src="${appSrc}"></script>` : ''}
+${page.script ? `<script type="module" src="${page.script}"></script>` : ''}
 </head>
 <body>
 ${nav(page.slug)}
@@ -178,8 +183,11 @@ await writeFile(
 <h2>How your content is processed</h2>
 <p>To find personal information, the content of your file is sent over HTTPS to our Cloudflare Worker and analysed by AI models on Cloudflare Workers AI. Today that is the text read from your document; for formats that need it, such as audio or video, it may be the media itself. Content is processed in memory for that request only. We do not store it or the results, do not log it, and do not use it for training. Cloudflare processes the request as our infrastructure provider.</p>
 <p>Wherever possible the work happens in your browser instead: documents are opened, text is read (using the open-source Tesseract OCR engine, loaded from the jsDelivr CDN, for images and scanned pages) and the redacted copy is created on your device.</p>
+<p>Nothing is sent until you choose AI detection for a file. You can always use the built-in rules instead, which run entirely in your browser.</p>
 <h2>What we collect</h2>
-<p>No accounts, no cookies and no third-party analytics. Our hosting provider keeps standard, short-lived request logs (such as IP address and URL) for security and abuse prevention, and we rate-limit the AI endpoint per IP address.</p>
+<p>No third-party analytics. To give everyone a free daily AI allowance, your browser keeps a random ID (in local storage) and we count, per day, how many characters that ID and your IP address sent for AI detection. Our hosting provider keeps standard, short-lived request logs (such as IP address and URL) for security and abuse prevention.</p>
+<h2>Accounts and payments</h2>
+<p>An account is only needed to buy pages. We store your email address (or your Google account ID), your page balances and a sign-in cookie. Payments are handled by Stripe; we never see your card details. Sign-in emails are sent through Cloudflare.</p>
 <h2>Check before you share</h2>
 <p>Automatic detection can miss things. Always review the redacted file before sharing it.</p>
 </article>`,
@@ -194,8 +202,22 @@ await writeFile(
   ).replace('<link rel="canonical" href="https://anyredact.app/404">', '<meta name="robots" content="noindex">'),
 );
 
+await writeFile(
+  path.join(dist, 'account.html'),
+  layout(
+    {
+      slug: 'account',
+      title: 'Plans and account – AnyRedact',
+      description: 'Free AI redaction every day, plus a monthly plan and page packs that never expire for larger jobs.',
+      jsonLd: false,
+      script: accountSrc,
+    },
+    `<article class="wrap prose"><h1>Plans and account</h1><div id="account"><p>Loading…</p></div></article>`,
+  ),
+);
+
 const today = new Date().toISOString().slice(0, 10);
-const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'privacy'];
+const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'account', 'privacy'];
 await writeFile(
   path.join(dist, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>
