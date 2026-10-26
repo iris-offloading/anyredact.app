@@ -1,10 +1,12 @@
 import { burnBoxes, canvasToBlob, outputName, rectsForPage, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { readMetadata } from './metadata.ts';
 import { ocrUnit } from './ocr.ts';
 
 const MAX_SIDE = 6000;
 
 export async function loadImage(file: File, progress: Progress): Promise<LoadedDoc> {
   progress('Opening image…');
+  const metadata = readMetadata(file);
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
@@ -31,8 +33,9 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
     units: [unit],
     pages: [{ index: 0, canvas }],
     notes,
+    metadata: await metadata,
     async exportFile(findings, boxes) {
-      // Re-encoding through a canvas also drops EXIF metadata such as GPS location.
+      // Re-encoding through a canvas writes pixels only, so EXIF, GPS, XMP and IPTC are left behind.
       const out = burnBoxes(canvas, rectsForPage(0, findings, boxes));
       return { blob: await canvasToBlob(out, type, 0.92), filename: outputName(file.name, ext) };
     },

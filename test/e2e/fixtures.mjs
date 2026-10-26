@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import JSZip from 'jszip';
+import sharp from 'sharp';
 import { writeFileSync } from 'node:fs';
 const out = process.argv[2] || 'e2e-out';
 const pdf = await PDFDocument.create();
@@ -26,3 +27,17 @@ zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="
 </w:body></w:document>`);
 writeFileSync(`${out}/sample.docx`, await zip.generateAsync({ type: 'nodebuffer' }));
 writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\nNext steps\nHelpline: 0800 123 4567\n');
+
+/** Adds EXIF (camera, author, date, GPS) and XMP to a JPEG, for the metadata test. */
+export function withMetadata(jpeg) {
+  const xmp = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" photoshop:City="San Francisco"/></rdf:RDF></x:xmpmeta>';
+  return sharp(jpeg)
+    .withExif({
+      IFD0: { Make: 'Canon', Model: 'Canon EOS R6', Artist: 'Jane Doe' },
+      IFD2: { DateTimeOriginal: '2026:10:20 14:03:00', BodySerialNumber: '0123456789' },
+      IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '37/1 46/1 30/1', GPSLongitudeRef: 'W', GPSLongitude: '122/1 25/1 12/1' },
+    })
+    .withXmp(xmp)
+    .jpeg()
+    .toBuffer();
+}

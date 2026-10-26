@@ -42,6 +42,13 @@ export interface ManualBox extends Rect {
   page: number;
 }
 
+export interface MetaField {
+  label: string;
+  value: string;
+  /** Location, camera, dates, people: shown first. */
+  key: boolean;
+}
+
 export type RedactStyle = 'block' | 'label';
 
 export interface LoadedDoc {
@@ -51,6 +58,8 @@ export interface LoadedDoc {
   pages: Page[];
   /** Shown to the user under the preview, e.g. limitations of the format. */
   notes: string[];
+  /** Embedded metadata, listed for review; the export leaves it out. */
+  metadata?: MetaField[];
   exportFile(findings: Finding[], boxes: ManualBox[], style: RedactStyle): Promise<{ blob: Blob; filename: string }>;
 }
 
