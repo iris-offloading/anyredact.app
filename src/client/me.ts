@@ -1,7 +1,7 @@
 // The signed-in account as /api/me returns it, shared by /account and /pricing.
 
 export interface Activity {
-  /** A format, check, credits (bought once), plan, refund or dispute. */
+  /** A format, check, credits (bought once), free (the daily refill), plan, refund or dispute. */
   kind: string;
   /** Signed: spent credits are negative. */
   credits: number;

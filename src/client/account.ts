@@ -193,6 +193,8 @@ function activityRow(a: Activity) {
         return ['check', 'Check for anything left', ''];
       case 'credits':
         return ['plus', `Bought ${a.credits.toLocaleString('en-US')} credits`, a.cents ? price(a.cents) : ''];
+      case 'free':
+        return ['plus', 'Daily free credits', ''];
       case 'plan':
         return ['plus', `${PRODUCTS.find((p) => p.monthly && p.credits === a.credits)?.name ?? 'Monthly'} plan`, a.cents ? price(a.cents) : ''];
       case 'refund':
