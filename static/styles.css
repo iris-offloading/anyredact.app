@@ -604,3 +604,36 @@ mark.saying { outline: 2px solid var(--accent); }
   .consent-bar { flex-direction: column; align-items: stretch; gap: 12px; }
   .consent-actions .btn { flex: 1; }
 }
+
+/* Diagrams (scripts/diagrams.mjs): a wide drawing for desktop, a narrow one for phones. */
+.diagram { margin: 0; }
+.prose .diagram { margin: 1.6em 0; }
+.diagram svg { display: block; width: 100%; height: auto; font-family: var(--sans); }
+.diagram .dg-narrow { display: none; max-width: 420px; margin: 0 auto; }
+@media (max-width: 900px) { .section > .diagram .dg-wide { display: none; } .section > .diagram .dg-narrow { display: block; } }
+@media (max-width: 600px) { .prose .diagram .dg-wide { display: none; } .prose .diagram .dg-narrow { display: block; } }
+.prose .diagram .dg-wide { max-width: 640px; }
+.dg-lane { fill: var(--sunken); stroke: var(--line); }
+.dg-lane-label { fill: var(--muted); font-size: 13px; font-weight: 600; }
+.dg-node { fill: var(--surface); stroke: var(--line-strong); }
+.dg-node.dg-ai { stroke: var(--accent); }
+.dg-badge { fill: var(--ink); }
+.dg-badge-ai { fill: var(--accent); }
+.dg-dot { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2; }
+.dg-num { fill: var(--ink-text); font-size: 12px; font-weight: 700; }
+.dg-badge-ai + .dg-num { fill: var(--accent-ink); }
+.dg-title { fill: var(--text); font-size: 15px; font-weight: 600; }
+.dg-sub { fill: var(--muted); font-size: 13px; }
+.dg-strong { fill: var(--text); font-weight: 600; }
+.dg-arrow { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+.dg-dash { stroke-dasharray: 5 5; }
+.dg-head { fill: var(--line-strong); }
+.dg-page { fill: var(--surface); stroke: var(--line-strong); }
+.dg-ghost { fill: none; stroke: var(--line-strong); stroke-dasharray: 4 4; }
+.dg-bar { fill: var(--ink); }
+.dg-line { fill: var(--line-strong); }
+.dg-leak { fill: var(--accent); font-size: 13px; font-weight: 600; }
+.dg-leak-box { fill: none; stroke: var(--accent); }
+.dg-hill { fill: var(--line-strong); }
+.dg-cell { fill: var(--text); font-size: 12px; font-family: var(--mono); }
+.dg-span { fill: var(--ink); }

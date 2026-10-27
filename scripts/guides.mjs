@@ -1,6 +1,7 @@
 // Guides under /guides. Bodies are HTML, rendered by scripts/build.mjs into the
 // prose layout. Keep the steps in line with what the editor does, and give
 // every guide its own wording: the site never repeats a phrase.
+import { pdfLayersDiagram, photoMetadataDiagram, redactionKindsDiagram, sarTimelineDiagram } from './diagrams.mjs';
 
 export const GUIDES_INDEX = {
   slug: 'guides',
@@ -24,6 +25,7 @@ export const GUIDES = [
 <p>The word comes from legal and government work, where court filings and released records have names, account numbers and other private details blacked out. Today it applies to any file: a screenshot sent to a support team, a spreadsheet handed to a contractor, a call recording used for training.</p>
 
 <h2>Redaction, deletion and anonymisation</h2>
+${redactionKindsDiagram()}
 <ul>
 <li><strong>Deletion</strong> gets rid of a whole file or record.</li>
 <li><strong>Redaction</strong> keeps the file and removes selected parts of it, usually leaving a visible mark (a black bar, a label such as [NAME], or a beep) so the reader knows something was taken out.</li>
@@ -68,6 +70,7 @@ export const GUIDES = [
     summary: 'Text under a drawn rectangle can still be copied. Where it hides and how to test a file.',
     body: `
 <p>A PDF stores its text and its drawings separately. A black rectangle added with a comment or drawing tool is one more object on the page, painted after the text. Readers see a bar. Anything that reads the text layer (copy and paste, search, screen readers, text extraction tools) still gets the original words.</p>
+${pdfLayersDiagram()}
 
 <h2>Where hidden text survives</h2>
 <ul>
@@ -342,6 +345,7 @@ export const GUIDES = [
 </ul>
 
 <h2>Save a copy without it</h2>
+${photoMetadataDiagram()}
 <ul>
 <li><strong>AnyRedact:</strong> open the photo and download it. The file is re-encoded from the pixels, so no metadata is carried over. Redacting text or faces is optional.</li>
 <li><strong>Windows:</strong> in Properties, Details, use "Remove Properties and Personal Information" and choose to create a copy.</li>
@@ -419,6 +423,7 @@ export const GUIDES = [
 
 <h2>Deadlines</h2>
 <p>A response is due within one calendar month of receiving the request. It can be extended by up to two further months for complex or numerous requests, as long as the requester is told within the first month.</p>
+${sarTimelineDiagram()}
 
 <h2>A workflow that scales</h2>
 <ol>
