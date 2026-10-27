@@ -217,7 +217,7 @@ export const HOME = {
   format: 'all',
   title: 'AnyRedact: Free Online Auto Redaction Tool with AI',
   description:
-    'Redact PDFs, images, Word, PowerPoint, Excel, text and audio for free. AI finds the personal information, you review it, and nothing is stored.',
+    'Auto redact PDFs, images, Word, PowerPoint, Excel, text and audio for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
   lead: 'Upload PDFs, images, Word, PowerPoint, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
   hint: 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
