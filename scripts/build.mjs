@@ -65,6 +65,7 @@ await writeFile(path.join(dist, '_headers'), headers.replaceAll('CDN_SCRIPTS', c
 const css = await readFile(path.join(root, 'static/styles.css'));
 const cssHash = (await import('node:crypto')).createHash('sha256').update(css).digest('hex').slice(0, 8);
 const themeHash = (await import('node:crypto')).createHash('sha256').update(await readFile(path.join(root, 'static/theme.js'))).digest('hex').slice(0, 8);
+const analyticsHash = (await import('node:crypto')).createHash('sha256').update(await readFile(path.join(root, 'static/analytics.js'))).digest('hex').slice(0, 8);
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const url = (slug) => `${SITE.origin}/${slug}`;
@@ -100,7 +101,7 @@ function footer() {
   return `<footer class="site-footer"><div class="wrap">
   <div><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
-  <div><h2>About</h2><ul>${about}</ul></div>
+  <div><h2>About</h2><ul>${about}<li><button type="button" class="footer-link" data-consent>Cookies</button></li></ul></div>
 </div></footer>`;
 }
 
@@ -156,6 +157,7 @@ function layout(page, main) {
 <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css?v=${cssHash}">
 <script src="/theme.js?v=${themeHash}"></script>
+<script src="/analytics.js?v=${analyticsHash}"></script>
 ${page.jsonLd === false ? '' : `<script type="application/ld+json">${jsonLd(page)}</script>`}
 ${page.tool ? `<script type="module" src="${appSrc}"></script>` : ''}
 ${page.script ? `<script type="module" src="${page.script}"></script>` : ''}

@@ -33,26 +33,28 @@ export const LEGAL = [
 <li><strong>Account.</strong> If you sign in, we keep your email address, your Google account ID if you use Google, your plan, your credit balances, your purchases and a sign-in session.</li>
 <li><strong>Payments.</strong> Stripe takes the payment and keeps your card details. We receive your Stripe customer ID and what you bought.</li>
 <li><strong>Logs.</strong> Cloudflare keeps short-lived request logs, such as IP address, URL and errors, for security and abuse prevention.</li>
+<li><strong>Analytics.</strong> Google Analytics counts page views. Each visit sends the page address without its query or anchor, the page title, and your browser, device type and approximate location. File names, file content and findings are never sent.</li>
 </ul>
-<p>We do not sell personal data and do not use advertising or third-party analytics.</p>
+<p>We do not sell personal data and do not use advertising.</p>
 
 <h2>Cookies and local storage</h2>
-<p>Signing in sets a session cookie for 30 days and a cookie that tells the page you are signed in. Google sign-in sets a short-lived cookie that protects the login. Local storage keeps the free allowance ID and your settings, such as the theme. All of these are needed for the site to work, so there is no cookie banner.</p>
+<p>Signing in sets a session cookie for 30 days and a cookie that tells the page you are signed in. Google sign-in sets a short-lived cookie that protects the login. Local storage keeps the free allowance ID and your settings, such as the theme and your analytics choice. These are needed for the site to work.</p>
+<p>Google Analytics sets <code>_ga</code> cookies that last up to 2 years. In the EU, EEA, UK and Switzerland they are only set after you accept them in the bar at the bottom of the page; until then Google Analytics counts the visit without cookies. Elsewhere they are set unless you decline. You can change your choice at any time with the Cookies button at the bottom of every page, and declining deletes these cookies.</p>
 
 <h2>Who processes data</h2>
 <ul>
 <li><strong>Cloudflare</strong> hosts the site, runs the AI models and sends sign-in emails.</li>
 <li><strong>Stripe</strong> handles payments, subscriptions and refunds.</li>
-<li><strong>Google</strong> confirms your identity if you sign in with Google.</li>
+<li><strong>Google</strong> confirms your identity if you sign in with Google, and runs Google Analytics with Google signals and ad personalisation turned off.</li>
 <li><strong>jsDelivr</strong> serves the OCR engine and picture models to your browser.</li>
 </ul>
 <p>These providers may process data outside your country, under their own safeguards for international transfers.</p>
 
 <h2>Purpose and legal basis</h2>
-<p>We use this data to provide the service you ask for, to count free and paid use, to take payments and to prevent abuse. The legal bases are the contract with you, our legitimate interest in keeping the service secure and fair, and our legal duties such as keeping tax records.</p>
+<p>We use this data to provide the service you ask for, to count free and paid use, to take payments and to prevent abuse. We use analytics to see which pages people use. The legal bases are the contract with you, our legitimate interest in keeping the service secure and fair, your consent for analytics cookies where the law asks for it, and our legal duties such as keeping tax records.</p>
 
 <h2>How long we keep it</h2>
-<p>File content is gone once the request ends. Daily counters are replaced the next day. Sign-in links expire after 15 minutes and sessions after 30 days. Account data stays until you ask us to delete it. Payment records are kept as long as tax law requires.</p>
+<p>File content is gone once the request ends. Daily counters are replaced the next day. Sign-in links expire after 15 minutes and sessions after 30 days. Account data stays until you ask us to delete it. Payment records are kept as long as tax law requires. Google Analytics keeps visit data for 2 months.</p>
 
 <h2>Your rights</h2>
 <p>You can ask for a copy of your data, a correction, or deletion of your account, and you can object to processing. Write to ${mail} from the email address on your account. You can also complain to your local data protection authority.</p>
