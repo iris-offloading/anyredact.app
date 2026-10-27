@@ -1,5 +1,5 @@
 import { chunkText, type EntityType } from '../shared/detect.ts';
-import { MAX_CHARS, PAGE_CHARS } from '../shared/pricing.ts';
+import { MAX_CHARS, CREDIT_CHARS } from '../shared/pricing.ts';
 
 export interface AiEntity {
   text: string;
@@ -45,12 +45,12 @@ export class QuotaError extends Error {
   }
 }
 
-/** Today's free allowance in pages (3,000 characters), or null when the server doesn't track one. */
-export async function freePagesLeft(): Promise<number | null> {
+/** Today's free credits left (3,000 characters each), or null when the server doesn't track one. */
+export async function freeCreditsLeft(): Promise<number | null> {
   try {
     const res = await fetch('/api/quota', { headers: { 'x-device-id': deviceId() } });
     const { quota } = (await res.json()) as { quota?: { used: number; limit: number } | null };
-    return quota ? Math.max(0, Math.floor((quota.limit - quota.used) / PAGE_CHARS)) : null;
+    return quota ? Math.max(0, Math.floor((quota.limit - quota.used) / CREDIT_CHARS)) : null;
   } catch {
     return null;
   }
@@ -59,15 +59,19 @@ export async function freePagesLeft(): Promise<number | null> {
 // Stays under the Worker's per-request limit.
 const BATCH_CHARS = MAX_CHARS - 10_000;
 
-/** Sends extracted text (never the file) to the Worker for model-based detection. The token pays for the scan's free final check. */
+/**
+ * Sends extracted text (never the file) to the Worker for model-based detection. The token pays for the scan's
+ * free final check; each one covers about twice its batch, so the longest batch's token is kept.
+ */
 export async function detectWithAi(text: string): Promise<{ entities: AiEntity[]; checkToken?: string }> {
   const entities: AiEntity[] = [];
   let checkToken: string | undefined;
+  let longest = 0;
   // Sequential, so a long document doesn't trip the per-IP rate limit in one burst.
   for (const batch of chunkText(text, BATCH_CHARS)) {
     const data = await postApi<{ entities?: AiEntity[]; checkToken?: string }>('/api/detect', { text: batch }, 'AI detection failed');
     entities.push(...(data.entities ?? []));
-    checkToken = data.checkToken ?? checkToken;
+    if (data.checkToken && batch.length > longest) [checkToken, longest] = [data.checkToken, batch.length];
   }
   return { entities, checkToken };
 }

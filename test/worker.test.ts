@@ -130,7 +130,7 @@ async function quotaNamespace() {
     get: (name: string) => {
       if (!objects.has(name)) {
         const data = new Map<string, unknown>();
-        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v), delete: async (k: string) => data.delete(k) };
+        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v), delete: async (k: string) => data.delete(k), setAlarm: async () => {} };
         objects.set(name, new Quota({ storage } as unknown as DurableObjectState));
       }
       const obj = objects.get(name)!;

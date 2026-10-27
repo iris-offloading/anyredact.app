@@ -1,19 +1,9 @@
-import { FREE_CREDITS, PRODUCTS, type Product } from '../shared/pricing.ts';
-import { freePagesLeft } from './ai.ts';
+import { findProduct, FREE_CREDITS, price, PRODUCTS, type Product } from '../shared/pricing.ts';
+import { freeCreditsLeft } from './ai.ts';
 import { h } from './dom.ts';
+import { fetchMe, forgetPaidBase, paidBase, paidLeft, planLeft, rememberPaidBase, type User } from './me.ts';
 
 // The /account page: sign in, see balances, buy a plan or credits, manage a plan.
-
-interface Me {
-  user: {
-    email: string | null;
-    subscription: { pages: number; used: number; renews: number; ending: boolean } | null;
-    packPages: number;
-    canManage: boolean;
-  } | null;
-  signIn?: { email: boolean; google: boolean };
-  error?: string;
-}
 
 const root = document.getElementById('account')!;
 const status = h('p', { className: 'status', role: 'status', hidden: true });
@@ -40,11 +30,11 @@ function pendingBuy() {
   try {
     if (id) localStorage.setItem(BUY_KEY, JSON.stringify({ id, at: Date.now() }));
     const saved = JSON.parse(localStorage.getItem(BUY_KEY) || 'null') as { id: string; at: number } | null;
-    if (saved && Date.now() - saved.at < BUY_TTL) return PRODUCTS.find((p) => p.id === saved.id);
+    if (saved && Date.now() - saved.at < BUY_TTL) return findProduct(saved.id);
   } catch {
     // Storage blocked: the buy still works if the visitor is already signed in.
   }
-  return PRODUCTS.find((p) => p.id === id);
+  return findProduct(id);
 }
 
 function clearBuy() {
@@ -54,30 +44,10 @@ function clearBuy() {
   if (location.search.includes('buy=')) history.replaceState(null, '', '/account');
 }
 
-/** Paid credits left: the plan's and the bought ones. Rises once a payment lands. */
-const paidLeft = (user: NonNullable<Me['user']>) => (user.subscription ? Math.max(0, user.subscription.pages - user.subscription.used) : 0) + user.packPages;
-
-// The paid balance before checkout, so the page can tell when the payment has landed.
-const PAID_BASE_KEY = 'anyredact-paid-base';
-let currentPaid: number | null = null;
-
-function rememberPaidBase(paid: number | null) {
-  try {
-    if (paid !== null) sessionStorage.setItem(PAID_BASE_KEY, String(paid));
-  } catch {}
-}
-
-function paidBase(): number | null {
-  try {
-    const v = sessionStorage.getItem(PAID_BASE_KEY);
-    return v === null ? null : Number(v);
-  } catch {
-    return null;
-  }
-}
+let currentUser: User | null = null;
 
 async function checkout(product: Product) {
-  rememberPaidBase(currentPaid);
+  rememberPaidBase(currentUser);
   say('Opening secure checkout…', 'busy');
   const r = await post('/api/checkout', { product: product.id });
   if (r.url) location.href = r.url;
@@ -139,15 +109,13 @@ function meter(label: string, left: number | string, total: number | null, note?
   );
 }
 
-const usd = (cents: number) => `$${(cents / 100).toLocaleString('en-US')}`;
-
 /** One product with its price and a button that opens checkout. */
 function offer(p: Product, button: string) {
   return h(
     'div',
     { className: 'offer' },
-    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.pages.toLocaleString('en-US')} credits`), h('span', {}, p.monthly ? `${p.pages.toLocaleString('en-US')} credits a month` : 'Paid once')),
-    h('span', { className: 'offer-price' }, usd(p.cents), ...(p.monthly ? [h('small', {}, ' / month')] : [])),
+    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.credits.toLocaleString('en-US')} credits`), h('span', {}, p.monthly ? `${p.credits.toLocaleString('en-US')} credits a month` : 'Paid once')),
+    h('span', { className: 'offer-price' }, price(p.cents), ...(p.monthly ? [h('small', {}, ' / month')] : [])),
     h('button', { type: 'button', className: 'btn', textContent: button, onclick: () => checkout(p) }),
   );
 }
@@ -197,11 +165,10 @@ function deleteAccount() {
   return row;
 }
 
-function balance(user: NonNullable<Me['user']>, free: number | null) {
-  const sub = user.subscription;
-  const plan = sub && PRODUCTS.find((p) => p.monthly && p.pages === sub.pages);
-  const planLeft = sub ? Math.max(0, sub.pages - sub.used) : 0;
-  const total = (free ?? 0) + planLeft + user.packPages;
+function balance(user: User, free: number | null) {
+  const sub = user.plan;
+  const plan = sub && PRODUCTS.find((p) => p.monthly && p.credits === sub.credits);
+  const total = (free ?? 0) + paidLeft(user);
   const name = user.email ?? 'Google account';
   const head = h(
     'div',
@@ -226,9 +193,9 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
   const meters = [
     ...(free === null ? [] : [meter('Free today', free, FREE_CREDITS)]),
     sub
-      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, sub.ending ? 'Lapse when the plan ends' : 'Reset each month')
+      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft(user), sub.credits, sub.ending ? 'Lapse when the plan ends' : 'Reset each month')
       : meter('Monthly plan', 'None', null),
-    meter('Credits', user.packPages, null, 'Never expire'),
+    meter('Credits', user.credits, null, 'Never expire'),
   ];
   const balanceCard = h(
     'section',
@@ -249,9 +216,9 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
             'div',
             {},
             h('div', { className: 'plan-name' }, h('strong', {}, plan?.name ?? 'Monthly'), h('span', { className: sub.ending ? 'pill ending' : 'pill' }, sub.ending ? 'Cancelled' : 'Active')),
-            h('span', { className: 'plan-sub' }, `${sub.pages.toLocaleString('en-US')} credits a month`),
+            h('span', { className: 'plan-sub' }, `${sub.credits.toLocaleString('en-US')} credits a month`),
           ),
-          ...(plan ? [h('span', { className: 'plan-price' }, usd(plan.cents), h('small', {}, ' / month'))] : []),
+          ...(plan ? [h('span', { className: 'plan-price' }, price(plan.cents), h('small', {}, ' / month'))] : []),
         ),
         h(
           'div',
@@ -293,7 +260,7 @@ let paidChecks = 0;
 const PAID_CHECK_MS = 3000;
 const PAID_CHECKS = 20;
 
-function confirmPayment(user: Me['user']) {
+function confirmPayment(user: User | null) {
   const base = paidBase();
   const added = user && base !== null ? paidLeft(user) - base : 0;
   // Without a stored balance (checkout opened in another tab) one refresh has to do.
@@ -307,9 +274,7 @@ function confirmPayment(user: Me['user']) {
   } else {
     say('Payment received. Your credits will appear shortly.');
   }
-  try {
-    sessionStorage.removeItem(PAID_BASE_KEY);
-  } catch {}
+  forgetPaidBase();
   history.replaceState(null, '', '/account');
 }
 
@@ -319,8 +284,8 @@ async function render() {
   const params = new URLSearchParams(location.search);
   const paid = !!params.get('paid');
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
-  const [me, free] = await Promise.all([fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null })) as Promise<Me>, freePagesLeft()]);
-  currentPaid = me.user ? paidLeft(me.user) : null;
+  const [me, free] = await Promise.all([fetchMe(), freeCreditsLeft()]);
+  currentUser = me.user;
   const buying = paid ? undefined : pendingBuy();
   root.parentElement!.classList.toggle('solo', !me.user);
   root.replaceChildren(me.user ? balance(me.user, free) : signInForm(me.signIn ?? { email: false, google: false }));

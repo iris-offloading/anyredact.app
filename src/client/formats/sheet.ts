@@ -415,6 +415,8 @@ async function readOds(zip: JSZip): Promise<Workbook> {
   const blocks: Block[] = [];
   const sheets: SheetMeta[] = [];
   const notes: Block[] = [];
+  // Counts every sheet's comments, so their ids stay unique across sheets.
+  let noteCount = 0;
   const inNote = (el: Element) => el.closest('annotation') !== null;
 
   const hiddenStyles = new Set(
@@ -438,7 +440,7 @@ async function readOds(zip: JSZip): Promise<Workbook> {
         for (const note of kids(cell, OFFICE, 'annotation')) {
           for (const who of [...kids(note, DC, 'creator'), ...kids(note, META, 'creator-initials')]) who.textContent = 'Redacted';
           const np = odfPieces(note);
-          if (np.map((p) => p.text).join('').trim()) notes.push(block(`content.xml#note${notes.length}`, `${name}: comments`, [nodeCell(np)]));
+          if (np.map((p) => p.text).join('').trim()) notes.push(block(`content.xml#note${noteCount++}`, `${name}: comments`, [nodeCell(np)]));
         }
       }
       if (cells.length) blocks.push(block(`content.xml!${name}!${r}`, name, cells, name));

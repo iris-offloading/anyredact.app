@@ -18,11 +18,13 @@ export interface User {
   id: string;
   email: string | null;
   stripe_customer: string | null;
-  sub_id: string | null;
-  sub_pages: number;
-  sub_used: number;
-  sub_period_end: number;
-  pack_pages: number;
+  /** The monthly plan's Stripe subscription, its credits per period and how many are used. */
+  plan_subscription: string | null;
+  plan_credits: number;
+  plan_used: number;
+  plan_period_end: number;
+  /** One-off credits, which never expire. Below zero after a refund or dispute of spent credits. */
+  credits: number;
 }
 
 const SESSION_DAYS = 30;
@@ -155,12 +157,10 @@ async function deleteAccount(request: Request, env: AccountsEnv): Promise<Respon
 }
 
 /** Whether a plan was cancelled and stops at the end of its period. False when Stripe can't say. */
-async function planEnding(env: AccountsEnv, subId: string): Promise<boolean> {
+async function planEnding(env: AccountsEnv, subscription: string): Promise<boolean> {
   if (!env.STRIPE_SECRET_KEY) return false;
   try {
-    const res = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subId)}`, { headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
-    if (!res.ok) return false;
-    const sub = (await res.json()) as { cancel_at_period_end?: boolean; cancel_at?: number | null };
+    const sub = await stripe<{ cancel_at_period_end?: boolean; cancel_at?: number | null }>(env, `subscriptions/${encodeURIComponent(subscription)}`, {}, { method: 'GET' });
     return !!(sub.cancel_at_period_end || sub.cancel_at);
   } catch {
     return false;
@@ -179,12 +179,12 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
   if (path === '/api/me') {
     const user = await currentUser(request, env);
     if (!user) return json({ user: null, signIn: { email: !!env.EMAIL, google: !!env.GOOGLE_CLIENT_ID } });
-    const subActive = !!user.sub_id && user.sub_period_end > now();
+    const planActive = !!user.plan_subscription && user.plan_period_end > now();
     return json({
       user: {
         email: user.email,
-        subscription: subActive ? { pages: user.sub_pages, used: user.sub_used, renews: user.sub_period_end, ending: await planEnding(env, user.sub_id!) } : null,
-        packPages: user.pack_pages,
+        plan: planActive ? { credits: user.plan_credits, used: user.plan_used, renews: user.plan_period_end, ending: await planEnding(env, user.plan_subscription!) } : null,
+        credits: user.credits,
         canManage: !!user.stripe_customer,
       },
     });

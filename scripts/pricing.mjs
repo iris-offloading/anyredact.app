@@ -41,7 +41,7 @@ export const PRICING = {
     return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(/</g, '\\u003c');
   },
 
-  body({ PRODUCTS, FREE_CREDITS, AUDIO_CREDITS_PER_MINUTE, CHECK_CREDITS, PAGE_CHARS, price }, esc) {
+  body({ PRODUCTS, FREE_CREDITS, AUDIO_CREDITS_PER_MINUTE, CHECK_CREDITS, CREDIT_CHARS, price }, esc) {
     const n = (v) => v.toLocaleString('en-US');
     // Credits mean nothing on their own, so each amount is shown as pages and audio minutes.
     const covers = (credits) => `${n(credits)} pages or ${n(Math.floor(credits / AUDIO_CREDITS_PER_MINUTE))} audio minutes`;
@@ -52,14 +52,14 @@ export const PRICING = {
     const plans = [
       plan({ name: 'Free', amount: '$0', detail: `Up to ${FREE_CREDITS} pages or ${Math.floor(FREE_CREDITS / AUDIO_CREDITS_PER_MINUTE)} audio minutes a day`, points: ['No sign-in needed', 'Every format', 'Resets daily'], button: 'Redact a file', href: '/' }),
       ...monthly.map((p, i) =>
-        plan({ name: p.name, amount: price(p.cents), per: 'month', detail: covers(p.pages), points: ['Every format', 'Resets monthly', 'Cancel any time'], button: 'Subscribe', href: `/account?buy=${p.id}`, main: i === 0 }),
+        plan({ name: p.name, amount: price(p.cents), per: 'month', detail: covers(p.credits), points: ['Every format', 'Resets monthly', 'Cancel any time'], button: 'Subscribe', href: `/account?buy=${p.id}`, main: i === 0 }),
       ),
     ].join('');
-    const packs = PRODUCTS.filter((p) => !p.monthly)
-      .map((p) => `<div class="pack"><strong>${esc(p.name)}</strong><span>${esc(covers(p.pages))}</span><span class="pack-price">${esc(price(p.cents))}</span><a class="btn" href="/account?buy=${p.id}">Buy</a></div>`)
+    const oneOff = PRODUCTS.filter((p) => !p.monthly)
+      .map((p) => `<div class="credit-offer"><strong>${esc(p.name)}</strong><span>${esc(covers(p.credits))}</span><span class="credit-price">${esc(price(p.cents))}</span><a class="btn" href="/account?buy=${p.id}">Buy</a></div>`)
       .join('');
     const rows = [
-      ['Documents, images and scans', `1 per ${n(PAGE_CHARS)} characters of text, about one page`],
+      ['Documents, images and scans', `1 per ${n(CREDIT_CHARS)} characters of text, about one page`],
       ['Faces, screens, road signs and number plates', '1 per picture or page, only when ticked'],
       ['Audio', `${AUDIO_CREDITS_PER_MINUTE} per started minute`],
       ['Check for anything left', `Free once per file, then ${CHECK_CREDITS}`],
@@ -71,7 +71,7 @@ export const PRICING = {
 <div class="cards plans">${plans}</div>
 <h2>Credits</h2>
 <p>Paid once. They never expire.</p>
-<div class="packs">${packs}</div>
+<div class="credit-offers">${oneOff}</div>
 <h2>Credits per format</h2>
 <table class="credit-table"><tbody>${rows}</tbody></table>
 </article>`;

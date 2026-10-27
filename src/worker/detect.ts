@@ -1,8 +1,8 @@
 import { chunkText, plausibleEntity } from '../shared/detect.ts';
 import { pool } from '../shared/pool.ts';
-import { MAX_CHARS, PAGE_CHARS, pagesFor } from '../shared/pricing.ts';
+import { MAX_CHARS, CREDIT_CHARS, creditsFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
-import { refundPaidPages, spendPaidPages, type BillingEnv } from './billing.ts';
+import { refundCredits, spendCredits, type BillingEnv } from './billing.ts';
 import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
 import { json, modelJson, readAiPost, trialsAllowed } from './http.ts';
 
@@ -256,21 +256,21 @@ export interface Charge {
   refund: () => Promise<void>;
 }
 
-/** Charges the free daily allowance, then the account's paid pages. Returns a 402 response when neither covers it. */
+/** Charges the free daily allowance, then the account's paid credits. Returns a 402 response when neither covers it. */
 export async function chargeUsage(request: Request, env: Env, chars: number): Promise<Response | Charge> {
   const user = await currentUser(request, env);
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
-  if (user && user.pack_pages < 0) {
+  if (user && user.credits < 0) {
     return json({ error: 'Your credit balance is below zero after a refund or dispute. Buy credits under Account to continue.', code: 'negative', signedIn: true }, 402);
   }
   const quota = await chargeQuota(request, env, chars);
   if (!quota.exceeded) return quota;
-  const paid = user ? await spendPaidPages(env, user.id, pagesFor(chars)) : null;
+  const paid = user ? await spendCredits(env, user.id, creditsFor(chars)) : null;
   if (paid) {
     return {
       state: quota.state,
       refund: async () => {
-        await Promise.all([quota.refund(), refundPaidPages(env, user!.id, paid)]);
+        await Promise.all([quota.refund(), refundCredits(env, user!.id, paid)]);
       },
     };
   }
@@ -304,7 +304,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
     // The scan comes with one free final check of about its size (src/worker/check.ts).
-    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env, text.length * 2 + PAGE_CHARS) });
+    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env, text.length * 2 + CREDIT_CHARS) });
   } catch (err) {
     console.error('detect failed', err);
     await quota.refund();

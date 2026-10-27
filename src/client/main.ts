@@ -1,10 +1,10 @@
 import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
 import { h } from './dom.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
-import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts';
+import { detectWithAi, freeCreditsLeft, QuotaError, type AiEntity } from './ai.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
-import { audioCredits, CHECK_CREDITS, pagesFor } from '../shared/pricing.ts';
+import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
 import { highlight, pieces, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
 import { isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
@@ -1089,8 +1089,8 @@ class App {
     const images = `${isOffice(doc) ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
     const what = seconds ? `the recording (${clock(seconds)})` : words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
     // Speech runs at about 900 characters a minute, which detection then reads.
-    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + pagesFor((seconds / 60) * 900) : 0);
-    const cost = `Estimated cost: ${pages} credit${pages === 1 ? '' : 's'}`;
+    const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
+    const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
     const costLine = h('p', { className: 'hint' }, `${cost}.`);
     this.consentBox.replaceChildren(
       h('p', {}, `Upload ${what} to find personal info?`),
@@ -1098,9 +1098,9 @@ class App {
       h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
     );
     this.consentBox.hidden = false;
-    freePagesLeft().then((left) => {
+    freeCreditsLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      costLine.textContent = `${cost}, ${left >= pages ? '' : 'only '}${left} left today.`;
+      costLine.textContent = `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`;
     });
   }
 

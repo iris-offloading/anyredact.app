@@ -5,7 +5,7 @@
 // of personal values against Whisper turbo's 81%, but outside its default
 // English mode Nova-3 reports word times about 0.7 s late, so other languages
 // go to Whisper turbo (70% on Spanish, against Nova-3's 18%).
-import { audioCredits, CHUNK_OVERLAP, CHUNK_SECONDS, PAGE_CHARS, SPEECH_RATE } from '../shared/pricing.ts';
+import { audioCredits, CHUNK_OVERLAP, CHUNK_SECONDS, CREDIT_CHARS, SPEECH_RATE } from '../shared/pricing.ts';
 import { wordsFromDeepgram, wordsFromWhisper, type Word } from '../shared/transcript.ts';
 import { chargeUsage, runWithRetry, type Env } from './detect.ts';
 import { aiGuard, base64, json } from './http.ts';
@@ -65,7 +65,7 @@ export async function handleTranscribe(request: Request, env: Env & { TRANSCRIBE
   const seconds = (wav.length - HEADER_BYTES) / (SPEECH_RATE * 2);
 
   // The overlap with the next chunk is not billed, so a full chunk costs CHUNK_SECONDS / 60 credits (with a little slack for rounding).
-  const quota = await chargeUsage(request, env, audioCredits(seconds - CHUNK_OVERLAP - 0.05) * PAGE_CHARS);
+  const quota = await chargeUsage(request, env, audioCredits(seconds - CHUNK_OVERLAP - 0.05) * CREDIT_CHARS);
   if (quota instanceof Response) return quota;
 
   // The first chunk arrives without a language: Whisper names it, and English is then redone with Nova-3.
