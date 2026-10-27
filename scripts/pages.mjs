@@ -215,7 +215,7 @@ export const TOOLS = [
 export const HOME = {
   slug: '',
   format: 'all',
-  title: 'AnyRedact: Free Online Redaction Tool with AI',
+  title: 'AnyRedact: Free Online Auto Redaction Tool with AI',
   description:
     'Redact PDFs, images, Word, PowerPoint, Excel, text and audio for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
