@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import exifr from 'exifr';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
+import sharp from 'sharp';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -47,16 +48,14 @@ async function fakeDetect(route) {
 }
 await page.route('**/api/detect', fakeDetect);
 
-/** Sets whether the consent prompt shows or files go straight to the (fake) AI. */
-async function alwaysConsent(on) {
-  await page.goto(BASE);
-  await page.evaluate((v) => (v ? localStorage.setItem('ai-consent', 'always') : localStorage.removeItem('ai-consent')), on);
-}
-await alwaysConsent(true);
-
+/** Opens a file and, unless waiting for something else, agrees to the upload. */
 async function run(slug, file, wait = 'label.finding') {
   await page.goto(`${BASE}/${slug}`);
   await page.setInputFiles('#file-input', file);
+  if (wait === 'label.finding') {
+    await page.waitForSelector('.consent button.primary', { timeout: 90_000 });
+    await page.click('.consent button.primary');
+  }
   await page.waitForSelector(wait, { timeout: 90_000 });
   return page.$$eval('label.finding .ftext', (els) => els.map((e) => e.textContent));
 }
@@ -96,6 +95,32 @@ async function download(name) {
   check(!/Gonzalez|0132|0199/.test(doc) && doc.includes('<w:br/>'), 'docx name and wrapped phones redacted, line break kept');
   check(!doc.includes('Bob Author') && !core.includes('Bob Author'), 'docx authors removed');
   check(!rels.includes('mailto'), 'docx hyperlink target removed');
+}
+
+// DOCX with pictures
+{
+  const found = await run('redact-word', fx('pictures.docx'));
+  check(found.includes('123-45-6789') && found.includes('415-555-0132'), `docx picture and alt text findings: ${found.join(', ')}`);
+  check((await page.$$('.page')).length === 2 && (await page.$$('.text-preview .unit')).length >= 2, 'docx shows text and both pictures');
+  await page.screenshot({ path: fx('docx-pictures.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('docx-pictures-phone.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { path: p } = await download('out-pictures.docx');
+  const zip = await JSZip.loadAsync(readFileSync(p));
+  const photo = await zip.file('word/media/image1.jpeg').async('nodebuffer');
+  const tags = await exifr.parse(photo, { gps: true }).catch(() => null);
+  check(!tags?.latitude && !tags?.Artist && !tags?.Make, `docx picture metadata stripped: ${JSON.stringify(tags)}`);
+  // The SSN number sits at x 150 to 430, y 170 to 215 in the 900x300 photo; a burned box makes it dark.
+  const { channels } = await sharp(await sharp(photo).extract({ left: 160, top: 178, width: 250, height: 30 }).toBuffer()).stats();
+  check(channels[0].mean < 60, `docx picture SSN covered (mean ${channels[0].mean.toFixed(0)})`);
+  const doc = await zip.file('word/document.xml').async('string');
+  check(!doc.includes('0132') && !doc.includes('passport'), 'docx alt text and picture file names redacted');
+  const rels = await zip.file('word/_rels/document.xml.rels').async('string');
+  const types = await zip.file('[Content_Types].xml').async('string');
+  check(!zip.file('word/media/image2.gif') && zip.file('word/media/image2.png') && rels.includes('media/image2.png') && types.includes('Extension="png"'), 'docx GIF saved as PNG and relinked');
+  const root = await zip.file('_rels/.rels').async('string');
+  check(!zip.file('docProps/thumbnail.jpeg') && !root.includes('thumbnail'), 'docx thumbnail removed');
 }
 
 // PDF
@@ -154,7 +179,6 @@ async function download(name) {
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
   });
   apiCalls.length = 0;
-  await alwaysConsent(false);
   await run('redact-text', fx('sample.txt'), '.consent');
   check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
   await page.click('.consent button.primary');
@@ -179,7 +203,6 @@ async function download(name) {
   });
   await page.unroute('**/api/detect');
   await page.route('**/api/detect', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities: [] }) }));
-  await page.evaluate(() => localStorage.removeItem('ai-consent'));
   await run('redact-image', fx('sample.png'), '.consent');
   const pictureChips = page.locator('label.chip', { hasText: 'Number plates' });
   check((await pictureChips.count()) === 1 && !(await pictureChips.locator('input').isChecked()), 'picture options shown and off by default');

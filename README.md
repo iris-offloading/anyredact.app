@@ -12,7 +12,7 @@ Free online redaction for PDF, images, Word (DOCX) and text, served from Cloudfl
 | --- | --- |
 | PDF | Every page flattened to an image with solid boxes. Original text, links, forms and metadata are gone. Up to 60 pages. |
 | Image (PNG/JPG/WebP) | Re-encoded image with solid boxes; EXIF, GPS, XMP and IPTC metadata is listed in the editor and dropped from the download. |
-| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded images are not scanned yet. |
+| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded pictures are read with OCR, can take picture redaction and drawn boxes, and are re-encoded so their metadata is dropped (GIF and BMP become PNG); alt text and the first-page thumbnail are handled too. EMF, WMF and TIFF pictures are left as they are. |
 | Text (TXT, CSV, JSON, logs…) | Masked or labelled text. |
 
 Users can untick any detection, add their own terms, select text to redact everywhere, and draw boxes on PDF pages and images.
@@ -49,5 +49,5 @@ The Workers AI model defaults to `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (wit
 ## Roadmap
 
 - Audio and video (speech-to-text with Whisper on Workers AI, then bleep/mute and blur)
-- Redact images embedded in DOCX and keep a text layer in redacted PDFs
+- Keep a text layer in redacted PDFs
 - More languages for OCR

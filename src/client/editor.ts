@@ -34,7 +34,7 @@ export class PageEditor {
     this.overlay.width = canvas.width;
     this.overlay.height = canvas.height;
     this.overlay.className = 'page-overlay';
-    this.overlay.setAttribute('aria-label', `Page ${opts.page.index + 1}. Drag to draw a redaction box.`);
+    this.overlay.setAttribute('aria-label', `${opts.page.label ?? `Page ${opts.page.index + 1}`}. Drag to draw a redaction box.`);
     this.el.append(img, this.overlay);
     this.overlay.addEventListener('pointerdown', (e) => this.down(e));
     this.overlay.addEventListener('pointermove', (e) => this.move(e));

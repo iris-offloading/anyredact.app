@@ -73,7 +73,7 @@ export const TOOLS = [
     hint: 'Word .docx files',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
-      ['Hidden places too', 'Tracked changes, comments, headers, footers and hyperlink targets are redacted along with the body.'],
+      ['Hidden places too', 'Tracked changes, comments, headers, footers, hyperlink targets, pictures and their alt text are redacted along with the body.'],
       ['Author names removed', 'Document properties and the names on comments and revisions are cleared.'],
     ],
     faq: [
