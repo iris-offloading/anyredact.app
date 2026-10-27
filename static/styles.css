@@ -177,11 +177,16 @@ textarea, select {
 .sheet { margin-bottom: 16px; }
 .sheet .docx-wrapper { background: none; padding: 0; }
 .sheet .docx-wrapper > section.docx { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); margin-bottom: 16px; }
+.sheet .slide-page { position: relative; overflow: hidden; contain: paint; width: fit-content; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); margin-bottom: 16px; color: #000; }
+/* The slide background sits at z-index -1, which needs the slide to stack its own layers. */
+.sheet .slide { isolation: isolate; }
+/* Slides can be dark, so a light edge shows where a highlight is. */
+.sheet .slide-page mark.on { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6); }
 .sheet .page.placed { margin: 0; box-shadow: none; background: none; }
 .sheet .page.placed canvas { height: 100%; }
 /* The pages stay white in dark mode, so highlights keep their light colors. */
 .sheet mark.on { background: rgba(0, 0, 0, 0.45); color: inherit; }
-.sheet mark.off { background: #ffe8cc; }
+.sheet mark.off { background: #ffe8cc; color: #1a1a1a; }
 .unit-section { font-family: inherit; font-size: 0.95rem; margin: 20px 0 8px; }
 .unit-section:first-child { margin-top: 0; }
 .para .at { border: 0; background: none; padding: 0; color: var(--muted); font: inherit; font-size: 0.85rem; font-variant-numeric: tabular-nums; cursor: pointer; }
