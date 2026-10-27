@@ -229,7 +229,7 @@ export const HOME = {
   faq: [
     {
       q: 'Is AnyRedact free?',
-      a: 'Yes. You get 10 credits a day. One credit covers one page of text or one picture, and a minute of audio takes 3. For more, buy a monthly plan or a credit pack that never expires. There is no watermark.',
+      a: 'Yes. You get 10 credits a day. One credit covers one page of text or one picture, and a minute of audio takes 3. For more, buy a monthly plan or credits that never expire. There is no watermark.',
     },
     {
       q: 'Do I need an account?',

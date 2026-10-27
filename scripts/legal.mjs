@@ -69,7 +69,7 @@ export const LEGAL = [
     slug: 'terms',
     nav: 'Terms',
     title: 'Terms of Service | AnyRedact',
-    description: 'The terms for using AnyRedact: free daily credits, plans and packs, your responsibility to review every redacted file, and the limits of our liability.',
+    description: 'The terms for using AnyRedact: free daily credits, plans and paid credits, your responsibility to review every redacted file, and the limits of our liability.',
     h1: 'Terms of service',
     body: `
 <p>These terms apply when you use anyredact.app. By using it, you agree to them.</p>
@@ -86,12 +86,12 @@ export const LEGAL = [
 <h2>Accounts</h2>
 <p>You need an account only to buy credits. Keep access to your email or Google account secure, since it is how you sign in. You must be 18 or older to buy credits.</p>
 
-<h2>Credits, plans and packs</h2>
+<h2>Credits and plans</h2>
 <ul>
 <li>Every browser gets free credits each day. Unused free credits do not carry over.</li>
 <li>A plan renews each month until you cancel it under Manage plan on your account page. Its credits reset at each renewal and end with the plan.</li>
-<li>Packs are paid once and their credits do not expire.</li>
-<li>Free credits are used first, then the plan, then packs.</li>
+<li>Credits bought on their own are paid once and do not expire.</li>
+<li>Free credits are used first, then the plan, then bought credits.</li>
 <li>Credits have no cash value and cannot be transferred.</li>
 <li>Prices are in US dollars and shown on the <a href="/pricing">pricing page</a>.</li>
 </ul>
@@ -119,11 +119,11 @@ export const LEGAL = [
     slug: 'refunds',
     nav: 'Refunds',
     title: 'Refund Policy | AnyRedact',
-    description: 'Refunds for AnyRedact plans and credit packs: unused credits within 14 days, cancel a plan any time, and billing errors always refunded.',
+    description: 'Refunds for AnyRedact plans and credits: unused credits within 14 days, cancel a plan any time, and billing errors always refunded.',
     h1: 'Refund policy',
     body: `
-<h2>Packs</h2>
-<p>Within 14 days of buying a pack, you can ask for a refund of the credits you have not used. We refund their share of the price, and those credits leave your balance.</p>
+<h2>Credits</h2>
+<p>Within 14 days of buying credits, you can ask for a refund of the ones you have not used. We refund their share of the price, and those credits leave your balance.</p>
 
 <h2>Plans</h2>
 <p>You can cancel a plan at any time under Manage plan on your account page. It stops renewing, and you keep its credits until the end of the month you paid for. Within 14 days of a plan payment, if you have used none of that month's credits, you can ask for the payment back. A refunded plan payment ends that month's credits.</p>

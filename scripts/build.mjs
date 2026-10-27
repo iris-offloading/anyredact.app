@@ -218,7 +218,7 @@ await writeFile(
     {
       slug: 'account',
       title: 'Account | AnyRedact',
-      description: 'Free AI redaction credits every day, plus a monthly plan and credit packs that never expire.',
+      description: 'Free AI redaction credits every day, plus monthly plans and credits that never expire.',
       jsonLd: false,
       script: accountSrc,
     },
@@ -226,7 +226,7 @@ await writeFile(
   ),
 );
 
-// The pricing page reads plans and packs from src/shared/pricing.ts, so it can't drift from checkout.
+// The pricing page reads plans and credits from src/shared/pricing.ts, so it can't drift from checkout.
 const pricingTs = await transform(await readFile(path.join(root, 'src/shared/pricing.ts'), 'utf8'), { loader: 'ts', format: 'esm' });
 const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.code).toString('base64')}`);
 await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, jsonLd: PRICING.jsonLd(plans, url) }, PRICING.body(plans, esc)));

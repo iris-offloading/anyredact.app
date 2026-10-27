@@ -2,7 +2,7 @@ import { FREE_CREDITS, PRODUCTS, type Product } from '../shared/pricing.ts';
 import { freePagesLeft } from './ai.ts';
 import { h } from './dom.ts';
 
-// The /account page: sign in, see balances, manage a plan. Plans and packs are bought from /pricing.
+// The /account page: sign in, see balances, buy a plan or credits, manage a plan.
 
 interface Me {
   user: {
@@ -102,57 +102,88 @@ function meter(label: string, left: number | string, total: number | null, note?
   );
 }
 
+const usd = (cents: number) => `$${(cents / 100).toLocaleString('en-US')}`;
+
+/** One product with its price and a button that opens checkout. */
+function offer(p: Product, button: string) {
+  return h(
+    'div',
+    { className: 'offer' },
+    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.pages.toLocaleString()} credits`), h('span', {}, p.monthly ? `${p.pages.toLocaleString()} credits a month` : 'Paid once')),
+    h('span', { className: 'offer-price' }, usd(p.cents), ...(p.monthly ? [h('small', {}, ' / month')] : [])),
+    h('button', { type: 'button', className: 'btn', textContent: button, onclick: () => checkout(p) }),
+  );
+}
+
+function manageButton() {
+  return h('button', {
+    type: 'button',
+    className: 'btn',
+    textContent: 'Manage plan and invoices',
+    onclick: async () => {
+      const r = await post('/api/portal');
+      if (r.url) location.href = r.url;
+      else say(r.error || 'Could not open billing.', true);
+    },
+  });
+}
+
 function balance(user: NonNullable<Me['user']>, free: number | null) {
   const sub = user.subscription;
   const plan = sub && PRODUCTS.find((p) => p.monthly && p.pages === sub.pages);
   const planLeft = sub ? Math.max(0, sub.pages - sub.used) : 0;
   const total = (free ?? 0) + planLeft + user.packPages;
   const name = user.email ?? 'Google account';
-  const who = h(
+  const head = h(
     'div',
-    { className: 'who' },
-    h('span', { className: 'avatar', 'aria-hidden': 'true' }, name[0].toUpperCase()),
-    h('strong', {}, name),
-    h('button', {
-      type: 'button',
-      className: 'link-button',
-      textContent: 'Sign out',
-      onclick: async () => {
-        await post('/api/auth/logout');
-        location.reload();
-      },
-    }),
+    { className: 'account-head' },
+    h('h1', {}, 'Account'),
+    h(
+      'div',
+      { className: 'who' },
+      h('span', { className: 'avatar', 'aria-hidden': 'true' }, name[0].toUpperCase()),
+      h('strong', {}, name),
+      h('button', {
+        type: 'button',
+        className: 'link-button',
+        textContent: 'Sign out',
+        onclick: async () => {
+          await post('/api/auth/logout');
+          location.reload();
+        },
+      }),
+    ),
   );
   const meters = [
     ...(free === null ? [] : [meter('Free today', free, FREE_CREDITS)]),
     sub
       ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, `Renews ${new Date(sub.renews * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`)
       : meter('Monthly plan', 'None', null),
-    meter('Packs', user.packPages, null, 'Never expire'),
+    meter('Credits', user.packPages, null, 'Never expire'),
   ];
-  const actions = h('div', { className: 'actions' }, h('a', { className: 'btn primary', href: '/pricing' }, sub ? 'Buy more credits' : 'Get a plan or pack'));
-  if (user.canManage) {
-    actions.append(
-      h('button', {
-        type: 'button',
-        className: 'btn',
-        textContent: 'Manage plan and invoices',
-        onclick: async () => {
-          const r = await post('/api/portal');
-          if (r.url) location.href = r.url;
-          else say(r.error || 'Could not open billing.', true);
-        },
-      }),
-    );
-  }
-  return h(
-    'div',
-    { className: 'auth-card account-card' },
-    who,
-    status,
+  const balanceCard = h(
+    'section',
+    { className: 'panel-card' },
+    h('h2', {}, 'Balance'),
     h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString()), h('span', { className: 'total-label' }, 'credits left')),
     h('div', { className: 'meters' }, ...meters),
-    actions,
+  );
+  const planCard = sub
+    ? h('section', { className: 'panel-card' }, h('h2', {}, 'Plan'), h('p', { className: 'muted' }, plan ? `${plan.name}, ${sub.pages.toLocaleString()} credits a month for ${usd(plan.cents)}.` : `${sub.pages.toLocaleString()} credits a month.`), ...(user.canManage ? [manageButton()] : []))
+    : h(
+        'section',
+        { className: 'panel-card' },
+        h('h2', {}, 'Plans'),
+        h('div', { className: 'offers' }, ...PRODUCTS.filter((p) => p.monthly).map((p) => offer(p, 'Subscribe'))),
+        ...(user.canManage ? [manageButton()] : []),
+      );
+  const creditCard = h('section', { className: 'panel-card' }, h('h2', {}, 'Buy credits'), h('div', { className: 'offers' }, ...PRODUCTS.filter((p) => !p.monthly).map((p) => offer(p, 'Buy'))));
+  return h(
+    'div',
+    { className: 'account-view' },
+    head,
+    status,
+    h('div', { className: 'account-grid' }, balanceCard, h('div', { className: 'account-side' }, planCard, creditCard)),
   );
 }
 
@@ -176,6 +207,7 @@ async function render() {
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
   const [me, free] = await Promise.all([fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null })) as Promise<Me>, freePagesLeft()]);
   const buying = params.get('paid') ? undefined : pendingBuy();
+  root.parentElement!.classList.toggle('solo', !me.user);
   root.replaceChildren(me.user ? balance(me.user, free) : signInForm(me.signIn ?? { email: false, google: false }));
   if (params.get('paid')) {
     clearBuy();
