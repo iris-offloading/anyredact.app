@@ -457,10 +457,39 @@ mark.saying { outline: 2px solid var(--accent); }
 .credit-table th, .credit-table td { text-align: left; vertical-align: top; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--line); }
 .credit-table th { font-weight: 600; width: 45%; }
 .credit-table td { color: var(--muted); }
-.signin-box { display: flex; flex-direction: column; gap: 10px; max-width: 400px; margin-top: 24px; }
+/* Short pages (404, account): one centred block filling the space between header and footer. */
+.solo { min-height: min(680px, calc(100svh - var(--header-h))); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-top: 48px; padding-bottom: 64px; }
+.solo h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.03em; margin: 0 0 12px; }
+#account { width: 100%; display: flex; justify-content: center; }
+.auth-card { width: min(100%, 420px); padding: 32px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); }
+.auth-card h1 { font-size: 1.6rem; letter-spacing: -0.02em; margin: 0 0 24px; text-align: center; }
+.auth-card .status { margin: 0 0 16px; }
+.auth-card p { margin: 0 0 10px; }
+.auth-card .btn { width: 100%; min-height: 48px; border-radius: 12px; }
+.auth-card .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+.account-card { width: min(100%, 460px); }
+.who { display: flex; align-items: center; gap: 12px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.who strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: var(--ink-text); font-weight: 700; }
+.link-button { flex: none; font: inherit; font-size: 0.875rem; color: var(--muted); background: none; border: 0; padding: 8px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-button:hover { color: var(--text); }
+.total { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; }
+.total-num { font-size: 3rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.total-label { color: var(--muted); }
+.meters { display: flex; flex-direction: column; gap: 10px; }
+.meter { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); }
+.meter-head { display: flex; justify-content: space-between; gap: 12px; }
+.meter-head strong { font-variant-numeric: tabular-nums; }
+.meter-bar { height: 6px; margin-top: 10px; border-radius: 999px; background: var(--chip-bg); overflow: hidden; }
+.meter-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.auth-card .meter-note { margin: 6px 0 0; color: var(--muted); font-size: 0.875rem; }
+.or { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: 0.875rem; }
+.or::before, .or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
 .signin { display: flex; flex-direction: column; gap: 10px; }
-.signin input { font: inherit; min-height: 48px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); }
-.signin-box .btn { width: 100%; min-height: 48px; border-radius: 12px; }
+.signin input { font: inherit; min-height: 48px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--text); }
+.signin input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.google svg { flex: none; }
+@media (max-width: 640px) { .solo { justify-content: flex-start; min-height: 0; padding-top: 40px; } .auth-card { padding: 24px 20px; border-radius: 16px; } }
 .btn.google[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 .cell-bar { display: flex; align-items: baseline; gap: 12px; min-height: 38px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .cell-ref { flex: none; min-width: 3em; color: var(--muted); font-variant-numeric: tabular-nums; }

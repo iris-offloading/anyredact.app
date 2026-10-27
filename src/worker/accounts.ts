@@ -104,7 +104,7 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
   await env.DB!.prepare('INSERT INTO login_tokens (token_hash, email, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), email, now() + LOGIN_MINUTES * 60)
     .run();
-  // The page only shows a Sign in button: mail scanners that open links can't use up the token.
+  // The token sits in the hash, so only the page's script sends it: a plain fetch of the link spends nothing.
   const link = `${origin}/account#signin=${encodeURIComponent(token)}`;
   try {
     await env.EMAIL.send({
@@ -120,10 +120,10 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
   return json({ ok: true });
 }
 
-/** Handles /auth/* and /api/me. Returns null for other paths. */
+/** Handles /api/auth/* and /api/me. Returns null for other paths. */
 export async function handleAccounts(request: Request, env: AccountsEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
-  if (!path.startsWith('/auth/') && path !== '/api/me') return null;
+  if (!path.startsWith('/api/auth/') && path !== '/api/me') return null;
   if (!env.DB) return json({ error: 'Accounts are not set up on this server.' }, 503);
   const origin = url.origin;
 
@@ -141,7 +141,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     });
   }
 
-  if (path === '/auth/email' && request.method === 'POST') {
+  if (path === '/api/auth/email' && request.method === 'POST') {
     if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
     if (await rateLimited(request, env.DETECT_LIMITER, 'login:')) return json({ error: 'Too many requests. Please wait a minute.' }, 429);
     const { email } = (await request.json().catch(() => ({}))) as { email?: unknown };
@@ -149,12 +149,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     return sendLoginEmail(env, origin, email.trim().toLowerCase());
   }
 
-  // Links sent before the Sign in button existed.
-  if (path === '/auth/email/verify' && request.method === 'GET') {
-    return redirect(`/account#signin=${encodeURIComponent(url.searchParams.get('token') || '')}`);
-  }
-
-  if (path === '/auth/email/verify' && request.method === 'POST') {
+  if (path === '/api/auth/email/verify' && request.method === 'POST') {
     if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
     const { token } = (await request.json().catch(() => ({}))) as { token?: unknown };
     const row = await env.DB.prepare('DELETE FROM login_tokens WHERE token_hash = ? RETURNING email, expires_at')
@@ -165,12 +160,12 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     return json({ ok: true }, 200, [await startSession(env, userId), signedInHint(true)]);
   }
 
-  if (path === '/auth/google') {
+  if (path === '/api/auth/google') {
     if (!env.GOOGLE_CLIENT_ID) return redirect('/account?error=google');
     const state = randomToken();
     const params = new URLSearchParams({
       client_id: env.GOOGLE_CLIENT_ID,
-      redirect_uri: `${origin}/auth/google/callback`,
+      redirect_uri: `${origin}/api/auth/google/callback`,
       response_type: 'code',
       scope: 'openid email',
       state,
@@ -179,7 +174,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     return redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`, [setCookie('oauth_state', state, 600)]);
   }
 
-  if (path === '/auth/google/callback') {
+  if (path === '/api/auth/google/callback') {
     const state = url.searchParams.get('state');
     const code = url.searchParams.get('code');
     if (!state || !code || state !== cookie(request, 'oauth_state') || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
@@ -192,7 +187,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
         code,
         client_id: env.GOOGLE_CLIENT_ID,
         client_secret: env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: `${origin}/auth/google/callback`,
+        redirect_uri: `${origin}/api/auth/google/callback`,
         grant_type: 'authorization_code',
       }),
     });
@@ -206,7 +201,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     return redirect('/account', [await startSession(env, userId), signedInHint(true), setCookie('oauth_state', '', 0)]);
   }
 
-  if (path === '/auth/logout' && request.method === 'POST') {
+  if (path === '/api/auth/logout' && request.method === 'POST') {
     const token = cookie(request, 'session');
     if (token) await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256(token)).run();
     return json({ ok: true }, 200, [setCookie('session', '', 0), signedInHint(false)]);

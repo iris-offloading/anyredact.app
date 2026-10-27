@@ -208,7 +208,7 @@ await writeFile(
   path.join(dist, '404.html'),
   layout(
     { slug: '404', title: 'Page not found | AnyRedact', description: 'Page not found.', jsonLd: false },
-    `<article class="wrap prose"><h1>Page not found</h1><p>Try the <a href="/">redaction tool</a> instead.</p></article>`,
+    `<article class="wrap solo"><h1>Page not found</h1><p>Try the <a href="/">redaction tool</a> instead.</p></article>`,
   ).replace('<link rel="canonical" href="https://anyredact.app/404">', '<meta name="robots" content="noindex">'),
 );
 
@@ -222,7 +222,7 @@ await writeFile(
       jsonLd: false,
       script: accountSrc,
     },
-    `<article class="wrap prose"><h1>Account</h1><div id="account"><p>Loading…</p></div></article>`,
+    `<article class="wrap solo"><div id="account"><div class="auth-card"><h1>Account</h1><p class="hint">Loading…</p></div></div></article>`,
   ),
 );
 

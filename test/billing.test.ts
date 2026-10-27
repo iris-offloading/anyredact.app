@@ -139,25 +139,22 @@ test('email sign-in sends a one-time link that starts a session', async () => {
   const sent: { to: string; text: string }[] = [];
   const e = { ...env(db), EMAIL: { send: async (m: { to: string; text: string }) => (sent.push(m), { messageId: 'm1' }) } } as Env;
   const res = await fetchWorker(
-    new Request('https://anyredact.app/auth/email', { method: 'POST', body: JSON.stringify({ email: 'Jane@Example.com ' }), headers: { origin: 'https://anyredact.app' } }),
+    new Request('https://anyredact.app/api/auth/email', { method: 'POST', body: JSON.stringify({ email: 'Jane@Example.com ' }), headers: { origin: 'https://anyredact.app' } }),
     e,
   );
   assert.equal(res.status, 200);
   assert.equal(sent[0].to, 'jane@example.com');
   const link = sent[0].text.match(/https:\S+/)![0];
-  // Opening the link spends nothing; the page's Sign in button posts the token.
+  // Opening the link spends nothing; the page's script posts the token.
   assert.match(link, /^https:\/\/anyredact\.app\/account#signin=/);
   const token = decodeURIComponent(link.split('#signin=')[1]);
   const verify = (t: string, origin = 'https://anyredact.app') =>
-    fetchWorker(new Request('https://anyredact.app/auth/email/verify', { method: 'POST', body: JSON.stringify({ token: t }), headers: { origin } }), e);
+    fetchWorker(new Request('https://anyredact.app/api/auth/email/verify', { method: 'POST', body: JSON.stringify({ token: t }), headers: { origin } }), e);
   assert.equal((await verify(token, 'https://evil.example')).status, 403);
   const ok = await verify(token);
   assert.equal(ok.status, 200);
   assert.match(ok.headers.get('set-cookie') || '', /^session=/);
   assert.equal((await verify(token)).status, 400);
-  // Links sent before the button existed land on the same page.
-  const old = await fetchWorker(new Request(`https://anyredact.app/auth/email/verify?token=${encodeURIComponent(token)}`), e);
-  assert.equal(old.headers.get('location'), `/account#signin=${encodeURIComponent(token)}`);
 });
 
 test('audio costs three credits per started minute', () => {
@@ -201,7 +198,7 @@ test('stops sending sign-in links to one address after a few', async () => {
   const sent: unknown[] = [];
   const e = { ...env(db), EMAIL: { send: async (m: unknown) => (sent.push(m), { messageId: 'm' }) } } as Env;
   const ask = () =>
-    fetchWorker(new Request('https://anyredact.app/auth/email', { method: 'POST', body: JSON.stringify({ email: 'jane@example.com' }), headers: { origin: 'https://anyredact.app' } }), e);
+    fetchWorker(new Request('https://anyredact.app/api/auth/email', { method: 'POST', body: JSON.stringify({ email: 'jane@example.com' }), headers: { origin: 'https://anyredact.app' } }), e);
   for (let i = 0; i < 3; i++) assert.equal((await ask()).status, 200);
   assert.equal((await ask()).status, 429);
   assert.equal(sent.length, 3);
