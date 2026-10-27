@@ -1,6 +1,9 @@
-import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
+import { IRenderManagerService, UniverSheetsCorePreset, Vector2, type SpreadsheetSkeleton } from '@univerjs/preset-sheets-core';
 import sheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US';
-import { BooleanNumber, createUniver, LocaleType, mergeLocales, type ICellData, type IStyleData, type IWorkbookData, type IWorksheetData } from '@univerjs/presets';
+import {
+  BooleanNumber, CellValueType, createUniver, HorizontalAlign, LocaleType, mergeLocales, VerticalAlign, WrapStrategy,
+  type ICellData, type IStyleData, type IWorkbookData, type IWorksheetData,
+} from '@univerjs/presets';
 import ExcelJS from 'exceljs';
 import type { DocView, Finding, Unit, ViewHandlers } from '../types.ts';
 
@@ -165,6 +168,93 @@ async function fromXlsx(buffer: ArrayBuffer, sheets: SheetMeta[]): Promise<Recor
   return out;
 }
 
+interface Run {
+  st: number;
+  ed: number;
+  on: boolean;
+  key: string;
+}
+
+/** A box in sheet coordinates. */
+interface Box {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+}
+
+/**
+ * Where each run of a cell's text is drawn, which can be past the cell when the
+ * text overflows into its neighbours. Follows Univer's font extension and
+ * Documents.draw: the text is laid out from the first overflow column, then
+ * aligned by the cell's own width.
+ */
+function runBoxes(sk: SpreadsheetSkeleton, row: number, col: number, runs: Run[]): Box[][] {
+  const font = sk.getFont(row, col);
+  const page = font?.documentSkeleton?.getSkeletonData()?.pages[0];
+  if (!font || !page || font.vertexAngle || font.centerAngle) return runs.map(() => []);
+  const cell = sk.getCellWithCoordByIndex(row, col, false);
+  const { startX, startY, endX, endY } = cell.isMergedMainCell ? cell.mergeInfo : cell;
+  let x = startX;
+  let y = startY;
+  // Text is clipped to the cell, or to the cells it overflows into.
+  const clip = { x0: startX, x1: endX, y0: startY, y1: endY };
+  const overflow = font.wrapStrategy !== WrapStrategy.WRAP && sk.overflowCache.getValue(row, col);
+  if (overflow) {
+    const first = sk.getCellWithCoordByIndex(overflow.startRow, overflow.startColumn, false);
+    const last = sk.getCellWithCoordByIndex(overflow.endRow, overflow.endColumn, false);
+    x = clip.x0 = first.startX;
+    y = clip.y0 = first.startY;
+    clip.x1 = last.endX;
+    clip.y1 = last.endY;
+  }
+  const { horizontalAlign = HorizontalAlign.LEFT, verticalAlign = VerticalAlign.TOP, cellValueType } = page.renderConfig ?? {};
+  const h = horizontalAlign !== HorizontalAlign.UNSPECIFIED ? horizontalAlign
+    : cellValueType === CellValueType.NUMBER ? HorizontalAlign.RIGHT
+    : cellValueType === CellValueType.BOOLEAN ? HorizontalAlign.CENTER
+    : HorizontalAlign.LEFT;
+  const width = endX - startX;
+  const height = endY - startY;
+  x += h === HorizontalAlign.CENTER ? (width - page.width) / 2 : h === HorizontalAlign.RIGHT ? width - page.width - page.marginRight : page.marginLeft;
+  y += verticalAlign === VerticalAlign.MIDDLE ? (height - page.height) / 2 : verticalAlign === VerticalAlign.TOP ? page.marginTop : height - page.height - page.marginBottom;
+
+  const out: Box[][] = runs.map(() => []);
+  // A single line takes the whole row height, so a tap anywhere beside the text counts.
+  const single = page.sections.length === 1 && page.sections[0].columns.length === 1 && page.sections[0].columns[0].lines.length === 1;
+  for (const section of page.sections) {
+    for (const column of section.columns) {
+      for (const line of column.lines) {
+        const y0 = single ? startY : y + section.top + line.top;
+        const y1 = single ? endY : y0 + line.lineHeight;
+        for (const divide of line.divides) {
+          let i = divide.st;
+          for (const glyph of divide.glyphGroup) {
+            const gx = x + column.left + divide.left + divide.paddingLeft + glyph.left;
+            runs.forEach((r, n) => {
+              if (i >= r.ed || i + glyph.count <= r.st) return;
+              const b = { x0: Math.max(gx, clip.x0), x1: Math.min(gx + glyph.width, clip.x1), y0: Math.max(y0, clip.y0), y1: Math.min(y1, clip.y1) };
+              if (b.x1 <= b.x0 || b.y1 <= b.y0) return;
+              const boxes = out[n];
+              const last = boxes[boxes.length - 1];
+              if (last && last.y0 === b.y0 && Math.abs(last.x1 - b.x0) < 1) last.x1 = b.x1;
+              else boxes.push(b);
+            });
+            i += glyph.count;
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** A cell's name, such as B1. */
+function a1(row: number, col: number) {
+  let name = '';
+  for (let c = col + 1; c > 0; c = Math.floor((c - 1) / 26)) name = String.fromCharCode(65 + ((c - 1) % 26)) + name;
+  return `${name}${row + 1}`;
+}
+
 function loadCss() {
   if (document.querySelector('link[data-univer]')) return;
   document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: __UNIVER_CSS__ }));
@@ -232,25 +322,65 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
   univerAPI.setPermissionDialogVisible(false);
 
   const original = (sheet: string, r: number, c: number): ICellData => data.sheets[ids.get(sheet)!]?.cellData?.[r]?.[c] ?? {};
-  let marked = new Map<string, { sheet: string; row: number; col: number; keys: string[]; on: boolean }>();
+  let marked = new Map<string, { sheet: string; row: number; col: number; text: string; runs: Run[] }>();
 
   const nameOf = (id: string) => [...ids].find(([, x]) => x === id)?.[0];
+  // Univer's cell events carry no coordinates, so keep the last press.
+  let press = { x: 0, y: 0 };
+  el.addEventListener('pointerdown', (e) => (press = { x: e.clientX, y: e.clientY }), true);
+
+  /** The runs under the press: a click toggles the highlight it lands on, also where the text overflows into the next cell. */
+  function runsAt(sheetName: string, row: number, column: number, sk: SpreadsheetSkeleton): { cell?: { row: number; col: number }; runs: Run[] } {
+    const render = univer.__getInjector().get(IRenderManagerService).getRenderUnitById(book.getId());
+    if (!render) return { runs: [] };
+    const { scene } = render;
+    const rect = render.engine.getCanvasElement().getBoundingClientRect();
+    const rel = scene.getCoordRelativeToViewport(Vector2.FromArray([press.x - rect.left, press.y - rect.top]));
+    const scroll = scene.getScrollXYInfoByViewport(rel);
+    const { scaleX, scaleY } = scene.getAncestorScale();
+    const x = rel.x / scaleX + scroll.x - sk.rowHeaderWidthAndMarginLeft;
+    const y = rel.y / scaleY + scroll.y - sk.columnHeaderHeightAndMarginTop;
+    const slack = 3 / scaleX;
+    let nearest: { run: Run; d: number } | undefined;
+    const hits: Run[] = [];
+    let owner: { row: number; col: number } | undefined;
+    for (const cell of marked.values()) {
+      if (cell.sheet !== sheetName) continue;
+      const own = cell.row === row && cell.col === column;
+      const boxes = runBoxes(sk, cell.row, cell.col, cell.runs);
+      cell.runs.forEach((run, n) => {
+        for (const b of boxes[n]) {
+          const d = Math.hypot(x < b.x0 ? b.x0 - x : x > b.x1 ? x - b.x1 : 0, y < b.y0 ? b.y0 - y : y > b.y1 ? y - b.y1 : 0);
+          if (d <= slack) {
+            hits.push(run);
+            owner = cell;
+          }
+          // Elsewhere in a cell with highlights, the closest one.
+          else if (own && (!nearest || d < nearest.d)) nearest = { run, d };
+        }
+      });
+    }
+    if (hits.length) return { cell: owner, runs: hits };
+    if (nearest) return { runs: [nearest.run] };
+    // No layout to go by: the whole cell, as one.
+    return { runs: marked.get(`${sheetName}:${row}:${column}`)?.runs ?? [] };
+  }
+
   univerAPI.addEvent(univerAPI.Event.CellClicked, ({ worksheet, row, column }) => {
-    const hit = marked.get(`${nameOf(worksheet.getSheetId())}:${row}:${column}`);
-    if (hit) on.toggle(hit.keys, !hit.on);
-  });
-  // Selecting a cell without highlights offers to redact its text.
-  univerAPI.addEvent(univerAPI.Event.SelectionChanged, ({ worksheet, selections }) => {
-    const r = selections[0];
-    const key = r && r.startRow === r.endRow && r.startColumn === r.endColumn ? `${nameOf(worksheet.getSheetId())}:${r.startRow}:${r.startColumn}` : '';
-    on.select(marked.has(key) ? null : spots.get(key) ?? null);
+    const sk = worksheet.getSkeleton();
+    const sheetName = nameOf(worksheet.getSheetId());
+    if (!sk || !sheetName) return;
+    const { cell = { row, col: column }, runs } = runsAt(sheetName, row, column, sk);
+    // The cell bar shows the cell whose text was clicked, which can be left of the clicked one.
+    on.cell({ label: a1(cell.row, cell.col), spot: spots.get(`${sheetName}:${cell.row}:${cell.col}`) });
+    if (runs.length) on.toggle([...new Set(runs.map((r) => r.key))], !runs.some((r) => r.on));
   });
 
   return {
     update(findings: Finding[]) {
       const byUnit = new Map<string, Finding[]>();
       for (const f of findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-      const next = new Map<string, { sheet: string; row: number; col: number; text: string; runs: { st: number; ed: number; on: boolean }[]; keys: string[]; on: boolean }>();
+      const next: typeof marked = new Map();
       for (const u of opts.units) {
         const fs = byUnit.get(u.id);
         if (!fs) continue;
@@ -260,10 +390,8 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
             const ed = Math.min(f.end, g.end) - g.start;
             if (ed <= st) continue;
             const key = `${g.sheet}:${g.row}:${g.col}`;
-            const cell = next.get(key) ?? next.set(key, { sheet: g.sheet, row: g.row, col: g.col, text: u.text.slice(g.start, g.end), runs: [], keys: [], on: false }).get(key)!;
-            cell.runs.push({ st, ed, on: f.enabled });
-            cell.keys.push(f.key);
-            cell.on ||= f.enabled;
+            const cell = next.get(key) ?? next.set(key, { sheet: g.sheet, row: g.row, col: g.col, text: u.text.slice(g.start, g.end), runs: [] }).get(key)!;
+            cell.runs.push({ st, ed, on: f.enabled, key: f.key });
           }
         }
       }
@@ -274,6 +402,8 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
       for (const cell of next.values()) {
         const base = original(cell.sheet, cell.row, cell.col);
         const runs = cell.runs.sort((a, b) => a.st - b.st);
+        // Univer ends paragraphs with \r and reads \n as a section break, which hides the text. Same length, so runs keep their offsets.
+        const lines = cell.text.replace(/\r\n/g, ' \r').replace(/\n/g, '\r');
         book
           .getSheetBySheetId(ids.get(cell.sheet)!)
           ?.getRange(cell.row, cell.col)
@@ -284,15 +414,15 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
               id: 'cell',
               documentStyle: {},
               body: {
-                dataStream: `${cell.text}\r\n`,
-                paragraphs: [{ startIndex: cell.text.length, paragraphId: 'p' }],
+                dataStream: `${lines}\r\n`,
+                paragraphs: [...lines.matchAll(/\r/g), { index: lines.length }].map((m, i) => ({ startIndex: m.index!, paragraphId: `p${i}` })),
                 textRuns: runs.map((r) => ({ st: r.st, ed: r.ed, ts: { bg: { rgb: r.on ? ON : OFF } } })),
               },
             },
           });
       }
       book.setEditable(false);
-      marked = new Map([...next].map(([k, c]) => [k, { sheet: c.sheet, row: c.row, col: c.col, keys: c.keys, on: c.on }]));
+      marked = next;
     },
     reveal(f: Finding) {
       const g = opts.grid.get(f.unitId)?.find((c) => c.start <= f.start && f.start < c.end);

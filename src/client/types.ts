@@ -84,8 +84,8 @@ export type RedactStyle = 'block' | 'label' | 'beep' | 'silence';
 
 export interface ViewHandlers {
   toggle(keys: string[], on: boolean): void;
-  /** A spot the user selected in the view, or null when the selection holds none. */
-  select(pick: { unitId: string; start: number; end: number } | null): void;
+  /** The cell the user clicked, by its A1 name, with where its text sits in a unit. */
+  cell(c: { label: string; spot?: { unitId: string; start: number; end: number } }): void;
 }
 
 /** A preview drawn by the format itself, such as the spreadsheet grid. */

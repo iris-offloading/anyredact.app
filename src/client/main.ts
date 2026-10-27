@@ -7,7 +7,7 @@ import { PageEditor, type Overlay } from './editor.ts';
 import { audioCredits, pagesFor } from '../shared/pricing.ts';
 import { highlight, pieces, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
-import { isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit } from './types.ts';
+import { isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
@@ -106,6 +106,9 @@ class App {
   private timeline: Timeline | null = null;
   // Where the text preview or transcript is drawn, below the timeline for audio.
   private textHost = h('div');
+  /** The spreadsheet's cell bar and the cell it shows. */
+  private cellBar: HTMLElement | null = null;
+  private cell: Parameters<ViewHandlers['cell']>[0] | null = null;
   // Transcript words in the order they are said, with the spans that show each one.
   private spoken: { word: SpokenWord; els: HTMLElement[] }[] = [];
   private speaking: HTMLElement[] = [];
@@ -626,19 +629,34 @@ class App {
     if (doc.mountView) {
       const host = h('div', { className: 'sheet-view' });
       this.extras = h('div');
-      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlighted cell to redact or keep it. Select a cell to add more.'), host, this.extras);
-      // The grid reports its own selection; text selection only applies to the list under it.
-      this.extras.addEventListener('mouseup', this.onSelect);
-      this.extras.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      // Like Excel's formula bar: the selected cell's whole text, which the grid can cut off.
+      this.cellBar = h('div', { className: 'cell-bar' });
+      this.cell = null;
+      this.textHost = h('div', {}, this.cellBar);
+      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select a cell or its text to add more.'), this.textHost, host, this.extras);
+      // The grid reports its own selection; text selection applies to the cell bar and the list under the grid.
+      for (const el of [this.textHost, this.extras]) {
+        el.addEventListener('mouseup', this.onSelect);
+        el.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      }
+      this.drawCellBar();
       const view = await doc.mountView(host, {
         toggle: (keys, on) => this.toggle(keys, on),
-        select: (pick) => this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : ''),
+        cell: (c) => {
+          this.cell = c;
+          this.drawCellBar();
+          // Selecting a cell without highlights offers to redact its text.
+          const s = c.spot;
+          const pick = s && !this.findings.some((f) => f.unitId === s.unitId && f.start < s.end && f.end > s.start) ? s : null;
+          this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : '');
+        },
       });
       if (this.doc !== doc) return view.dispose();
       this.view = view;
       this.refreshPreview();
       return;
     }
+    this.cellBar = null;
     this.editors = doc.pages.map((page) => this.pageEditor(page));
     // Pictures in a Word file show at their own size rather than full width.
     if (doc.kind === 'docx') this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
@@ -689,6 +707,24 @@ class App {
     this.refreshPreview();
   }
 
+  private drawCellBar() {
+    const bar = this.cellBar;
+    const c = this.cell;
+    if (!bar || !this.doc) return;
+    const ref = h('span', { className: 'cell-ref' }, c?.label ?? '');
+    const spot = c?.spot;
+    const index = spot ? this.doc.units.findIndex((u) => u.id === spot.unitId) : -1;
+    if (!spot || index < 0) return bar.replaceChildren(ref, h('div', { className: 'cell-text' }));
+    const { unitId, start, end } = spot;
+    const text = this.doc.units[index].text.slice(start, end);
+    const spans = this.findings
+      .filter((f) => f.unitId === unitId && f.start < end && f.end > start)
+      .map((f) => ({ ...f, start: Math.max(f.start, start) - start, end: Math.min(f.end, end) - start }));
+    const el = h('div', { className: 'unit cell-text', 'data-unit': String(index), 'data-from': String(start) });
+    for (const p of pieces(text.length, spans)) el.append(p.top ? this.mark(p.top, text.slice(p.start, p.end)) : text.slice(p.start, p.end));
+    bar.replaceChildren(ref, el);
+  }
+
   private pageEditor(page: Page) {
     return new PageEditor({
       page,
@@ -723,6 +759,7 @@ class App {
     if (!picks.length || sel.trim().length < 2) return;
     const done = (fn: () => void) => () => {
       getSelection()?.removeAllRanges();
+      this.preview.querySelector('.sel-add')?.remove();
       fn();
     };
     this.textHost.append(
@@ -748,8 +785,10 @@ class App {
         r.setEnd(node, at);
         return r.toString().length;
       };
-      let start = el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0;
-      let end = el.contains(range.endContainer) ? offset(range.endContainer, range.endOffset) : unit.text.length;
+      // The cell bar shows part of a unit, from data-from on.
+      const from = Number(el.dataset.from ?? 0);
+      let start = from + (el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0);
+      let end = el.contains(range.endContainer) ? from + offset(range.endContainer, range.endOffset) : from + el.textContent!.length;
       while (start < end && /\s/.test(unit.text[start])) start++;
       while (end > start && /\s/.test(unit.text[end - 1])) end--;
       if (end > start) out.push({ unitId: unit.id, start, end });
@@ -793,6 +832,7 @@ class App {
       return;
     }
     this.view?.update(this.findings);
+    this.drawCellBar();
     // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
     // Spreadsheet cells show in the grid above, so only comments, headers and footers are listed here.
     const byUnit = new Map<string, Finding[]>();
