@@ -2,6 +2,7 @@ import { chunkText, plausibleEntity } from '../shared/detect.ts';
 import { pool } from '../shared/pool.ts';
 import { MAX_CHARS, PAGE_CHARS, pagesFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
+import { jobOf, logActivity, type ActivityKind } from './activity.ts';
 import { refundPaidPages, spendPaidPages, type BillingEnv } from './billing.ts';
 import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
 import { json, modelJson, readAiPost, trialsAllowed } from './http.ts';
@@ -256,21 +257,32 @@ export interface Charge {
   refund: () => Promise<void>;
 }
 
-/** Charges the free daily allowance, then the account's paid pages. Returns a 402 response when neither covers it. */
-export async function chargeUsage(request: Request, env: Env, chars: number): Promise<Response | Charge> {
+/**
+ * Charges the free daily allowance, then the account's paid pages. Returns a 402
+ * response when neither covers it. A signed-in account's activity records the cost.
+ */
+export async function chargeUsage(request: Request, env: Env, chars: number, kind?: ActivityKind): Promise<Response | Charge> {
   const user = await currentUser(request, env);
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
   if (user && user.pack_pages < 0) {
     return json({ error: 'Your credit balance is below zero after a refund or dispute. Buy credits under Account to continue.', code: 'negative', signedIn: true }, 402);
   }
+  const job = jobOf(request);
+  if (kind) job.job += `:${kind}`;
+  const log = (credits: number) => (user ? logActivity(env.DB, user.id, job.job, kind ?? job.kind, credits) : Promise.resolve());
+  const credits = pagesFor(chars);
   const quota = await chargeQuota(request, env, chars);
-  if (!quota.exceeded) return quota;
-  const paid = user ? await spendPaidPages(env, user.id, pagesFor(chars)) : null;
+  if (!quota.exceeded) {
+    await log(-credits);
+    return { state: quota.state, refund: async () => void (await Promise.all([quota.refund(), log(credits)])) };
+  }
+  const paid = user ? await spendPaidPages(env, user.id, credits) : null;
   if (paid) {
+    await log(-credits);
     return {
       state: quota.state,
       refund: async () => {
-        await Promise.all([quota.refund(), refundPaidPages(env, user!.id, paid)]);
+        await Promise.all([quota.refund(), refundPaidPages(env, user!.id, paid), log(credits)]);
       },
     };
   }

@@ -537,10 +537,20 @@ mark.saying { outline: 2px solid var(--accent); }
 .total-num { font-size: 3rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
 .total-label { color: var(--muted); }
 .meters { display: flex; flex-direction: column; gap: 10px; }
-/* The total takes the free height, so the rows sit at the bottom level with the right column. */
+/* The total stays under the heading and the rows sit at the bottom, level with the right column. */
 .balance-card { display: flex; flex-direction: column; }
-.balance-card .total { flex: 1; align-items: center; min-height: 72px; margin-bottom: 20px; }
-.balance-card .total > * { align-self: center; }
+.balance-card .meters { margin-top: auto; }
+.activity-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.activity-head h3 { margin: 0; font-size: 0.95rem; font-weight: 500; color: var(--muted); }
+.activity { list-style: none; margin: 4px 0 20px; padding: 0; }
+.activity li { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.activity li:last-child { border-bottom: 0; }
+.activity li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.activity li strong { font-weight: 500; }
+.activity li > div span { color: var(--muted); font-size: 0.875rem; }
+.activity-icon { flex: none; display: flex; color: var(--muted); }
+.activity-credits { font-variant-numeric: tabular-nums; font-weight: 500; }
+.activity-credits.added { color: var(--success); }
 .plan-card { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 60%); border-color: color-mix(in srgb, var(--accent) 22%, var(--line)); }
 .plan-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .plan-name { display: flex; align-items: center; gap: 10px; }

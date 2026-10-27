@@ -30,7 +30,7 @@ export const LEGAL = [
 <h2>Data we keep</h2>
 <ul>
 <li><strong>Free allowance.</strong> Your browser keeps a random ID in local storage. For each day, we count how many credits that ID and your IP address used.</li>
-<li><strong>Account.</strong> If you sign in, we keep your email address, your Google account ID if you use Google, your plan, your credit balances, your purchases and a sign-in session.</li>
+<li><strong>Account.</strong> If you sign in, we keep your email address, your Google account ID if you use Google, your plan, your credit balances, your purchases, a sign-in session, and for each file you scan its format, its size in pages or minutes, the credits it used and the date, without its name.</li>
 <li><strong>Payments.</strong> Stripe takes the payment and keeps your card details. We receive your Stripe customer ID and what you bought.</li>
 <li><strong>Logs.</strong> Cloudflare keeps short-lived request logs, such as IP address, URL and errors, for security and abuse prevention.</li>
 <li><strong>Analytics.</strong> Google Analytics counts page views. Each visit sends the page address without its query or anchor, the page title, and your browser, device type and approximate location. File names, file content and findings are never sent.</li>
