@@ -29,71 +29,89 @@ const arrowHead = (x, y, dir) => {
   const d = { right: [-7, -5, -7, 5], down: [-5, -7, 5, -7], left: [7, -5, 7, 5] }[dir];
   return `<path class="dg-head" d="M${x} ${y}l${d[0]} ${d[1]}L${x + d[2]} ${y + d[3]}z"/>`;
 };
+const DETAIL = 13;
 const path = (d) => `<path class="dg-arrow" d="${d}"/>`;
 
-// Swimlane flow: steps alternate between the browser and the server.
-// Each step is [lane, title, detail], with lane 0 for the browser and 1 for the server.
-const LANES = ['In your browser', 'On our server'];
-const TITLE = 15;
-const DETAIL = 13;
+// "How it works" pictures on the tool pages: the same file three times,
+// plain, with findings marked, then redacted. Each art lists its fixed
+// shapes and the spots that hold personal details.
+const bar = (x, y, w, h = 12) => ({ x, y, w, h });
+const ART = {
+  doc: {
+    base: [bar(40, 30, 92, 10), bar(150, 64, 120, 10), bar(40, 98, 170, 10)],
+    spots: [bar(140, 30, 74, 10), bar(40, 64, 100, 10)],
+  },
+  pdf: {
+    frame: { x: 96, y: 8, w: 128, h: 124 },
+    base: [bar(112, 26, 46, 7), bar(112, 60, 96, 7), bar(150, 76, 58, 7), bar(112, 94, 96, 7), bar(112, 110, 60, 7)],
+    spots: [bar(164, 26, 44, 7), bar(112, 76, 32, 7)],
+  },
+  image: {
+    frame: { x: 70, y: 10, w: 180, h: 120 },
+    hill: true,
+    base: [bar(86, 94, 40, 8)],
+    spots: [bar(132, 94, 64, 8), bar(86, 112, 92, 8)],
+  },
+  slide: {
+    frame: { x: 56, y: 14, w: 208, h: 112 },
+    base: [bar(74, 32, 110, 12), bar(74, 64, 40, 7), bar(74, 82, 100, 7), bar(74, 100, 60, 7)],
+    spots: [bar(120, 64, 70, 7), bar(140, 100, 60, 7)],
+  },
+  sheet: {
+    grid: { x: 46, y: 14, cols: [70, 90, 68], rows: 4, h: 28 },
+    base: [bar(56, 25, 40, 6), bar(126, 25, 56, 6), bar(216, 25, 40, 6), bar(216, 53, 34, 6), bar(216, 81, 46, 6), bar(56, 109, 34, 6), bar(126, 109, 60, 6)],
+    spots: [bar(56, 53, 50, 6), bar(126, 53, 70, 6), bar(56, 81, 44, 6), bar(126, 81, 52, 6)],
+  },
+  text: {
+    mono: true,
+    base: [bar(40, 24, 30, 8), bar(40, 46, 30, 8), bar(40, 68, 30, 8), bar(40, 90, 30, 8), bar(150, 46, 60, 8), bar(150, 90, 40, 8)],
+    spots: [bar(80, 24, 120, 8), bar(80, 46, 62, 8), bar(80, 68, 90, 8), bar(80, 90, 62, 8)],
+  },
+  audio: { wave: true, spots: [bar(118, 40, 46, 60)] },
+};
+const WAVE = [14, 30, 22, 46, 34, 18, 40, 56, 28, 44, 60, 38, 24, 48, 32, 20, 42, 26, 36, 16, 30, 50, 22, 12];
 
-function node(x, y, w, h, n, step) {
-  const [lane, title, detail] = step;
-  const sub = wrap(detail, w - 28, DETAIL);
-  return (
-    `<rect class="dg-node${lane ? ' dg-ai' : ''}" x="${x}" y="${y}" width="${w}" height="${h}" rx="12"/>` +
-    `<circle class="dg-badge${lane ? ' dg-badge-ai' : ''}" cx="${x + 24}" cy="${y + 25}" r="11"/>` +
-    text(x + 24, y + 29.5, String(n), 'dg-num', 'middle') +
-    text(x + 42, y + 30, title, 'dg-title') +
-    lines(x + 14, y + 54, sub, 'dg-sub', 17)
-  );
+function art(kind, stage) {
+  const a = ART[kind];
+  let b = '';
+  if (a.frame) b += `<rect class="dg-frame" x="${a.frame.x}" y="${a.frame.y}" width="${a.frame.w}" height="${a.frame.h}" rx="6"/>`;
+  if (a.hill) b += `<path class="dg-line" d="M${a.frame.x} 72l40-34 30 22 30-14 80 30v8h-180z"/><circle class="dg-line" cx="216" cy="30" r="9"/>`;
+  if (a.grid) {
+    const g = a.grid;
+    const W = g.cols.reduce((t, c) => t + c, 0);
+    b += `<rect class="dg-frame" x="${g.x}" y="${g.y}" width="${W}" height="${g.rows * g.h}" rx="4"/>`;
+    for (let r = 1; r < g.rows; r++) b += `<path class="dg-grid" d="M${g.x} ${g.y + r * g.h}h${W}"/>`;
+    let x = g.x;
+    for (const c of g.cols.slice(0, -1)) b += `<path class="dg-grid" d="M${(x += c)} ${g.y}v${g.rows * g.h}"/>`;
+  }
+  if (a.wave) {
+    // Found: a marker behind the words. Redacted: the stretch becomes one flat tone.
+    if (stage === 1) for (const s of a.spots) b += `<rect class="dg-found" x="${s.x - 4}" y="${s.y - 4}" width="${s.w + 8}" height="${s.h + 8}" rx="4"/>`;
+    if (stage === 2) for (const s of a.spots) b += `<rect class="dg-bar" x="${s.x - 2}" y="64" width="${s.w + 2}" height="12" rx="6"/>`;
+    WAVE.forEach((h, i) => {
+      const x = 46 + i * 10;
+      if (stage === 2 && a.spots.some((s) => x >= s.x && x < s.x + s.w)) return;
+      b += `<rect class="dg-line" x="${x}" y="${70 - h / 2}" width="5" height="${h}" rx="2.5"/>`;
+    });
+    return b;
+  }
+  for (const r of a.base) b += `<rect class="dg-line" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${r.h / 2}"/>`;
+  for (const r of a.spots) {
+    if (stage === 0) b += `<rect class="dg-line" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${r.h / 2}"/>`;
+    if (stage === 1) b += `<rect class="dg-found" x="${r.x - 2}" y="${r.y - 3}" width="${r.w + 4}" height="${r.h + 6}" rx="3"/>`;
+    if (stage === 2) b += `<rect class="dg-bar" x="${r.x - 2}" y="${r.y - 2}" width="${r.w + 4}" height="${r.h + 4}" rx="2"/>`;
+  }
+  return b;
 }
 
-function flowWide(steps) {
-  const W = 1100, labelH = 34, pad = 16, gap = 28;
-  const colW = (W - pad * 2 - 120) / steps.length;
-  const w = colW - gap;
-  const maxLines = Math.max(...steps.map((s) => wrap(s[2], w - 28, DETAIL).length));
-  const h = 44 + maxLines * 17;
-  const laneH = h + pad * 2;
-  const laneY = (l) => l * (laneH + 10);
-  let body = LANES.map((name, l) => `<rect class="dg-lane" x="0" y="${laneY(l)}" width="${W}" height="${laneH}" rx="14"/>` + text(20, laneY(l) + laneH / 2 + 5, name, 'dg-lane-label')).join('');
-  const x0 = 120 + pad + gap / 2;
-  const pos = steps.map((s, i) => ({ x: x0 + i * colW, y: laneY(s[0]) + pad }));
-  steps.forEach((s, i) => {
-    if (!i) return;
-    const a = pos[i - 1], b = pos[i];
-    const ax = a.x + w, ay = a.y + h / 2, bx = b.x, by = b.y + h / 2;
-    const mx = (ax + bx) / 2;
-    body += path(ay === by ? `M${ax} ${ay}H${bx - 2}` : `M${ax} ${ay}H${mx}V${by}H${bx - 2}`) + arrowHead(bx, by, 'right');
-  });
-  body += steps.map((s, i) => node(pos[i].x, pos[i].y, w, h, i + 1, s)).join('');
-  return { w: W, h: laneH * 2 + 10, body };
-}
-
-function flowNarrow(steps) {
-  const W = 360, head = 34, colW = W / 2, w = colW - 20, rowGap = 26;
-  const heights = steps.map((s) => 44 + wrap(s[2], w - 28, DETAIL).length * 17);
-  let y = head + 8;
-  const pos = steps.map((s, i) => {
-    const p = { x: s[0] * colW + 10, y };
-    y += heights[i] + rowGap;
-    return p;
-  });
-  const H = y - rowGap + 12;
-  let body = LANES.map((name, l) => `<rect class="dg-lane" x="${l * colW + (l ? 3 : 0)}" y="0" width="${colW - 3}" height="${H}" rx="14"/>` + text(l * colW + colW / 2, 23, name, 'dg-lane-label', 'middle')).join('');
-  steps.forEach((s, i) => {
-    if (!i) return;
-    const a = pos[i - 1], b = pos[i];
-    const ax = a.x + w / 2, ay = a.y + heights[i - 1], bx = b.x + w / 2, by = b.y;
-    const my = (ay + by) / 2;
-    body += path(ax === bx ? `M${ax} ${ay}V${by - 2}` : `M${ax} ${ay}V${my}H${bx}V${by - 2}`) + arrowHead(bx, by, 'down');
-  });
-  body += steps.map((s, i) => node(pos[i].x, pos[i].y, w, heights[i], i + 1, s)).join('');
-  return { w: W, h: H, body };
-}
-
-export const flowDiagram = (label, steps) => figure(label, flowWide(steps), flowNarrow(steps));
+const STAGE_LABELS = ['the file as opened', 'with findings marked', 'redacted'];
+export const howItWorks = (kind, steps) =>
+  `<ol class="how">${steps
+    .map(
+      ([title, detail], i) =>
+        `<li><span class="how-num">${String(i + 1).padStart(2, '0')}</span><div class="how-art"><svg viewBox="0 0 320 140" role="img" aria-label="${esc(`Illustration: ${STAGE_LABELS[i]}`)}">${art(kind, i)}</svg></div><h3>${esc(title)}</h3><p>${esc(detail)}</p></li>`,
+    )
+    .join('')}</ol>`;
 
 // Guide: a box drawn over PDF text compared with a page rebuilt as an image.
 function layer(x, y, cls) {

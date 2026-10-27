@@ -21,14 +21,11 @@ export const TOOLS = [
     h1: 'Auto redact PDF online with AI',
     lead: 'Drop a PDF and our AI will find and permanently remove names, numbers, signatures, and other sensitive details, including on scanned pages.',
     hint: 'PDF up to 60 pages',
-    flowTitle: 'Where your PDF goes',
-    flow: [
-      [0, 'Open', 'Digital or scanned PDF'],
-      [0, 'Read', 'Text layer, or OCR on scans'],
-      [1, 'Detect', 'AI tags people, places and account details'],
-      [0, 'Review', 'Check each page and draw boxes'],
-      [1, 'Final check', 'Second model rereads the kept text'],
-      [0, 'Save', 'Pages flattened to images'],
+    art: 'pdf',
+    how: [
+      ['Open your PDF', 'Scanned pages are read with OCR first.'],
+      ['Review what was found', 'Untick a finding to keep it, or drag a box over a signature.'],
+      ['Download the flattened copy', 'Every page comes back as an image with the marks burned in.'],
     ],
     points: [
       ['True redaction', 'Pages are flattened to images on export, so the original text, links, form fields and metadata are gone, not just covered.'],
@@ -59,14 +56,11 @@ export const TOOLS = [
     lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
     also: 'Works with JPG, PNG, WebP and HEIC.',
     hint: 'PNG, JPG, WebP or HEIC',
-    flowTitle: 'Where your image goes',
-    flow: [
-      [0, 'Open', 'Photo, scan or pasted screenshot'],
-      [0, 'Read', 'OCR finds the words in the picture'],
-      [1, 'Detect', 'AI picks out IDs, names and numbers'],
-      [0, 'Review', 'Drag boxes over anything else'],
-      [1, 'Final check', 'Rereads the words left visible'],
-      [0, 'Save', 'Pixels repainted, EXIF and GPS dropped'],
+    art: 'image',
+    how: [
+      ['Open or paste a picture', 'Words in the picture are read with OCR.'],
+      ['Check the boxes', 'Untick a box to keep that spot, or drag a new one over a face.'],
+      ['Save the clean image', 'It is repainted from scratch, so camera and GPS tags are gone.'],
     ],
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
@@ -100,14 +94,11 @@ export const TOOLS = [
     h1: 'Auto redact Word online with AI',
     lead: 'Upload a .docx to redact sensitive text, comments, tracked changes, and metadata while keeping your formatting intact.',
     hint: 'Word .docx files',
-    flowTitle: 'Where your Word file goes',
-    flow: [
-      [0, 'Open', 'Any .docx'],
-      [0, 'Read', 'Body, headers, comments and revisions'],
-      [1, 'Detect', 'AI spots people and their details'],
-      [0, 'Review', 'Select text to add more'],
-      [1, 'Final check', 'Rereads what the copy will say'],
-      [0, 'Save', 'Characters swapped, layout untouched'],
+    art: 'doc',
+    how: [
+      ['Open your .docx', 'Body text, headers, comments and tracked changes are scanned.'],
+      ['Review what was found', 'Select any word in the preview to remove it as well.'],
+      ['Download the edited file', 'Pick black bars or labels like [NAME] before you save.'],
     ],
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
@@ -137,14 +128,11 @@ export const TOOLS = [
     h1: 'Auto redact PowerPoint online with AI',
     lead: 'Upload a .pptx to redact names, numbers and other personal details on slides, in speaker notes, comments and pictures.',
     hint: 'PowerPoint .pptx files',
-    flowTitle: 'Where your deck goes',
-    flow: [
-      [0, 'Open', 'Any .pptx'],
-      [0, 'Read', 'Slides, notes, tables and alt text'],
-      [1, 'Detect', 'AI flags names, emails and numbers'],
-      [0, 'Review', 'Go through slides and notes'],
-      [1, 'Final check', 'Rereads the remaining slide text'],
-      [0, 'Save', 'Theme intact, thumbnail gone'],
+    art: 'slide',
+    how: [
+      ['Open your .pptx', 'Slides, speaker notes and comments are scanned together.'],
+      ['Review what was found', 'Step through the slides and untick what should stay.'],
+      ['Download the deck', 'It opens in PowerPoint, Keynote or Google Slides as before.'],
     ],
     points: [
       ['Design kept', 'Themes, fonts, shapes and animations are untouched.'],
@@ -175,14 +163,11 @@ export const TOOLS = [
     lead: 'Upload a spreadsheet to redact personal data in columns, cells, hidden sheets, and comments without breaking your layout.',
     also: 'Works with ODS and CSV.',
     hint: 'Excel .xlsx, OpenDocument .ods or CSV',
-    flowTitle: 'Where your workbook goes',
-    flow: [
-      [0, 'Open', 'XLSX, ODS or CSV'],
-      [0, 'Read', 'Every cell on every sheet'],
-      [1, 'Detect', 'AI marks personal values'],
-      [0, 'Review', 'Click a highlight to keep it'],
-      [1, 'Final check', 'Rereads the cells that stay'],
-      [0, 'Save', 'Same styles, safe formulas'],
+    art: 'sheet',
+    how: [
+      ['Open your workbook', 'Every sheet is read, cell by cell.'],
+      ['Review the cells', 'Click a highlight to keep that value.'],
+      ['Download the workbook', 'Open it in Excel and carry on working.'],
     ],
     points: [
       ['Cells keep their styles', 'Only redacted cells change. Number formats, colours, column widths and charts stay put.'],
@@ -217,14 +202,11 @@ export const TOOLS = [
     lead: 'Paste text or upload a file to mask personal info, passwords, API keys, and other secrets in seconds.',
     also: 'Works with CSV, JSON, XML, YAML, .env, Markdown and log files.',
     hint: 'TXT, CSV, JSON, XML, YAML, .env or logs',
-    flowTitle: 'Where your text goes',
-    flow: [
-      [0, 'Open', 'Paste it or pick a file'],
-      [0, 'Read', 'Lines, keys and values'],
-      [1, 'Detect', 'AI finds contacts, IDs and secrets'],
-      [0, 'Review', 'Add terms that must always go'],
-      [1, 'Final check', 'Rereads the masked text'],
-      [0, 'Save', 'JSON, XML and CSV still parse'],
+    art: 'text',
+    how: [
+      ['Paste or upload', 'Drop in a log, a config file or a chat export.'],
+      ['Review what was found', 'List project code names under Always redact.'],
+      ['Download the masked file', 'Keys, brackets and line breaks stay where they were.'],
     ],
     points: [
       ['Great for logs and support tickets', 'Strip customer details before sharing logs, transcripts or datasets.'],
@@ -255,14 +237,11 @@ export const TOOLS = [
     lead: 'Upload a recording and we’ll bleep spoken sensitive details, then give you the redacted audio and a redacted transcript.',
     also: 'Works with MP3, M4A, WAV, FLAC, OGG and Opus.',
     hint: 'MP3, M4A, WAV, FLAC, OGG or Opus, up to 2 hours',
-    flowTitle: 'Where your recording goes',
-    flow: [
-      [0, 'Open', 'Any common audio file'],
-      [1, 'Transcribe', 'Every word with its time'],
-      [1, 'Detect', 'AI marks what was said about people'],
-      [0, 'Review', 'Drag on the timeline to add more'],
-      [1, 'Final check', 'Rereads the edited transcript'],
-      [0, 'Save', 'New audio with bleeps'],
+    art: 'audio',
+    how: [
+      ['Upload a recording', 'Speech is written out next to a timeline.'],
+      ['Review what was found', 'Listen back and untick anything that can stay.'],
+      ['Download the bleeped audio', 'Save the redacted transcript too if you need it.'],
     ],
     points: [
       ['Found in the transcript', 'Speech is written out with a time for every word, so each finding is bleeped where it was said.'],
@@ -291,15 +270,6 @@ export const HOME = {
   h1: 'Redact anything, with AI that finds it for you',
   lead: 'Upload PDFs, images, Word, PowerPoint, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
   hint: 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
-  flowTitle: 'Where your file goes',
-  flow: [
-    [0, 'Open', 'PDF, Office, image, text or audio'],
-    [0, 'Extract', 'Text pulled out, OCR for scans'],
-    [1, 'Detect', 'AI marks personal details'],
-    [0, 'Review', 'Untick, select or draw'],
-    [1, 'Final check', 'A second model reads what is left'],
-    [0, 'Download', 'The copy is built in your browser'],
-  ],
   points: [
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],

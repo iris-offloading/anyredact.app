@@ -5,7 +5,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { GUIDES, GUIDES_INDEX, PUBLISHED } from './guides.mjs';
-import { flowDiagram } from './diagrams.mjs';
+import { howItWorks } from './diagrams.mjs';
 import { CONTACT, LEGAL, UPDATED } from './legal.mjs';
 import { logoMark } from './logo.mjs';
 import { HOME, SITE, TOOLS } from './pages.mjs';
@@ -194,14 +194,13 @@ function toolPage(page) {
   </div>
 </section>
 <section class="band"><div class="wrap points">${points}</div></section>
-${page.slug ? flowSection(page) : homeSections(page)}
+${page.slug ? howSection(page) : homeSections(page)}
 <section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>
 ${page.slug ? relatedGuides(page.slug) : ''}`,
   );
 }
 
-const flowSection = (page) =>
-  `<section class="wrap section"><h2>${esc(page.flowTitle)}</h2>${flowDiagram(page.flow.map((s) => `${s[1]}: ${s[2]}`).join('. '), page.flow)}</section>`;
+const howSection = (page) => `<section class="wrap section"><h2>How it works</h2>${howItWorks(page.art, page.how)}</section>`;
 
 const guideCards = (list) => `<div class="cards">${list.map((g) => `<a class="card" href="/guides/${g.slug}"><strong>${esc(g.h1)}</strong><span>${esc(g.summary)}</span></a>`).join('')}</div>`;
 
@@ -211,7 +210,6 @@ function homeSections(page) {
   const formats = TOOLS.map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.name)}</strong><span>${esc(t.card)}</span></a>`).join('');
   const finds = page.finds.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join('');
   return `<section class="wrap section"><h2>Redact a file in three steps</h2><ol class="steps">${steps}</ol></section>
-${flowSection(page)}
 <section class="wrap section"><h2>Pick a format</h2><div class="cards">${formats}</div></section>
 <section class="wrap section"><h2>What the AI looks for</h2><dl class="finds">${finds}</dl></section>
 <section class="wrap section"><h2>Guides</h2>${guideCards(GUIDES.slice(0, 6))}<p class="more"><a href="/guides">All ${GUIDES.length} guides</a></p></section>`;
