@@ -9,7 +9,8 @@ import { ENTITY_LABELS, type Span } from './detect.ts';
 export function rewriteSegments(
   pieces: string[],
   spans: Pick<Span, 'start' | 'end' | 'type'>[],
-  style: 'block' | 'label',
+  /** 'label' writes [TYPE] labels; any other style blocks characters out. */
+  style: string,
   char = '█',
 ): string[] {
   const total = pieces.reduce((n, p) => n + p.length, 0);

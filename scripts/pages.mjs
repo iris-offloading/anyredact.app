@@ -4,7 +4,7 @@
 export const SITE = {
   name: 'AnyRedact',
   origin: 'https://anyredact.app',
-  tagline: 'Free online redaction for PDF, images, Word, Excel and text',
+  tagline: 'Free online redaction for PDF, images, Word, Excel, text and audio',
 };
 
 
@@ -139,17 +139,43 @@ export const TOOLS = [
       },
     ],
   },
+  {
+    slug: 'redact-audio',
+    format: 'audio',
+    nav: 'Audio',
+    title: 'Redact Audio Online Free: Bleep Names and Numbers | AnyRedact',
+    description:
+      'Redact audio recordings online for free. AI writes out the speech, finds names, phone numbers and card numbers, and bleeps them in a new MP3, M4A or WAV file.',
+    h1: 'Redact audio online',
+    lead: 'Bleep names, numbers and addresses in calls, interviews and voice notes, then download a new file.',
+    hint: 'MP3, M4A, WAV, FLAC, OGG or Opus, up to 2 hours',
+    points: [
+      ['Found in the transcript', 'Speech is written out with a time for every word, so each finding is bleeped where it was said.'],
+      ['Pick any stretch', 'Drag on the timeline to bleep a part the transcript missed.'],
+      ['Tags removed', 'Title, artist, comments, cover art and recording location are left out of the new file.'],
+    ],
+    faq: [
+      {
+        q: 'Can I use silence instead of a beep?',
+        a: 'Yes. Pick Silence under Style before you download.',
+      },
+      {
+        q: 'Which languages work?',
+        a: 'English and most widely spoken languages. English recordings are transcribed with Deepgram Nova-3, others with OpenAI Whisper.',
+      },
+    ],
+  },
 ];
 
 export const HOME = {
   slug: '',
   format: 'all',
-  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word, Excel & Text',
+  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word, Excel, Text & Audio',
   description:
-    'Redact PDFs, images, Word documents, spreadsheets and text online for free. AI finds the personal information, you review it, and nothing is stored.',
+    'Redact PDFs, images, Word documents, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
-  lead: 'Drop a PDF, image, Word document, spreadsheet or text file. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
-  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP or text',
+  lead: 'Drop a PDF, image, Word document, spreadsheet, text file or recording. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
+  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
@@ -158,7 +184,7 @@ export const HOME = {
   faq: [
     {
       q: 'Is AnyRedact free?',
-      a: 'Yes. You get about 30 credits a day, and one credit covers about one page of text or one picture. For more, buy a monthly plan or a credit pack that never expires. There is no watermark.',
+      a: 'Yes. You get about 30 credits a day, and one credit covers about one page of text, one picture or one minute of audio. For more, buy a monthly plan or a credit pack that never expires. There is no watermark.',
     },
     {
       q: 'Do I need an account?',
@@ -166,7 +192,7 @@ export const HOME = {
     },
     {
       q: 'Do you store my files?',
-      a: 'No. Nothing leaves your browser until you agree. After that, the text (and page images, if picture redaction is on) is processed in memory to find personal information, then discarded. It is never logged or used for training.',
+      a: 'No. Nothing leaves your browser until you agree. After that, the text (and page images, if picture redaction is on, or the speech of a recording) is processed in memory to find personal information, then discarded. It is never logged or used for training.',
     },
     {
       q: 'Which details are found?',
@@ -174,7 +200,7 @@ export const HOME = {
     },
     {
       q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP and text files such as TXT, CSV, JSON and logs. Audio and video are planned.',
+      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, text files such as TXT, CSV, JSON and logs, and audio such as MP3, M4A and WAV. Video is planned.',
     },
   ],
 };

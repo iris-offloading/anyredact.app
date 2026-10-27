@@ -27,9 +27,10 @@
   // Sign-in links go out through Cloudflare Email Service (needs anyredact.app onboarded).
   "send_email": [{ "name": "EMAIL" }],
   "d1_databases": [{ "binding": "DB", "database_name": "anyredact", "database_id": "3dac13f1-b620-4fb7-be0d-95fe9ca963a7" }],
-  // Per-IP limit on /api/detect. namespace_id is any account-unique integer.
+  // Per-IP limits on /api/detect and /api/transcribe. namespace_id is any account-unique integer.
   "ratelimits": [
-    { "name": "DETECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }
+    { "name": "DETECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "TRANSCRIBE_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
   ],
   // Preview deployments (pull request builds) need their own bindings. They get a
   // separate rate-limit namespace so previews don't share production's counters.
@@ -41,7 +42,8 @@
     "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "76fdd406-5e72-4528-8702-d04104d017e5" }],
     "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
     "ratelimits": [
-      { "name": "DETECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
+      { "name": "DETECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
+      { "name": "TRANSCRIBE_LIMITER", "namespace_id": "1004", "simple": { "limit": 30, "period": 60 } }
     ]
   },
   // `npm run dev:local` runs without a Cloudflare login: no AI binding, so

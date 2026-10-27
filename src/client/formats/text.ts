@@ -1,10 +1,11 @@
 import { labelText, maskText } from '../../shared/detect.ts';
-import { outputName, type LoadedDoc } from '../types.ts';
+import { outputName, TEXT_STYLES, type LoadedDoc } from '../types.ts';
 
 export async function loadText(file: File): Promise<LoadedDoc> {
   const text = await file.text();
   return {
     kind: 'text',
+    styles: TEXT_STYLES,
     name: file.name,
     units: [{ id: 'text', text }],
     pages: [],

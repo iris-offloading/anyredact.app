@@ -6,7 +6,7 @@ Free online redaction for PDF, images, Word (DOCX), spreadsheets (XLSX, ODS) and
 
 - **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX, XLSX and ODS) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
 - **Matching:** `src/shared/analyze.ts` finds every mention of what the model returned and of the user's own terms, including first or last name alone (`src/shared/names.ts`), and leaves business and helpline contacts unticked. There are no local detection rules: if the AI endpoint fails, the user is told and redacts by hand.
-- **Redaction** happens in the browser. Today only extracted text is sent to the server; future formats such as audio or video may need the media itself, so user-facing copy promises "processed, never stored" rather than "never uploaded".
+- **Redaction** happens in the browser. Documents send only extracted text to the server; audio sends 16 kHz mono speech chunks (`/api/transcribe`, Nova-3 for English and Whisper turbo otherwise), so user-facing copy promises "processed, never stored" rather than "never uploaded".
 
 | Format | What the download contains |
 | --- | --- |
@@ -29,7 +29,7 @@ static/          CSS, favicon, _headers (CSP and caching)
 test/            unit tests; e2e/ drives every format in Chromium
 ```
 
-Each tool has its own landing page (`/redact-pdf`, `/redact-image`, `/redact-word`, `/redact-excel`, `/redact-text`) with unique title, description, FAQ and JSON-LD; `/` accepts every format. Edit copy in `scripts/pages.mjs`; the sitemap and robots.txt are generated from it.
+Each tool has its own landing page (`/redact-pdf`, `/redact-image`, `/redact-word`, `/redact-excel`, `/redact-text`, `/redact-audio`) with unique title, description, FAQ and JSON-LD; `/` accepts every format. Edit copy in `scripts/pages.mjs`; the sitemap and robots.txt are generated from it.
 
 ## Develop
 
@@ -45,10 +45,9 @@ npm run deploy
 
 Wrangler runs `npm run build` itself before dev, deploy and preview uploads (see `build` in `wrangler.jsonc`), so Workers Builds needs no build command. Pull request previews use the `previews` bindings.
 
-The Workers AI model defaults to `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (with thinking off) and can be overridden with an `AI_MODEL` variable. To compare models, run `node scripts/bench-models.mjs <preview-url> <model>...` against a preview deployment; previews accept a `model` in `/api/detect` requests and list the available models at `/api/models`.
+The Workers AI model defaults to `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (with thinking off) and can be overridden with an `AI_MODEL` variable. To compare models, run `node scripts/bench-models.mjs <preview-url> <model>...` against a preview deployment; previews accept a `model` in `/api/detect` requests and list the available models at `/api/models`. `scripts/bench-audio.mjs` compares speech-to-text models for audio redaction on synthetic recordings.
 
 ## Roadmap
 
 - Audio and video (speech-to-text with Whisper on Workers AI, then bleep/mute and blur)
-- Keep a text layer in redacted PDFs
-- More languages for OCR
+- Redact images embedded in DOCX and keep a text layer in redacted PDFs

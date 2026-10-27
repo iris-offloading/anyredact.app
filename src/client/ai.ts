@@ -18,12 +18,12 @@ export function deviceId(): string {
   }
 }
 
-/** POSTs JSON to a metered API route; a 402 becomes a QuotaError. */
-export async function postApi<T>(path: string, body: unknown, failure: string): Promise<T> {
+/** POSTs to a metered API route, as JSON unless another content type is given; a 402 becomes a QuotaError. */
+export async function postApi<T>(path: string, body: unknown, failure: string, contentType = 'application/json'): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-device-id': deviceId() },
-    body: JSON.stringify(body),
+    headers: { 'content-type': contentType, 'x-device-id': deviceId() },
+    body: contentType === 'application/json' ? JSON.stringify(body) : (body as BodyInit),
   });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.");

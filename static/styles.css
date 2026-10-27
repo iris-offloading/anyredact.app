@@ -170,8 +170,8 @@ textarea, select {
   white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem;
   max-height: 80vh; overflow: auto;
 }
-.text-preview.docx { font-family: inherit; font-size: 1rem; }
-.text-preview.docx .unit { margin-bottom: 0.6em; }
+.text-preview.flow { font-family: inherit; font-size: 1rem; }
+.text-preview.flow .unit { margin-bottom: 0.6em; }
 .sheet { margin-bottom: 16px; }
 .sheet .docx-wrapper { background: none; padding: 0; }
 .sheet .docx-wrapper > section.docx { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); margin-bottom: 16px; }
@@ -182,9 +182,23 @@ textarea, select {
 .sheet mark.off { background: #ffe8cc; }
 .unit-section { font-family: inherit; font-size: 0.95rem; margin: 20px 0 8px; }
 .unit-section:first-child { margin-top: 0; }
+.para .at { border: 0; background: none; padding: 0; color: var(--muted); font: inherit; font-size: 0.85rem; font-variant-numeric: tabular-nums; cursor: pointer; }
+.para .at:hover { color: var(--accent); text-decoration: underline; }
+
+.audio-view { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; }
+.player { width: 100%; display: block; margin-bottom: 12px; }
+.timeline { position: relative; height: 44px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); cursor: crosshair; touch-action: none; overflow: hidden; }
+.stretch { position: absolute; top: 0; bottom: 0; padding: 0; border: 0; border-radius: 3px; background: var(--mark-on); cursor: pointer; }
+.stretch.off { background: var(--mark-off); outline: 1px dashed #e8590c; outline-offset: -1px; }
+.stretch.manual { background: var(--accent); }
+.stretch.ghost { background: var(--accent); opacity: 0.4; pointer-events: none; }
+.pointer { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--muted); opacity: 0.6; pointer-events: none; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+.timeline-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; margin-top: 4px; }
 mark { cursor: pointer; border-radius: 3px; padding: 0 1px; }
 mark.on { background: var(--mark-on); color: inherit; }
 mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e8590c; }
+mark.saying { outline: 2px solid var(--accent); }
 .sel-add {
   position: fixed; bottom: 16px; left: 0; right: 0; margin: 0 auto; z-index: 10;
   display: flex; gap: 8px; padding: 8px; width: max-content; max-width: calc(100% - 32px);
@@ -223,3 +237,9 @@ mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e85
 .btn.google { display: inline-block; }
 .btn.google[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 .sheet-view { height: min(70vh, 640px); min-height: 360px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); margin-bottom: 16px; }
+.para { display: flex; gap: 0.5em; align-items: baseline; }
+.para .unit { flex: 1; }
+/* Each word reaches over the space after it, so a highlight running through words has no gaps. */
+.w { cursor: pointer; padding-right: 0.3em; margin-right: -0.3em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+@media (hover: hover) { .w:hover { text-decoration: underline; } }
+.w.speaking { --tint: var(--accent); background: linear-gradient(to right, color-mix(in srgb, var(--tint) calc(var(--a0, 1) * 28%), transparent), color-mix(in srgb, var(--tint) calc(var(--a1, 1) * 28%), transparent) var(--said, 100%), transparent calc(var(--said, 100%) + 15%)); }

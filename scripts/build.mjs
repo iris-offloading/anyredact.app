@@ -178,7 +178,7 @@ function toolPage(page) {
   <h2>How it works</h2>
   <ol>
     <li><strong>Open your file.</strong> Our AI finds the personal information in it.</li>
-    <li><strong>Review what was found.</strong> Untick anything you want to keep, add your own words, or draw boxes.</li>
+    <li><strong>Review what was found.</strong> Untick anything you want to keep, or mark more by hand.</li>
     <li><strong>Download the redacted copy.</strong> The sensitive content is removed from the file itself.</li>
   </ol>
 </section>
@@ -207,7 +207,7 @@ await writeFile(
 <h1>Privacy</h1>
 <p>AnyRedact is built so that your documents stay with you.</p>
 <h2>How your content is processed</h2>
-<p>To find personal information, the content of your file is sent over HTTPS to our Cloudflare Worker and analysed by AI models on Cloudflare Workers AI. Normally that is the text read from your document. If you turn on picture redaction (faces, screens, road signs or number plates), the page images are sent too. Content is processed in memory for that request only. We do not store it or the results, do not log it, and do not use it for training. Cloudflare processes the request as our infrastructure provider.</p>
+<p>To find personal information, the content of your file is sent over HTTPS to our Cloudflare Worker and analysed by AI models on Cloudflare Workers AI. Normally that is the text read from your document. If you turn on picture redaction (faces, screens, road signs or number plates), the page images are sent too. For a recording, the speech is sent as low-quality mono sound in parts of a few minutes. Content is processed in memory for that request only. We do not store it or the results, do not log it, and do not use it for training. Cloudflare processes the request as our infrastructure provider.</p>
 <p>Wherever possible the work happens in your browser instead: documents are opened, text is read (using the open-source Tesseract OCR engine, loaded from the jsDelivr CDN, for images and scanned pages) and the redacted copy is created on your device.</p>
 <p>Nothing is sent until you choose AI detection for a file. Without it, you can still redact by hand. Picture redaction also looks for faces, screens and stop signs in your browser first, with models downloaded to your device.</p>
 <h2>What we collect</h2>

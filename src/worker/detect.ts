@@ -1,4 +1,5 @@
 import { plausibleEntity } from '../shared/detect.ts';
+import { pool } from '../shared/pool.ts';
 import { MAX_CHARS, pagesFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
 import { spendPaidPages, type BillingEnv } from './billing.ts';
@@ -259,22 +260,17 @@ async function detectText(run: Run, text: string): Promise<Entity[]> {
 // Preview-only batch mode for benchmarks: many texts in one request, a few at a time.
 async function detectBatch(env: Env, texts: unknown[], model: string, options?: object, chunkChars?: number): Promise<Response> {
   const out: unknown[] = new Array(texts.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < texts.length) {
-      const i = next++;
-      const text = texts[i];
-      const usage: Usage = {};
-      const started = Date.now();
-      try {
-        if (typeof text !== 'string' || text.length > MAX_CHARS) throw new Error('invalid text');
-        out[i] = { entities: await detectText({ env, model, usage, extra: options, chunkChars, waits: [5000, 10000, 20000, 30000] }, text), ms: Date.now() - started, usage };
-      } catch (err) {
-        out[i] = { error: String(err), usage };
-      }
+  await pool(texts.length, 2, async (i) => {
+    const text = texts[i];
+    const usage: Usage = {};
+    const started = Date.now();
+    try {
+      if (typeof text !== 'string' || text.length > MAX_CHARS) throw new Error('invalid text');
+      out[i] = { entities: await detectText({ env, model, usage, extra: options, chunkChars, waits: [5000, 10000, 20000, 30000] }, text), ms: Date.now() - started, usage };
+    } catch (err) {
+      out[i] = { error: String(err), usage };
     }
-  };
-  await Promise.all(Array.from({ length: Math.min(2, texts.length) }, worker));
+  });
   return json({ model, results: out });
 }
 

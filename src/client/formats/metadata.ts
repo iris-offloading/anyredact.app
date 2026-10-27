@@ -86,7 +86,7 @@ export function describe(tags: Tags): MetaField[] {
   return out;
 }
 
-function show(v: unknown): string {
+export function show(v: unknown): string {
   if (v === undefined || v === null || v === '') return '';
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toLocaleString();
   if (v instanceof Uint8Array || ArrayBuffer.isView(v)) return '';
