@@ -4,6 +4,7 @@ import { build, transform } from 'esbuild';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { GUIDES, GUIDES_INDEX, PUBLISHED } from './guides.mjs';
 import { CONTACT, LEGAL, UPDATED } from './legal.mjs';
 import { logoMark } from './logo.mjs';
 import { HOME, SITE, TOOLS } from './pages.mjs';
@@ -90,13 +91,15 @@ function nav(current) {
   return `<header class="site-header"><div class="wrap">
   <a class="logo" href="/">${logoMark(28)}AnyRedact</a>
   <nav aria-label="Tools">${links}</nav>
-  <div class="header-actions"><a class="header-link" href="/pricing"${current === 'pricing' ? ' aria-current="page"' : ''}>Pricing</a>${themeButton}<a class="btn signin-link" href="/account">Sign in</a></div>
+  <div class="header-actions"><a class="header-link guides-link" href="/guides"${current.startsWith('guides') ? ' aria-current="page"' : ''}>Guides</a><a class="header-link" href="/pricing"${current === 'pricing' ? ' aria-current="page"' : ''}>Pricing</a>${themeButton}<a class="btn signin-link" href="/account">Sign in</a></div>
 </div></header>`;
 }
 
+const GUIDES_INDEX_LINK = { slug: 'guides', nav: 'Guides' };
+
 function footer() {
   const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
-  const about = [PRICING, ...LEGAL].map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('');
+  const about = [GUIDES_INDEX_LINK, PRICING, ...LEGAL].map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
   <div><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
@@ -146,7 +149,7 @@ function layout(page, main) {
 <link rel="canonical" href="${url(page.slug)}">
 <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111216" media="(prefers-color-scheme: dark)">
-<meta property="og:type" content="website">
+<meta property="og:type" content="${page.slug.startsWith('guides/') ? 'article' : 'website'}">
 <meta property="og:site_name" content="${SITE.name}">
 <meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
@@ -176,7 +179,7 @@ ${footer()}
 }
 
 function toolPage(page) {
-  const points = page.points.map(([t, d]) => `<div class="point"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join('');
+  const points = page.points.map(([t, d]) => `<div class="point"><h2>${esc(t)}</h2><p>${esc(d)}</p></div>`).join('');
   const faq = page.faq.map((f, i) => `<details${i ? '' : ' open'}><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
   return layout(
     { ...page, tool: true },
@@ -190,8 +193,28 @@ function toolPage(page) {
   </div>
 </section>
 <section class="band"><div class="wrap points">${points}</div></section>
-<section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>`,
+${page.slug ? '' : homeSections(page)}
+<section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>
+${page.slug ? relatedGuides(page.slug) : ''}`,
   );
+}
+
+const guideCards = (list) => `<div class="cards">${list.map((g) => `<a class="card" href="/guides/${g.slug}"><strong>${esc(g.h1)}</strong><span>${esc(g.summary)}</span></a>`).join('')}</div>`;
+
+// Home only: the steps, a card per format, what detection covers and the latest guides.
+function homeSections(page) {
+  const steps = page.steps.map(([t, d]) => `<li><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join('');
+  const formats = TOOLS.map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.name)}</strong><span>${esc(t.card)}</span></a>`).join('');
+  const finds = page.finds.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join('');
+  return `<section class="wrap section"><h2>Redact a file in three steps</h2><ol class="steps">${steps}</ol></section>
+<section class="wrap section"><h2>Pick a format</h2><div class="cards">${formats}</div></section>
+<section class="wrap section"><h2>What the AI looks for</h2><dl class="finds">${finds}</dl></section>
+<section class="wrap section"><h2>Guides</h2>${guideCards(GUIDES.slice(0, 6))}<p class="more"><a href="/guides">All ${GUIDES.length} guides</a></p></section>`;
+}
+
+function relatedGuides(slug) {
+  const list = GUIDES.filter((g) => g.tools?.includes(slug));
+  return list.length ? `<section class="wrap section"><h2>Guides</h2>${guideCards(list)}</section>` : '';
 }
 
 const pages = [
@@ -204,6 +227,46 @@ for (const page of LEGAL) {
   await writeFile(
     path.join(dist, `${page.slug}.html`),
     layout({ ...page, jsonLd: false }, `<article class="wrap prose">\n<h1>${esc(page.h1)}</h1>${page.body}\n${page.dated === false ? '' : `<p class="updated">Last updated ${UPDATED}</p>\n`}</article>`),
+  );
+}
+
+await mkdir(path.join(dist, 'guides'), { recursive: true });
+// guides/index.html is served at /guides (html_handling drops the trailing slash).
+await writeFile(
+  path.join(dist, 'guides/index.html'),
+  layout(
+    { ...GUIDES_INDEX, jsonLd: false },
+    `<article class="wrap guides"><h1>${esc(GUIDES_INDEX.h1)}</h1><p class="lead">${esc(GUIDES_INDEX.lead)}</p>${guideCards(GUIDES)}</article>`,
+  ),
+);
+for (const g of GUIDES) {
+  const page = { ...g, slug: `guides/${g.slug}` };
+  const ld = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      { '@type': 'Article', headline: g.h1, description: g.description, datePublished: PUBLISHED, url: url(page.slug), image: url('social.png'), author: { '@type': 'Organization', name: SITE.name, url: url('') }, publisher: { '@type': 'Organization', name: SITE.name, url: url('') } },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: SITE.name, item: url('') },
+          { '@type': 'ListItem', position: 2, name: GUIDES_INDEX.h1, item: url('guides') },
+          { '@type': 'ListItem', position: 3, name: g.h1, item: url(page.slug) },
+        ],
+      },
+    ],
+  };
+  const tools = TOOLS.filter((t) => g.tools?.includes(t.slug));
+  const others = GUIDES.filter((o) => o !== g && (o.tools ?? []).some((t) => g.tools?.includes(t))).concat(GUIDES.filter((o) => o !== g && !o.tools)).slice(0, 2);
+  const next = [
+    ...tools.map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.name)}</strong><span>${esc(t.card)}</span></a>`),
+    ...others.map((o) => `<a class="card" href="/guides/${o.slug}"><strong>${esc(o.h1)}</strong><span>${esc(o.summary)}</span></a>`),
+  ].join('');
+  await writeFile(
+    path.join(dist, `${page.slug}.html`),
+    layout(
+      { ...page, jsonLd: JSON.stringify(ld).replace(/</g, '\\u003c') },
+      `<article class="wrap prose guide">\n<p class="crumbs"><a href="/guides">${esc(GUIDES_INDEX.h1)}</a></p>\n<h1>${esc(g.h1)}</h1>${g.body}</article>\n<section class="wrap guide-next"><h2>Related</h2><div class="cards">${next}</div></section>`,
+    ),
   );
 }
 
@@ -235,7 +298,7 @@ const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.
 await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, script: pricingSrc, jsonLd: PRICING.jsonLd(plans, url) }, PRICING.body(plans, esc)));
 
 const today = new Date().toISOString().slice(0, 10);
-const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'pricing', 'account', ...LEGAL.map((p) => p.slug)];
+const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'guides', ...GUIDES.map((g) => `guides/${g.slug}`), 'pricing', 'account', ...LEGAL.map((p) => p.slug)];
 await writeFile(
   path.join(dist, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>
@@ -254,4 +317,4 @@ for (const f of await readdir(path.join(dist, 'assets'))) {
   if (!keep.has(f)) await rm(path.join(dist, 'assets', f), { force: true });
 }
 
-console.log(`Built ${pages.length + LEGAL.length + 3} pages into dist/ (app: ${appSrc})`);
+console.log(`Built ${pages.length + LEGAL.length + GUIDES.length + 4} pages into dist/ (app: ${appSrc})`);
