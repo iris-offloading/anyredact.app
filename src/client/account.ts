@@ -76,11 +76,11 @@ function signInForm(opts: { email: boolean; google: boolean }) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     say('Sending…');
-    const r = await post('/auth/email', { email: email.value });
+    const r = await post('/api/auth/email', { email: email.value });
     if (r.ok) say(`Check ${email.value} for a sign-in link. It expires in 15 minutes.`);
     else say(r.error || 'Could not send the link.', true);
   });
-  const google = h('a', { className: 'btn google', href: '/auth/google', 'aria-disabled': String(!opts.google), onclick: (e: Event) => !opts.google && e.preventDefault() }, 'Continue with Google');
+  const google = h('a', { className: 'btn google', href: '/api/auth/google', 'aria-disabled': String(!opts.google), onclick: (e: Event) => !opts.google && e.preventDefault() }, 'Continue with Google');
   google.insertAdjacentHTML('afterbegin', GOOGLE_G);
   return card(
     'Sign in to AnyRedact',
@@ -118,7 +118,7 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
       className: 'link-button',
       textContent: 'Sign out',
       onclick: async () => {
-        await post('/auth/logout');
+        await post('/api/auth/logout');
         location.reload();
       },
     }),
@@ -160,7 +160,7 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
 async function signInWithLink(token: string) {
   history.replaceState(null, '', '/account' + location.search);
   root.replaceChildren(card('Signing in…'));
-  const r = await post('/auth/email/verify', { token });
+  const r = await post('/api/auth/email/verify', { token });
   if (!r.ok) say(r.error || 'Sign-in failed.', true);
   else document.querySelector('.signin-link')!.textContent = 'Account';
 }
