@@ -167,7 +167,7 @@ class App {
       }),
     );
 
-    this.intake = h('div', { className: 'intake' }, drop, paste);
+    this.intake = h('div', { className: 'intake' }, drop, ...(format === 'text' || format === 'all' ? [paste] : []));
     this.status = h('div', { className: 'status', role: 'status', 'aria-live': 'polite', hidden: true });
 
     // Workspace: side panel + preview.
