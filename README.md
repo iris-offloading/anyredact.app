@@ -42,6 +42,7 @@ npm test            # unit tests
 npm run test:e2e    # with dev:local running; needs Playwright + Chromium installed (and LibreOffice for the ODS check)
 npm run typecheck
 npm run deploy
+node scripts/indexnow.mjs   # after a deploy: submit the sitemap URLs to IndexNow
 ```
 
 Wrangler runs `npm run build` itself before dev, deploy and preview uploads (see `build` in `wrangler.jsonc`), so Workers Builds needs no build command. Pull request previews use the `previews` bindings.
