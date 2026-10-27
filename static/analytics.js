@@ -1,7 +1,8 @@
 // Google Analytics (GA4). Each hit carries the page path only: no query string, no hash
 // (the sign-in token lives there) and the page's fixed title, so file names, text and
-// findings never reach Google. Cookies wait for consent in the EU, EEA, UK and Switzerland,
-// where the bar asks once; elsewhere they are on until declined (footer "Cookies" button).
+// findings never reach Google. Cookies wait for consent in the EU, EEA, UK and Switzerland
+// (by Cloudflare's country, /api/country), where the bar asks once; elsewhere they are on
+// until declined (footer "Cookies" button).
 (() => {
   const ID = 'G-VB0F93DF69';
   const KEY = 'analytics-consent';
@@ -27,8 +28,9 @@
     window.dataLayer.push(arguments);
   }
   const noAds = { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
-  gtag('consent', 'default', { ...noAds, analytics_storage: 'denied', region: ASK });
-  gtag('consent', 'default', { ...noAds, analytics_storage: 'granted' });
+  // Denied until the visitor's choice or country is known; tags wait up to 500 ms for it.
+  // (Google's own region defaults left analytics denied everywhere in testing.)
+  gtag('consent', 'default', { ...noAds, analytics_storage: 'denied', wait_for_update: 500 });
   const saved = read();
   if (saved) gtag('consent', 'update', { analytics_storage: saved === 'yes' ? 'granted' : 'denied' });
   gtag('set', {
@@ -76,12 +78,26 @@
     document.body.append(bar);
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
+  const ready = new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve));
+  ready.then(() => {
     for (const button of document.querySelectorAll('[data-consent]')) button.addEventListener('click', ask);
-    if (saved) return;
-    fetch('/api/country')
-      .then((r) => r.json())
-      .then(({ country }) => (!country || ASK.includes(country)) && ask())
-      .catch(() => {});
   });
+  if (saved) return;
+  let cached = null;
+  try {
+    cached = sessionStorage.getItem('country');
+  } catch {
+    /* no session storage: ask the server on every page */
+  }
+  (cached ? Promise.resolve(cached) : fetch('/api/country').then((r) => r.json()).then(({ country }) => country || ''))
+    .then((country) => {
+      try {
+        sessionStorage.setItem('country', country);
+      } catch {
+        /* see above */
+      }
+      if (country && !ASK.includes(country)) gtag('consent', 'update', { analytics_storage: 'granted' });
+      else ready.then(ask);
+    })
+    .catch(() => ready.then(ask));
 })();
