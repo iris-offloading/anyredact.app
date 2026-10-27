@@ -7,18 +7,18 @@ import { PageEditor, type Overlay } from './editor.ts';
 import { audioCredits, pagesFor } from '../shared/pricing.ts';
 import { highlight, pieces, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
-import { isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit } from './types.ts';
+import { isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
 
 const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
-  image: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp',
+  image: 'image/png,image/jpeg,image/webp,image/heic,image/heif,.png,.jpg,.jpeg,.webp,.heic,.heif',
   docx: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   pptx: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation',
   sheet: '.xlsx,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,text/csv',
-  text: '.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.yaml,.yml,text/*',
+  text: '.txt,.md,.csv,.tsv,.json,.jsonl,.ndjson,.log,.xml,.html,.yaml,.yml,.toml,.ini,.cfg,.conf,.properties,.env,text/*,application/json,application/xml',
   audio: 'audio/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.aac,.weba',
   all: '',
 };
@@ -42,16 +42,19 @@ function isOffice(doc: LoadedDoc | null) {
   return doc?.kind === 'docx' || doc?.kind === 'pptx';
 }
 
+// Config files are named .env, .env.local or prod.env.
+const TEXT_NAME = /\.(txt|md|csv|tsv|jsonl?|ndjson|log|xml|html?|ya?ml|toml|ini|cfg|conf|properties)$|(^|\.)env(\.[\w-]+)?$/;
+
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
-  if (/^image\/(png|jpeg|webp)$/.test(file.type) || /\.(png|jpe?g|webp)$/.test(n)) return 'image';
+  if (/^image\/(png|jpeg|webp|heic|heif)$/.test(file.type) || /\.(png|jpe?g|webp|heic|heif)$/.test(n)) return 'image';
   if (n.endsWith('.docx')) return 'docx';
   if (n.endsWith('.pptx')) return 'pptx';
   if (/\.(xlsx|ods)$/.test(n)) return 'sheet';
   if (file.type.startsWith('audio/') || /\.(mp3|m4a|wav|flac|ogg|opus|aac|weba)$/.test(n)) return 'audio';
   if (/\.(doc|xls|ppt)$/.test(n)) return null;
-  if (file.type.startsWith('text/') || /\.(txt|md|csv|tsv|json|log|xml|html?|ya?ml)$/.test(n) || !file.type) return 'text';
+  if (file.type.startsWith('text/') || /^application\/(json|xml)$/.test(file.type) || TEXT_NAME.test(n) || !file.type) return 'text';
   return null;
 }
 
@@ -72,7 +75,7 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
     case 'audio':
       return (await import('./formats/audio.ts')).loadAudio(file, progress);
     default:
-      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
+      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, HEIC, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
   }
 }
 
@@ -112,6 +115,9 @@ class App {
   private timeline: Timeline | null = null;
   // Where the text preview or transcript is drawn, below the timeline for audio.
   private textHost = h('div');
+  /** The spreadsheet's cell bar and the cell it shows. */
+  private cellBar: HTMLElement | null = null;
+  private cell: Parameters<ViewHandlers['cell']>[0] | null = null;
   // Transcript words in the order they are said, with the spans that show each one.
   private spoken: { word: SpokenWord; els: HTMLElement[] }[] = [];
   private speaking: HTMLElement[] = [];
@@ -152,6 +158,7 @@ class App {
   private metaBox: HTMLElement;
   private docName: HTMLElement;
   private download: HTMLButtonElement;
+  private transcriptBtn: HTMLButtonElement;
   private warn: HTMLElement;
   private styleRow: HTMLElement;
   private styleSel: HTMLSelectElement;
@@ -170,7 +177,7 @@ class App {
       this.fileInput,
       h('span', { className: 'drop-icon', 'aria-hidden': 'true' }, '⬆'),
       h('span', { className: 'drop-title' }, 'Drop a file here or ', h('u', {}, 'choose one')),
-      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio'),
+      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, () => drop.classList.remove('over'));
@@ -250,6 +257,7 @@ class App {
     this.styleRow = h('label', { className: 'row' }, 'Style ', this.styleSel);
 
     this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
+    this.transcriptBtn = h('button', { type: 'button', className: 'btn transcript', textContent: 'Download redacted transcript', hidden: true, onclick: () => this.export(false, true) });
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
@@ -272,6 +280,7 @@ class App {
       this.metaBox,
       this.styleRow,
       this.download,
+      this.transcriptBtn,
       this.warn,
       this.notes,
     );
@@ -312,6 +321,8 @@ class App {
       this.docName.textContent = file.name;
       const styles = this.doc.styles ?? [];
       this.styleRow.hidden = !styles.length;
+      this.transcriptBtn.hidden = !this.doc.exportTranscript;
+      this.download.textContent = this.doc.kind === 'audio' ? 'Download redacted audio' : 'Download redacted file';
       this.styleSel.replaceChildren(...styles.map(([value, textContent]) => h('option', { value, textContent })));
       this.style = styles[0]?.[0] ?? 'block';
       this.pictureBox.hidden = !this.doc.pages.length;
@@ -627,19 +638,34 @@ class App {
     if (doc.mountView) {
       const host = h('div', { className: 'sheet-view' });
       this.extras = h('div');
-      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlighted cell to redact or keep it. Select a cell to add more.'), host, this.extras);
-      // The grid reports its own selection; text selection only applies to the list under it.
-      this.extras.addEventListener('mouseup', this.onSelect);
-      this.extras.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      // Like Excel's formula bar: the selected cell's whole text, which the grid can cut off.
+      this.cellBar = h('div', { className: 'cell-bar' });
+      this.cell = null;
+      this.textHost = h('div', {}, this.cellBar);
+      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select a cell or its text to add more.'), this.textHost, host, this.extras);
+      // The grid reports its own selection; text selection applies to the cell bar and the list under the grid.
+      for (const el of [this.textHost, this.extras]) {
+        el.addEventListener('mouseup', this.onSelect);
+        el.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      }
+      this.drawCellBar();
       const view = await doc.mountView(host, {
         toggle: (keys, on) => this.toggle(keys, on),
-        select: (pick) => this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : ''),
+        cell: (c) => {
+          this.cell = c;
+          this.drawCellBar();
+          // Selecting a cell without highlights offers to redact its text.
+          const s = c.spot;
+          const pick = s && !this.findings.some((f) => f.unitId === s.unitId && f.start < s.end && f.end > s.start) ? s : null;
+          this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : '');
+        },
       });
       if (this.doc !== doc) return view.dispose();
       this.view = view;
       this.refreshPreview();
       return;
     }
+    this.cellBar = null;
     this.editors = doc.pages.map((page) => this.pageEditor(page));
     // Pictures in a Word or PowerPoint file show at their own size rather than full width.
     if (isOffice(doc)) this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
@@ -690,6 +716,24 @@ class App {
     this.refreshPreview();
   }
 
+  private drawCellBar() {
+    const bar = this.cellBar;
+    const c = this.cell;
+    if (!bar || !this.doc) return;
+    const ref = h('span', { className: 'cell-ref' }, c?.label ?? '');
+    const spot = c?.spot;
+    const index = spot ? this.doc.units.findIndex((u) => u.id === spot.unitId) : -1;
+    if (!spot || index < 0) return bar.replaceChildren(ref, h('div', { className: 'cell-text' }));
+    const { unitId, start, end } = spot;
+    const text = this.doc.units[index].text.slice(start, end);
+    const spans = this.findings
+      .filter((f) => f.unitId === unitId && f.start < end && f.end > start)
+      .map((f) => ({ ...f, start: Math.max(f.start, start) - start, end: Math.min(f.end, end) - start }));
+    const el = h('div', { className: 'unit cell-text', 'data-unit': String(index), 'data-from': String(start) });
+    for (const p of pieces(text.length, spans)) el.append(p.top ? this.mark(p.top, text.slice(p.start, p.end)) : text.slice(p.start, p.end));
+    bar.replaceChildren(ref, el);
+  }
+
   private pageEditor(page: Page) {
     return new PageEditor({
       page,
@@ -724,6 +768,7 @@ class App {
     if (!picks.length || sel.trim().length < 2) return;
     const done = (fn: () => void) => () => {
       getSelection()?.removeAllRanges();
+      this.preview.querySelector('.sel-add')?.remove();
       fn();
     };
     this.textHost.append(
@@ -749,8 +794,10 @@ class App {
         r.setEnd(node, at);
         return r.toString().length;
       };
-      let start = el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0;
-      let end = el.contains(range.endContainer) ? offset(range.endContainer, range.endOffset) : unit.text.length;
+      // The cell bar shows part of a unit, from data-from on.
+      const from = Number(el.dataset.from ?? 0);
+      let start = from + (el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0);
+      let end = el.contains(range.endContainer) ? from + offset(range.endContainer, range.endOffset) : from + el.textContent!.length;
       while (start < end && /\s/.test(unit.text[start])) start++;
       while (end > start && /\s/.test(unit.text[end - 1])) end--;
       if (end > start) out.push({ unitId: unit.id, start, end });
@@ -794,6 +841,7 @@ class App {
       return;
     }
     this.view?.update(this.findings);
+    this.drawCellBar();
     // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
     // Spreadsheet cells show in the grid above, so only comments, headers and footers are listed here.
     const byUnit = new Map<string, Finding[]>();
@@ -941,11 +989,11 @@ class App {
     if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - b.height / 3;
   }
 
-  private async export(skipCheck = false) {
+  private async export(skipCheck = false, transcript = false) {
     const doc = this.doc;
     if (!doc || this.busy) return;
     this.busy = true;
-    this.download.disabled = true;
+    this.download.disabled = this.transcriptBtn.disabled = true;
     this.warn.hidden = true;
     let checkNote = '';
     try {
@@ -955,14 +1003,17 @@ class App {
         try {
           const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
           if (this.doc !== doc) return;
-          if (left.length) return this.warnLeft(left);
+          if (left.length) return this.warnLeft(left, transcript);
         } catch (err) {
           console.warn(err);
           checkNote = ' The final check could not run, so review the file carefully.';
         }
       }
       this.say('Preparing your redacted file…', false, true);
-      const { blob, filename } = await doc.exportFile(this.findings, this.boxes, this.style, (m) => this.say(m, false, true));
+      const { blob, filename } =
+        transcript && doc.exportTranscript
+          ? await doc.exportTranscript(this.findings, this.boxes)
+          : await doc.exportFile(this.findings, this.boxes, this.style, (m) => this.say(m, false, true));
       const url = URL.createObjectURL(blob);
       const a = h('a', { href: url, download: filename });
       document.body.append(a);
@@ -977,7 +1028,7 @@ class App {
       this.say(err instanceof Error ? err.message : 'Export failed.', true, true);
     } finally {
       this.busy = false;
-      this.download.disabled = false;
+      this.download.disabled = this.transcriptBtn.disabled = false;
     }
   }
 
@@ -1014,7 +1065,7 @@ class App {
     });
   }
 
-  private warnLeft(left: string[]) {
+  private warnLeft(left: string[], transcript: boolean) {
     const list = left.map((k) => CHECK_LABELS[k]);
     const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
     this.say('');
@@ -1024,7 +1075,7 @@ class App {
         'div',
         { className: 'warn-actions' },
         h('button', { type: 'button', className: 'btn', textContent: 'Keep reviewing', onclick: () => (this.warn.hidden = true) }),
-        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true) }),
+        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true, transcript) }),
       ),
     );
     this.warn.hidden = false;

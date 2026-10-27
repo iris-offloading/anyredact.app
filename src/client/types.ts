@@ -84,8 +84,8 @@ export type RedactStyle = 'block' | 'label' | 'beep' | 'silence';
 
 export interface ViewHandlers {
   toggle(keys: string[], on: boolean): void;
-  /** A spot the user selected in the view, or null when the selection holds none. */
-  select(pick: { unitId: string; start: number; end: number } | null): void;
+  /** The cell the user clicked, by its A1 name, with where its text sits in a unit. */
+  cell(c: { label: string; spot?: { unitId: string; start: number; end: number } }): void;
 }
 
 /** A preview drawn by the format itself, such as the spreadsheet grid. */
@@ -119,6 +119,8 @@ export interface LoadedDoc {
   /** Frees what the loader holds (object URLs, open readers) when the file is closed. */
   dispose?(): void;
   exportFile(findings: Finding[], marks: ManualMark[], style: RedactStyle, progress?: Progress): Promise<{ blob: Blob; filename: string }>;
+  /** Audio: the transcript as text, masked where the recording is bleeped. */
+  exportTranscript?(findings: Finding[], marks: ManualMark[]): Promise<{ blob: Blob; filename: string }>;
 }
 
 export interface Layout {

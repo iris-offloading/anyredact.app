@@ -29,8 +29,10 @@ import {
 import { pool } from '../../shared/pool.ts';
 import { CHUNK_OVERLAP, CHUNK_SECONDS, SPEECH_RATE } from '../../shared/pricing.ts';
 import { BLEEP_PAD, buildTranscript, mergeChunks, padRanges, paragraphs, timeRangeFor, type Word } from '../../shared/transcript.ts';
+import { maskText } from '../../shared/detect.ts';
 import { postApi } from '../ai.ts';
-import { isBox, outputName, type LoadedDoc, type MetaField, type Progress, type RedactStyle } from '../types.ts';
+import { clock } from '../timeline.ts';
+import { isBox, outputName, type Finding, type LoadedDoc, type MetaField, type Progress, type RedactStyle } from '../types.ts';
 import { show } from './metadata.ts';
 
 export const MAX_AUDIO_SECONDS = 2 * 60 * 60;
@@ -95,6 +97,18 @@ export async function loadAudio(file: File, progress: Progress): Promise<LoadedD
       );
       const { blob, ext } = await exportAudio(input, format, ranges, style, progress);
       return { blob, filename: outputName(file.name, ext) };
+    },
+    async exportTranscript(findings, marks) {
+      const stretches = marks.flatMap((m) => (isBox(m) ? [] : [m.times]));
+      const text = doc.units
+        .map((u) => {
+          const spans = findings.filter((f) => f.enabled && f.unitId === u.id);
+          // Words spoken inside a stretch picked on the timeline are bleeped too.
+          for (const w of u.words ?? []) if (stretches.some(([s, e]) => w.start < e && w.end > s)) spans.push({ start: w.from, end: w.to } as Finding);
+          return `[${clock(u.words?.[0]?.start ?? 0)}] ${maskText(u.text, spans)}`;
+        })
+        .join('\n\n');
+      return { blob: new Blob([text + '\n'], { type: 'text/plain;charset=utf-8' }), filename: outputName(file.name, 'txt').replace(/\.txt$/, '-transcript.txt') };
     },
   };
   return doc;

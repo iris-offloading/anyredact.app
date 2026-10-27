@@ -202,6 +202,27 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
 /** Laid-out text has no line breaks, and a line break inside a paragraph may show as a space. */
 const key = (s: string) => s.replace(/\s+/g, '');
 
+// What pptx-to-html draws with. It writes some values from the file (colors in charts) into
+// attributes as they are, so a crafted deck could add elements of its own, such as a frame
+// that loads outside scripts. Anything else is dropped before the slide is shown.
+const TAGS = new Set(['div', 'span', 'ul', 'ol', 'li', 'br', 'img', 'table', 'colgroup', 'col', 'tbody', 'tr', 'td', 'svg', 'defs', 'marker', 'path', 'polyline', 'polygon', 'line', 'circle', 'text']);
+const ATTRS = new Set(['class', 'style', 'src', 'colspan', 'rowspan', 'viewbox', 'overflow', 'd', 'points', 'fill', 'fill-opacity', 'stroke', 'stroke-width', 'vector-effect', 'marker-start', 'marker-end', 'id', 'markerunits', 'markerwidth', 'markerheight', 'refx', 'refy', 'orient', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'width', 'height', 'text-anchor', 'font-size']);
+
+function sanitize(root: DocumentFragment) {
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    // Skips what went with a removed parent.
+    if (!root.contains(el)) continue;
+    if (!TAGS.has(el.localName)) {
+      el.remove();
+      continue;
+    }
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (!ATTRS.has(name) || (name === 'src' && !/^data:image\/(png|jpeg|gif|webp|bmp|svg\+xml|tiff);base64,/.test(attr.value))) el.removeAttribute(attr.name);
+    }
+  }
+}
+
 /**
  * Draws each slide with pptx-to-html, at the deck's own size. The renderer
  * leaves no trace of which shape became which element, so each text unit is
@@ -215,7 +236,13 @@ async function render(file: File, zip: JSZip, count: number, width: number, heig
     const el = document.createElement('div');
     el.className = 'slide-page';
     el.setAttribute('aria-label', `Slide ${i + 1}`);
-    el.innerHTML = s;
+    // A template parses the markup without loading anything, so it can be cleaned first.
+    const t = document.createElement('template');
+    t.innerHTML = s;
+    sanitize(t.content);
+    // Markup that closed the slide early is left out with the rest of what falls outside it.
+    const drawn = t.content.firstElementChild;
+    if (drawn?.classList.contains('slide')) el.append(drawn);
     // A text box is a flex column, where a highlight would become a line of its own; one span keeps the text inline.
     for (const box of Array.from(el.querySelectorAll<HTMLElement>('div'))) {
       if (box.style.display !== 'flex' || !Array.from(box.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())) continue;

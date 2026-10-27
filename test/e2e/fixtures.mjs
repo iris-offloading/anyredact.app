@@ -99,6 +99,21 @@ ${pic('rId8', 2, 'Logo')}
   writeFileSync(`${out}/sample.pptx`, await z.generateAsync({ type: 'nodebuffer' }));
 }
 
+// A deck whose chart color closes the drawing early and adds a frame that loads a script.
+{
+  const deck = new PptxGenJS();
+  const slide = deck.addSlide();
+  slide.addText('Hello Jane Doe', { x: 0.5, y: 0.3, w: 8, h: 0.8 });
+  slide.addChart(deck.ChartType.pie, [{ name: 'Sales', labels: ['North', 'South'], values: [3, 5] }], { x: 1, y: 1.5, w: 5, h: 3.5, chartColors: ['AA0000', '00AA00'] });
+  const z = await JSZip.loadAsync(await deck.write({ outputType: 'nodebuffer' }));
+  const attack = '</svg></div><iframe id="injected" srcdoc="<script src=https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js></script>"></iframe><a id="injected-link" href="https://example.com">Sign in</a><svg><path d="';
+  const esc = (v) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  for (const n of Object.keys(z.files).filter((n) => /^ppt\/charts\/chart\d+\.xml$/.test(n))) {
+    z.file(n, (await z.file(n).async('string')).replace('val="AA0000"', `val="AA0000${esc(attack)}"`));
+  }
+  writeFileSync(`${out}/injected.pptx`, await z.generateAsync({ type: 'nodebuffer' }));
+}
+
 writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\nNext steps\nHelpline: 0800 123 4567\n');
 
 // Spreadsheet: styled header, a phone stored as a number, a formula copying an email,
