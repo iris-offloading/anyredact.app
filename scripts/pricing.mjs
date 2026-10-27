@@ -16,29 +16,20 @@ const offer = (name, cents, monthly) => {
 export const PRICING = {
   slug: 'pricing',
   nav: 'Pricing',
-  title: 'Pricing | AnyRedact',
+  title: 'Pricing: Free Daily Credits and Plans | AnyRedact',
   description: '10 free AI redaction credits a day, monthly plans from $9, and credits from $5 that never expire. One credit covers about a page of text.',
   h1: 'Pricing',
 
-  jsonLd({ PRODUCTS, FREE_CREDITS }, url) {
-    const graph = [
-      {
-        '@type': 'WebApplication',
-        name: 'AnyRedact',
-        url: url(''),
-        applicationCategory: 'UtilitiesApplication',
-        operatingSystem: 'Any (web browser)',
-        offers: [offer(`Free, ${FREE_CREDITS} credits a day`, 0), ...PRODUCTS.map((p) => offer(p.name, p.cents, p.monthly))],
-      },
-      {
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'AnyRedact', item: url('') },
-          { '@type': 'ListItem', position: 2, name: 'Pricing', item: url('pricing') },
-        ],
-      },
-    ];
-    return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(/</g, '\\u003c');
+  // The WebApplication node for the page's JSON-LD; build.mjs adds the rest of the graph.
+  app({ PRODUCTS, FREE_CREDITS }, node) {
+    return {
+      '@type': 'WebApplication',
+      ...node,
+      name: 'AnyRedact',
+      applicationCategory: 'UtilitiesApplication',
+      operatingSystem: 'Any (web browser)',
+      offers: [offer(`Free, ${FREE_CREDITS} credits a day`, 0), ...PRODUCTS.map((p) => offer(p.name, p.cents, p.monthly))],
+    };
   },
 
   body({ PRODUCTS, FREE_CREDITS, AUDIO_CREDITS_PER_MINUTE, CHECK_CREDITS, CREDIT_CHARS, price }, esc) {

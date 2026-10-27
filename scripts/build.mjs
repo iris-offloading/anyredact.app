@@ -1,6 +1,7 @@
 // Builds the static site into dist/: bundles the client, then renders one
 // HTML page per tool plus the home page, sitemap and robots.txt.
 import { build, transform } from 'esbuild';
+import { execFileSync } from 'node:child_process';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -14,6 +15,19 @@ import { PRICING } from './pricing.mjs';
 const root = path.resolve(import.meta.dirname, '..');
 const dist = path.join(root, 'dist');
 const require = createRequire(import.meta.url);
+
+// Sitemap lastmod: the last commit that touched a page's content. Without git
+// history the build date stands in.
+const today = new Date().toISOString().slice(0, 10);
+const modified = (...files) => {
+  try {
+    return execFileSync('git', ['log', '-1', '--format=%cs', '--', ...files], { cwd: root, encoding: 'utf8' }).trim() || today;
+  } catch {
+    return today;
+  }
+};
+const toolsModified = modified('scripts/pages.mjs', 'scripts/diagrams.mjs');
+const guidesModified = modified('scripts/guides.mjs', 'scripts/diagrams.mjs');
 
 // Overwrite in place and prune stale assets at the end, rather than deleting
 // dist/ up front: `wrangler dev` serves from it while rebuilding.
@@ -104,39 +118,64 @@ function footer() {
   return `<footer class="site-footer"><div class="wrap">
   <div><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
-  <div><h2>About</h2><ul>${about}<li><button type="button" class="footer-link" data-consent>Cookies</button></li></ul></div>
+  <div><h2>About</h2><ul>${about}<li><button type="button" class="footer-link" data-consent>Cookie settings</button></li></ul></div>
 </div></footer>`;
 }
 
-function jsonLd(page) {
+// Every page's JSON-LD is one @graph: the site and its publisher, the page itself,
+// then the page's own nodes, linked by @id.
+const ORG = `${SITE.origin}/#organization`;
+const WEBSITE = `${SITE.origin}/#website`;
+const ref = (id) => ({ '@id': id });
+
+function ld(page, { type = 'WebPage', nodes = [], crumbs = [], extra = {} } = {}) {
+  const pageUrl = url(page.slug);
+  const trail = page.slug ? [[SITE.name, ''], ...crumbs, [page.h1, page.slug]] : [];
   const graph = [
+    { '@type': 'WebSite', '@id': WEBSITE, url: url(''), name: SITE.name, description: SITE.tagline, inLanguage: 'en', publisher: ref(ORG) },
+    { '@type': 'Organization', '@id': ORG, name: SITE.name, url: url(''), logo: { '@type': 'ImageObject', url: url('apple-touch-icon.png'), width: '180', height: '180' }, email: CONTACT },
     {
-      '@type': 'WebApplication',
-      name: page.slug ? `${SITE.name}: ${page.h1}` : SITE.name,
-      url: url(page.slug),
+      '@type': type,
+      '@id': `${pageUrl}#webpage`,
+      url: pageUrl,
+      name: page.title,
       description: page.description,
-      applicationCategory: 'UtilitiesApplication',
-      operatingSystem: 'Any (web browser)',
-      browserRequirements: 'Requires JavaScript',
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      inLanguage: 'en',
+      isPartOf: ref(WEBSITE),
+      ...(page.lastmod && { dateModified: page.lastmod }),
+      ...(trail.length && { breadcrumb: ref(`${pageUrl}#breadcrumb`) }),
+      ...extra,
     },
+    ...nodes,
   ];
-  if (page.faq?.length) {
-    graph.push({
-      '@type': 'FAQPage',
-      mainEntity: page.faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
-    });
-  }
-  if (page.slug) {
+  if (trail.length) {
     graph.push({
       '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: SITE.name, item: url('') },
-        { '@type': 'ListItem', position: 2, name: page.h1, item: url(page.slug) },
-      ],
+      '@id': `${pageUrl}#breadcrumb`,
+      itemListElement: trail.map(([name, slug], i) => ({ '@type': 'ListItem', position: i + 1, name, item: url(slug) })),
     });
   }
   return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(/</g, '\\u003c');
+}
+
+// The home page describes AnyRedact itself (/pricing adds its offers); each tool page its own format.
+const appId = (page) => (page.slug ? `${url(page.slug)}#app` : `${SITE.origin}/#app`);
+
+function toolLd(page) {
+  const app = {
+    '@type': 'WebApplication',
+    '@id': appId(page),
+    name: page.slug ? `${SITE.name}: ${page.h1}` : SITE.name,
+    url: url(page.slug),
+    description: page.description,
+    applicationCategory: 'UtilitiesApplication',
+    operatingSystem: 'Any (web browser)',
+    browserRequirements: 'Requires JavaScript',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    provider: ref(ORG),
+  };
+  const faq = page.faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } }));
+  return ld(page, { type: 'FAQPage', nodes: [app], extra: { about: ref(app['@id']), mainEntity: faq } });
 }
 
 function layout(page, main) {
@@ -166,7 +205,7 @@ function layout(page, main) {
 <link rel="stylesheet" href="/styles.css?v=${cssHash}">
 <script src="/theme.js?v=${themeHash}"></script>
 <script src="/analytics.js?v=${analyticsHash}"></script>
-${page.jsonLd === false ? '' : `<script type="application/ld+json">${typeof page.jsonLd === 'string' ? page.jsonLd : jsonLd(page)}</script>`}
+${page.jsonLd ? `<script type="application/ld+json">${page.jsonLd}</script>` : ''}
 ${page.tool ? `<script type="module" src="${appSrc}"></script>` : ''}
 ${page.script ? `<script type="module" src="${page.script}"></script>` : ''}
 </head>
@@ -183,7 +222,7 @@ function toolPage(page) {
   const points = page.points.map(([t, d]) => `<div class="point"><h2>${esc(t)}</h2><p>${esc(d)}</p></div>`).join('');
   const faq = page.faq.map((f, i) => `<details${i ? '' : ' open'}><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
   return layout(
-    { ...page, tool: true },
+    { ...page, tool: true, jsonLd: toolLd(page) },
     `<section class="hero wrap">
   <div class="hero-copy">
     <h1>${page.slug ? esc(page.h1) : esc(page.h1).replace('finds', '<span class="redacted">finds</span>')}</h1>
@@ -229,7 +268,7 @@ for (const [page, file] of pages) await writeFile(path.join(dist, file), toolPag
 for (const page of LEGAL) {
   await writeFile(
     path.join(dist, `${page.slug}.html`),
-    layout({ ...page, jsonLd: false }, `<article class="wrap prose">\n<h1>${esc(page.h1)}</h1>${page.body}\n${page.dated === false ? '' : `<p class="updated">Last updated ${UPDATED}</p>\n`}</article>`),
+    layout({ ...page, jsonLd: ld(page, { type: page.slug === 'contact' ? 'ContactPage' : 'WebPage' }) }, `<article class="wrap prose">\n<h1>${esc(page.h1)}</h1>${page.body}\n${page.dated === false ? '' : `<p class="updated">Last updated ${UPDATED}</p>\n`}</article>`),
   );
 }
 
@@ -238,26 +277,33 @@ await mkdir(path.join(dist, 'guides'), { recursive: true });
 await writeFile(
   path.join(dist, 'guides/index.html'),
   layout(
-    { ...GUIDES_INDEX, jsonLd: false },
+    {
+      ...GUIDES_INDEX,
+      jsonLd: ld(GUIDES_INDEX, {
+        type: 'CollectionPage',
+        extra: { mainEntity: { '@type': 'ItemList', itemListElement: GUIDES.map((g, i) => ({ '@type': 'ListItem', position: i + 1, name: g.h1, url: url(`guides/${g.slug}`) })) } },
+      }),
+    },
     `<article class="wrap guides"><h1>${esc(GUIDES_INDEX.h1)}</h1><p class="lead">${esc(GUIDES_INDEX.lead)}</p>${guideCards(GUIDES)}</article>`,
   ),
 );
 for (const g of GUIDES) {
   const page = { ...g, slug: `guides/${g.slug}` };
-  const ld = {
-    '@context': 'https://schema.org',
-    '@graph': [
-      { '@type': 'Article', headline: g.h1, description: g.description, datePublished: PUBLISHED, url: url(page.slug), image: url('social.png'), author: { '@type': 'Organization', name: SITE.name, url: url('') }, publisher: { '@type': 'Organization', name: SITE.name, url: url('') } },
-      {
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: SITE.name, item: url('') },
-          { '@type': 'ListItem', position: 2, name: GUIDES_INDEX.h1, item: url('guides') },
-          { '@type': 'ListItem', position: 3, name: g.h1, item: url(page.slug) },
-        ],
-      },
-    ],
+  const article = {
+    '@type': 'Article',
+    '@id': `${url(page.slug)}#article`,
+    headline: g.h1,
+    description: g.description,
+    datePublished: PUBLISHED,
+    dateModified: guidesModified,
+    url: url(page.slug),
+    image: url('social.png'),
+    inLanguage: 'en',
+    mainEntityOfPage: ref(`${url(page.slug)}#webpage`),
+    author: ref(ORG),
+    publisher: ref(ORG),
   };
+  const pageLd = ld({ ...page, lastmod: guidesModified }, { nodes: [article], crumbs: [[GUIDES_INDEX.h1, 'guides']] });
   const tools = TOOLS.filter((t) => g.tools?.includes(t.slug));
   const others = GUIDES.filter((o) => o !== g && (o.tools ?? []).some((t) => g.tools?.includes(t))).concat(GUIDES.filter((o) => o !== g && !o.tools)).slice(0, 2);
   const next = [
@@ -267,7 +313,7 @@ for (const g of GUIDES) {
   await writeFile(
     path.join(dist, `${page.slug}.html`),
     layout(
-      { ...page, jsonLd: JSON.stringify(ld).replace(/</g, '\\u003c') },
+      { ...page, jsonLd: pageLd },
       `<article class="wrap prose guide">\n<p class="crumbs"><a href="/guides">${esc(GUIDES_INDEX.h1)}</a></p>\n<h1>${esc(g.h1)}</h1>${g.body}</article>\n<section class="wrap guide-next"><h2>Related</h2><div class="cards">${next}</div></section>`,
     ),
   );
@@ -276,7 +322,7 @@ for (const g of GUIDES) {
 await writeFile(
   path.join(dist, '404.html'),
   layout(
-    { slug: '404', title: 'Page not found | AnyRedact', description: 'Page not found.', jsonLd: false },
+    { slug: '404', title: 'Page not found | AnyRedact', description: 'Page not found.' },
     `<article class="wrap solo"><h1>Page not found</h1><p>Try the <a href="/">redaction tool</a> instead.</p></article>`,
   ).replace('<link rel="canonical" href="https://anyredact.app/404">', '<meta name="robots" content="noindex">'),
 );
@@ -288,25 +334,29 @@ await writeFile(
       slug: 'account',
       title: 'Account | AnyRedact',
       description: 'Sign in to see your balance, manage your plan or buy more credits.',
-      jsonLd: false,
       script: accountSrc,
     },
     `<article class="wrap solo"><div id="account"></div></article>`,
-  ),
+  ).replace('<link rel="canonical" href="https://anyredact.app/account">', '<meta name="robots" content="noindex">'),
 );
 
 // The pricing page reads plans and credits from src/shared/pricing.ts, so it can't drift from checkout.
 const pricingTs = await transform(await readFile(path.join(root, 'src/shared/pricing.ts'), 'utf8'), { loader: 'ts', format: 'esm' });
 const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.code).toString('base64')}`);
-await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, script: pricingSrc, jsonLd: PRICING.jsonLd(plans, url) }, PRICING.body(plans, esc)));
+await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, script: pricingSrc, jsonLd: ld(PRICING, { nodes: [PRICING.app(plans, { '@id': `${SITE.origin}/#app`, url: url(''), provider: ref(ORG) })] }) }, PRICING.body(plans, esc)));
 
-const today = new Date().toISOString().slice(0, 10);
-const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'guides', ...GUIDES.map((g) => `guides/${g.slug}`), 'pricing', 'account', ...LEGAL.map((p) => p.slug)];
+// /account and the 404 page are noindex, so they stay out.
+const sitemapUrls = [
+  ...['', ...TOOLS.map((t) => t.slug)].map((s) => [s, toolsModified]),
+  ...['guides', ...GUIDES.map((g) => `guides/${g.slug}`)].map((s) => [s, guidesModified]),
+  ['pricing', modified('scripts/pricing.mjs', 'src/shared/pricing.ts')],
+  ...LEGAL.map((p) => [p.slug, modified('scripts/legal.mjs')]),
+];
 await writeFile(
   path.join(dist, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${sitemapUrls.map((s) => `  <url><loc>${url(s)}</loc><lastmod>${today}</lastmod></url>`).join('\n')}
+${sitemapUrls.map(([s, lastmod]) => `  <url><loc>${url(s)}</loc><lastmod>${lastmod}</lastmod></url>`).join('\n')}
 </urlset>
 `,
 );
