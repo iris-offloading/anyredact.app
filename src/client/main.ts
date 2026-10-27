@@ -184,6 +184,12 @@ class App {
     this.fileInput = h('input', { type: 'file', accept: ACCEPT[format], className: 'visually-hidden', id: 'file-input' });
     this.fileInput.addEventListener('change', () => this.fileInput.files?.[0] && this.open(this.fileInput.files[0]));
 
+    // Some phones report a fine pointer that hovers, so the user agent is checked too.
+    const touch =
+      matchMedia('(hover: none), (pointer: coarse)').matches ||
+      (navigator as Navigator & { userAgentData?: { mobile: boolean } }).userAgentData?.mobile ||
+      /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
+      (/Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1);
     const drop = h(
       'label',
       { className: 'drop', for: 'file-input' },
@@ -193,8 +199,8 @@ class App {
         'aria-hidden': 'true',
         innerHTML: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
       }),
-      h('span', { className: 'drop-title' }, h('u', {}, 'Choose a file'), h('span', { className: 'drop-here' }, ' or drop it here')),
-      h('span', { className: 'drop-or' }, 'or paste with ', h('kbd', {}, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V')),
+      h('span', { className: 'drop-title' }, h('u', {}, 'Choose a file'), ...(touch ? [] : [h('span', { className: 'drop-here' }, ' or drop it here')])),
+      ...(touch ? [] : [h('span', { className: 'drop-or' }, 'or paste with ', h('kbd', {}, /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V'))]),
       h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, images, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
@@ -210,7 +216,7 @@ class App {
     const pasteText = (text: string) => text.trim() && this.open(new File([text], 'pasted-text.txt', { type: 'text/plain' }));
     const paste = h(
       'div',
-      { className: 'paste' + (format === 'text' ? ' always' : '') },
+      { className: 'paste' + (format === 'text' || touch ? ' always' : '') },
       h('label', { for: 'paste-text' }, 'Or paste text'),
       pasteArea,
       h('button', { type: 'button', className: 'btn', textContent: 'Find personal info', onclick: () => pasteText(pasteArea.value) }),
