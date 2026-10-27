@@ -26,6 +26,28 @@ zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="
 <w:p><w:del w:id="1" w:author="Bob Author"><w:r><w:delText>old ssn 123-45-6789</w:delText></w:r></w:del></w:p>
 </w:body></w:document>`);
 writeFileSync(`${out}/sample.docx`, await zip.generateAsync({ type: 'nodebuffer' }));
+// A Word file with pictures: text and EXIF in a photo, alt text, a GIF and a first-page thumbnail.
+{
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300"><rect width="100%" height="100%" fill="#fff"/><text x="40" y="120" font-family="Arial" font-size="48">Patient: Jane Doe</text><text x="40" y="210" font-family="Arial" font-size="48">SSN 123-45-6789</text></svg>`;
+  const photo = await withMetadata(await sharp(Buffer.from(svg)).jpeg().toBuffer());
+  const gif = await sharp({ create: { width: 120, height: 80, channels: 3, background: '#3a7' } }).gif().toBuffer();
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const pic = (rid, id, descr) => `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="5486400" cy="1828800"/><wp:docPr id="${id}" name="Jane passport.jpg" descr="${descr}"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="Jane passport.jpg" descr="${descr}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/></pic:blipFill><pic:spPr/></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+  const z = new JSZip();
+  z.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="gif" ContentType="image/gif"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+  z.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" Target="docProps/thumbnail.jpeg"/></Relationships>`);
+  z.file('docProps/thumbnail.jpeg', photo);
+  z.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="${R}/image" Target="media/image1.jpeg"/><Relationship Id="rId8" Type="${R}/image" Target="media/image2.gif"/></Relationships>`);
+  z.file('word/media/image1.jpeg', photo);
+  z.file('word/media/image2.gif', gif);
+  z.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W} xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>
+<w:p><w:r><w:t>Scan attached.</w:t></w:r></w:p>
+${pic('rId7', 1, 'ID card, call 415-555-0132')}
+${pic('rId8', 2, 'Logo')}
+</w:body></w:document>`);
+  writeFileSync(`${out}/pictures.docx`, await z.generateAsync({ type: 'nodebuffer' }));
+}
+
 writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\nNext steps\nHelpline: 0800 123 4567\n');
 
 /** Adds EXIF (camera, author, date, GPS) and XMP to a JPEG, for the metadata test. */
