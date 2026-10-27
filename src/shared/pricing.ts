@@ -1,5 +1,5 @@
 // Paid AI detection is sold as credits. One credit covers 3,000 characters of
-// extracted text (roughly one dense page) or one picture. Free use is the daily
+// extracted text (roughly one dense page), one picture or one minute of audio. Free use is the daily
 // allowance in src/worker/quota.ts. Code and the database still call them pages.
 
 export const PAGE_CHARS = 3_000;
@@ -24,5 +24,13 @@ export const PRODUCTS: Product[] = [
 ];
 
 export const pagesFor = (chars: number) => Math.max(1, Math.ceil(chars / PAGE_CHARS));
+
+/** Credits for transcribing a stretch of audio: one per started minute. */
+export const audioCredits = (seconds: number) => Math.max(1, Math.ceil(seconds / 60));
+
+// Audio goes to the Worker as 16 kHz mono 16-bit WAV, in chunks of this many seconds.
+export const SPEECH_RATE = 16_000;
+export const CHUNK_SECONDS = 240;
+export const CHUNK_OVERLAP = 1;
 
 export const price = (cents: number) => `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`;

@@ -19,6 +19,17 @@ export interface Unit {
   quiet?: boolean;
   /** Maps a character range to rectangles in page bitmap pixels. */
   rectsFor?(start: number, end: number): Rect[];
+  /** Audio: each spoken word, as its character range in `text` and its time in the recording. */
+  words?: SpokenWord[];
+  /** Audio: maps a character range of the transcript to seconds in the recording. */
+  timesFor?(start: number, end: number): [number, number] | null;
+}
+
+export interface SpokenWord {
+  from: number;
+  to: number;
+  start: number;
+  end: number;
 }
 
 /** A rendered page bitmap (PDF page or image) that can carry redaction boxes. */
@@ -41,12 +52,26 @@ export interface Finding {
   publicHint?: string;
   page?: number;
   rects: Rect[];
+  /** Audio: the stretch of the recording to bleep, in seconds. */
+  times?: [number, number];
 }
 
+/** A box drawn on a page. */
 export interface ManualBox extends Rect {
   id: string;
   page: number;
 }
+
+/** Audio: a stretch picked on the timeline, in seconds. */
+export interface ManualStretch {
+  id: string;
+  times: [number, number];
+}
+
+/** What the visitor marked by hand: boxes on pages, stretches of a recording. */
+export type ManualMark = ManualBox | ManualStretch;
+
+export const isBox = (m: ManualMark): m is ManualBox => 'page' in m;
 
 export interface MetaField {
   label: string;
@@ -55,7 +80,7 @@ export interface MetaField {
   key: boolean;
 }
 
-export type RedactStyle = 'block' | 'label';
+export type RedactStyle = 'block' | 'label' | 'beep' | 'silence';
 
 export interface ViewHandlers {
   toggle(keys: string[], on: boolean): void;
@@ -72,7 +97,7 @@ export interface DocView {
 }
 
 export interface LoadedDoc {
-  kind: 'text' | 'image' | 'pdf' | 'docx' | 'sheet';
+  kind: 'text' | 'image' | 'pdf' | 'docx' | 'sheet' | 'audio';
   name: string;
   units: Unit[];
   pages: Page[];
@@ -85,7 +110,15 @@ export interface LoadedDoc {
   /** Units shown in the custom view; the rest are listed under it. */
   gridUnits?: Set<string>;
   mountView?(el: HTMLElement, on: ViewHandlers): Promise<DocView>;
-  exportFile(findings: Finding[], boxes: ManualBox[], style: RedactStyle): Promise<{ blob: Blob; filename: string }>;
+  /** Redaction styles to offer, default first; none for formats with only one. */
+  styles?: [RedactStyle, string][];
+  /** Audio: the recording, for the player and timeline. */
+  audio?: { url: string; duration: number };
+  /** Audio: writes out the speech, which fills `units`. Runs once the user agreed to send it. */
+  transcribe?(progress: Progress): Promise<void>;
+  /** Frees what the loader holds (object URLs, open readers) when the file is closed. */
+  dispose?(): void;
+  exportFile(findings: Finding[], marks: ManualMark[], style: RedactStyle, progress?: Progress): Promise<{ blob: Blob; filename: string }>;
 }
 
 export interface Layout {
@@ -96,6 +129,11 @@ export interface Layout {
 }
 
 export type Progress = (message: string) => void;
+
+export const TEXT_STYLES: [RedactStyle, string][] = [
+  ['block', 'Black out (█████)'],
+  ['label', 'Replace with label ([EMAIL])'],
+];
 
 export function outputName(name: string, ext?: string): string {
   const dot = name.lastIndexOf('.');
@@ -122,9 +160,9 @@ export function burnBoxes(src: HTMLCanvasElement, rects: Rect[]): HTMLCanvasElem
   return out;
 }
 
-export function rectsForPage(page: number, findings: Finding[], boxes: ManualBox[]): Rect[] {
+export function rectsForPage(page: number, findings: Finding[], marks: ManualMark[]): Rect[] {
   return [
     ...findings.filter((f) => f.enabled && f.page === page).flatMap((f) => f.rects),
-    ...boxes.filter((b) => b.page === page),
+    ...marks.filter((b): b is ManualBox => isBox(b) && b.page === page),
   ];
 }

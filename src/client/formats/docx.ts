@@ -1,7 +1,7 @@
 import { parseAsync, renderDocument } from 'docx-preview';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { burnBoxes, canvasToBlob, outputName, rectsForPage, type Layout, type LoadedDoc, type Page, type Progress, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, outputName, rectsForPage, TEXT_STYLES, type Layout, type LoadedDoc, type Page, type Progress, type Unit } from '../types.ts';
 import { ocrUnit } from './ocr.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -129,6 +129,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
 
   return {
     kind: 'docx',
+    styles: TEXT_STYLES,
     name: file.name,
     units: [...paras.map((p) => p.unit), ...[...alts.values()].map((a) => a.unit), ...pictureUnits],
     pages,
