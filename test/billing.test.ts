@@ -436,6 +436,34 @@ test('activity shows credits per file and payments, without file names', async (
   ]);
 });
 
+test('free credits used today show as one refill row from the next midnight, at most a full day', async () => {
+  const db = d1();
+  const e = env(db);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), userId, 4102444800).run();
+  const scan = (chars: number) =>
+    fetchWorker(
+      new Request('https://anyredact.app/api/detect', {
+        method: 'POST',
+        body: JSON.stringify({ text: 'a'.repeat(chars) }),
+        headers: { origin: 'https://anyredact.app', cookie: 'session=tok', 'x-job': 'job-cccccccc', 'x-format': 'text' },
+      }),
+      e,
+    );
+  const me = async () => ((await (await fetchWorker(new Request('https://anyredact.app/api/me', { headers: { cookie: 'session=tok' } }), e)).json()) as { user: { activity: { kind: string; credits: number }[] } }).user.activity;
+  assert.equal((await scan(4000)).status, 200);
+  assert.equal((await scan(100)).status, 200);
+  const refill = (await db.prepare("SELECT credits, at FROM activity WHERE kind = 'free'").first()) as { credits: number; at: number };
+  assert.equal(refill.credits, 3);
+  assert.equal(refill.at % 86400, 0);
+  assert.ok(refill.at > Date.now() / 1000);
+  // Not shown before the refill happens.
+  assert.ok(!(await me()).some((a) => a.kind === 'free'));
+  assert.equal((await scan(60_000)).status, 200);
+  await db.prepare("UPDATE activity SET at = at - 86400 WHERE kind = 'free'").run();
+  assert.deepEqual((await me()).filter((a) => a.kind === 'free').map((a) => a.credits), [10]);
+});
+
 test('a failed scan takes its credits off the activity again', async () => {
   const db = d1();
   const e = { ...env(db), AI: { run: async () => { throw new Error('down'); } } as unknown as Ai } as Env;

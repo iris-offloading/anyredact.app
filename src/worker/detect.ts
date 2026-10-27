@@ -2,7 +2,7 @@ import { chunkText, plausibleEntity } from '../shared/detect.ts';
 import { pool } from '../shared/pool.ts';
 import { MAX_CHARS, CREDIT_CHARS, creditsFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
-import { jobOf, logActivity, type ActivityKind } from './activity.ts';
+import { jobOf, logActivity, logFreeUse, type ActivityKind } from './activity.ts';
 import { refundCredits, spendCredits, type BillingEnv } from './billing.ts';
 import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
 import { json, modelJson, readAiPost, trialsAllowed, type Limiter } from './http.ts';
@@ -239,8 +239,9 @@ export async function chargeUsage(request: Request, env: Env, chars: number, kin
   const log = (credits: number) => (user ? logActivity(env.DB, user.id, job.job, kind ?? job.kind, credits) : Promise.resolve());
   const credits = creditsFor(chars);
   if (!quota.exceeded) {
-    await log(-credits);
-    return { state: quota.state, refund: async () => void (await Promise.all([quota.refund(), log(credits)])) };
+    const free = (n: number) => (user ? logFreeUse(env.DB, user.id, n) : Promise.resolve());
+    await Promise.all([log(-credits), free(credits)]);
+    return { state: quota.state, refund: async () => void (await Promise.all([quota.refund(), log(credits), free(-credits)])) };
   }
   const paid = user ? await spendCredits(env, user.id, credits) : null;
   if (paid) {
