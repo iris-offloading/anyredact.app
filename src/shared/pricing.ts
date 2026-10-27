@@ -1,8 +1,8 @@
 // Paid AI detection is sold as credits. One credit covers 3,000 characters of
 // extracted text (roughly one dense page) or one picture; a minute of audio takes three. Free use is the daily
-// allowance in src/worker/quota.ts. Code and the database still call them pages.
+// allowance in src/worker/quota.ts.
 
-export const PAGE_CHARS = 3_000;
+export const CREDIT_CHARS = 3_000;
 /** Free credits each browser gets a day. */
 export const FREE_CREDITS = 10;
 // Most characters one AI request may carry.
@@ -11,26 +11,36 @@ export const MAX_CHARS = 60_000;
 export interface Product {
   id: string;
   name: string;
-  pages: number;
+  credits: number;
   /** Price in US cents. */
   cents: number;
-  /** Monthly subscription rather than a one-off pack. */
+  /** Monthly plan rather than credits paid once. */
   monthly?: boolean;
 }
 
-// Prices set by Iris on 2026-10-27 after comparing similar redaction tools; packs lowered the same day so they sit closer to plan rates.
+// Prices set by Iris on 2026-10-27 after comparing similar redaction tools; one-off credits lowered the same day so they sit closer to plan rates.
 export const PRODUCTS: Product[] = [
-  { id: 'plus', name: 'Plus', pages: 600, cents: 900, monthly: true },
-  { id: 'pro', name: 'Pro', pages: 3_000, cents: 2_400, monthly: true },
-  { id: 'pack-100', name: '100 credits', pages: 100, cents: 500 },
-  { id: 'pack-500', name: '500 credits', pages: 500, cents: 1_500 },
-  { id: 'pack-2000', name: '2,000 credits', pages: 2_000, cents: 3_900 },
+  { id: 'plus', name: 'Plus', credits: 600, cents: 900, monthly: true },
+  { id: 'pro', name: 'Pro', credits: 3_000, cents: 2_400, monthly: true },
+  { id: 'credits-100', name: '100 credits', credits: 100, cents: 500 },
+  { id: 'credits-500', name: '500 credits', credits: 500, cents: 1_500 },
+  { id: 'credits-2000', name: '2,000 credits', credits: 2_000, cents: 3_900 },
 ];
+
+// Ids before credits were renamed, still carried by checkouts started then (a bank debit confirms days later) and by old links.
+const OLD_IDS: Record<string, string> = { 'pack-100': 'credits-100', 'pack-500': 'credits-500', 'pack-2000': 'credits-2000' };
+
+/** The product with this id, or with the id it had before the rename. */
+export const findProduct = (id: unknown): Product | undefined => {
+  if (typeof id !== 'string') return undefined;
+  const current = Object.hasOwn(OLD_IDS, id) ? OLD_IDS[id] : id;
+  return PRODUCTS.find((p) => p.id === current);
+};
 
 /** Credits for a final check after the free first one. */
 export const CHECK_CREDITS = 1;
 
-export const pagesFor = (chars: number) => Math.max(1, Math.ceil(chars / PAGE_CHARS));
+export const creditsFor = (chars: number) => Math.max(1, Math.ceil(chars / CREDIT_CHARS));
 
 export const AUDIO_CREDITS_PER_MINUTE = 3;
 

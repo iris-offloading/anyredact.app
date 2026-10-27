@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { sha256, upsertUser } from '../src/worker/accounts.ts';
-import { spendPaidPages, stripeForm, verifyStripeSignature } from '../src/worker/billing.ts';
+import { spendCredits, stripeForm, verifyStripeSignature } from '../src/worker/billing.ts';
 import type { Env } from '../src/worker/detect.ts';
 import entry from '../src/worker/index.ts';
 import { audioCredits } from '../src/shared/pricing.ts';
@@ -12,7 +12,7 @@ import { isWav } from '../src/worker/transcribe.ts';
 // Minimal D1 over node:sqlite, with the real schema.
 function d1(): D1Database {
   const db = new DatabaseSync(':memory:');
-  for (const m of ['0001_accounts.sql', '0002_purchases.sql', '0003_activity.sql']) db.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
+  for (const m of readdirSync(new URL('../migrations/', import.meta.url)).sort()) db.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
   const prepare = (sql: string) => {
     let args: unknown[] = [];
     const stmt = {
@@ -74,7 +74,7 @@ test('verifies Stripe webhook signatures', async () => {
   assert.ok(!(await verifyStripeSignature(body, await sign(body, 1000), SECRET)));
 });
 
-test('webhook credits packs once and starts the monthly plan', async () => {
+test('webhook grants one-off credits once, under old ids too, and starts the monthly plan', async () => {
   const db = d1();
   const e = env(db);
   const userId = await upsertUser(e, 'jane@example.com');
@@ -82,34 +82,35 @@ test('webhook credits packs once and starts the monthly plan', async () => {
     const body = JSON.stringify(event);
     return fetchWorker(new Request('https://anyredact.app/api/stripe/webhook', { method: 'POST', body, headers: { 'stripe-signature': await sign(body) } }), e);
   };
+  // pack-500 is the id checkouts carried before credits-500, which Stripe can still send.
   const pack = { id: 'evt_pack', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', metadata: { user_id: userId, product: 'pack-500' } } } };
   assert.equal((await send(pack)).status, 200);
   await send(pack); // Stripe retries must not double-credit.
   // A bank debit completes unpaid, then confirms later.
-  const debit = { mode: 'payment', payment_status: 'unpaid', metadata: { user_id: userId, product: 'pack-500' } };
+  const debit = { mode: 'payment', payment_status: 'unpaid', metadata: { user_id: userId, product: 'credits-500' } };
   await send({ id: 'evt_debit', type: 'checkout.session.completed', data: { object: debit } });
   await send({ id: 'evt_debit_paid', type: 'checkout.session.async_payment_succeeded', data: { object: { ...debit, payment_status: 'paid' } } });
   const sub = { id: 'evt_sub', type: 'checkout.session.completed', data: { object: { mode: 'subscription', payment_status: 'paid', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'plus' } } } };
   await send(sub);
   const u = (await db.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
-  assert.equal(u.pack_pages, 1000);
-  assert.equal(u.sub_pages, 600);
-  assert.equal(u.sub_id, 'sub_1');
+  assert.equal(u.credits, 1000);
+  assert.equal(u.plan_credits, 600);
+  assert.equal(u.plan_subscription, 'sub_1');
 
   await send({ id: 'evt_del', type: 'customer.subscription.deleted', data: { object: { id: 'sub_1' } } });
-  const after = (await db.prepare('SELECT sub_id, sub_pages, pack_pages FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
-  assert.deepEqual({ ...after }, { sub_id: null, sub_pages: 0, pack_pages: 1000 });
+  const after = (await db.prepare('SELECT plan_subscription, plan_credits, credits FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
+  assert.deepEqual({ ...after }, { plan_subscription: null, plan_credits: 0, credits: 1000 });
 });
 
-test('spends the monthly plan before packs and never overspends', async () => {
+test('spends the monthly plan before one-off credits and never overspends', async () => {
   const db = d1();
   const e = env(db);
   const id = await upsertUser(e, 'a@example.com');
-  await db.prepare('UPDATE users SET sub_id = ?, sub_pages = 10, sub_used = 8, sub_period_end = ?, pack_pages = 5 WHERE id = ?').bind('sub_x', Math.floor(Date.now() / 1000) + 3600, id).run();
-  assert.ok(await spendPaidPages(e, id, 4)); // 2 from the plan, 2 from packs
-  const u = (await db.prepare('SELECT sub_used, pack_pages FROM users WHERE id = ?').bind(id).first()) as Record<string, number>;
-  assert.deepEqual({ ...u }, { sub_used: 10, pack_pages: 3 });
-  assert.ok(!(await spendPaidPages(e, id, 4)));
+  await db.prepare('UPDATE users SET plan_subscription = ?, plan_credits = 10, plan_used = 8, plan_period_end = ?, credits = 5 WHERE id = ?').bind('sub_x', Math.floor(Date.now() / 1000) + 3600, id).run();
+  assert.ok(await spendCredits(e, id, 4)); // 2 from the plan, 2 one-off
+  const u = (await db.prepare('SELECT plan_used, credits FROM users WHERE id = ?').bind(id).first()) as Record<string, number>;
+  assert.deepEqual({ ...u }, { plan_used: 10, credits: 3 });
+  assert.ok(!(await spendCredits(e, id, 4)));
 });
 
 test('signed-in users fall back to paid pages after the free allowance', async () => {
@@ -121,7 +122,7 @@ test('signed-in users fall back to paid pages after the free allowance', async (
     get: () => ({ fetch: async () => Response.json({ ok: false, used: 10, limit: 10 }) }),
   } as unknown as DurableObjectNamespace;
   const id = await upsertUser(e, 'paid@example.com');
-  await db.prepare('UPDATE users SET pack_pages = 1 WHERE id = ?').bind(id).run();
+  await db.prepare('UPDATE users SET credits = 1 WHERE id = ?').bind(id).run();
   await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), id, Math.floor(Date.now() / 1000) + 3600).run();
   const req = (cookie?: string) =>
     new Request('https://anyredact.app/api/detect', {
@@ -133,20 +134,20 @@ test('signed-in users fall back to paid pages after the free allowance', async (
   assert.equal(anon.status, 402);
   assert.equal(((await anon.json()) as { signedIn: boolean }).signedIn, false);
   assert.equal((await fetchWorker(req('session=tok'), e)).status, 200);
-  assert.equal((await fetchWorker(req('session=tok'), e)).status, 402); // the one pack page is spent
+  assert.equal((await fetchWorker(req('session=tok'), e)).status, 402); // the one credit is spent
 });
 
 test('me reports balances for the signed-in user only', async () => {
   const db = d1();
   const e = env(db);
   const id = await upsertUser(e, 'me@example.com');
-  await db.prepare('UPDATE users SET pack_pages = 42 WHERE id = ?').bind(id).run();
+  await db.prepare('UPDATE users SET credits = 42 WHERE id = ?').bind(id).run();
   await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('t2'), id, Math.floor(Date.now() / 1000) + 3600).run();
-  const me = (cookie?: string) => fetchWorker(new Request('https://anyredact.app/api/me', { headers: cookie ? { cookie } : {} }), e).then((r) => r.json()) as Promise<{ user: { email: string; packPages: number } | null }>;
+  const me = (cookie?: string) => fetchWorker(new Request('https://anyredact.app/api/me', { headers: cookie ? { cookie } : {} }), e).then((r) => r.json()) as Promise<{ user: { email: string; credits: number } | null }>;
   assert.equal((await me()).user, null);
   const signed = await me('session=t2');
   assert.equal(signed.user?.email, 'me@example.com');
-  assert.equal(signed.user?.packPages, 42);
+  assert.equal(signed.user?.credits, 42);
 });
 
 test('email sign-in sends a one-time link that starts a session', async () => {
@@ -183,30 +184,30 @@ test('a webhook that fails to apply is retried rather than lost', async () => {
   let broken = true;
   const flaky = {
     prepare: (sql: string) => {
-      if (broken && sql.startsWith('UPDATE users SET pack_pages')) throw new Error('D1 unavailable');
+      if (broken && sql.startsWith('UPDATE users SET credits')) throw new Error('D1 unavailable');
       return db.prepare(sql);
     },
     batch: db.batch,
   } as unknown as D1Database;
   const e = env(flaky);
   const userId = await upsertUser(e, 'jane@example.com');
-  const body = JSON.stringify({ id: 'evt_retry', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', metadata: { user_id: userId, product: 'pack-500' } } } });
+  const body = JSON.stringify({ id: 'evt_retry', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', metadata: { user_id: userId, product: 'credits-500' } } } });
   const send = async () => fetchWorker(new Request('https://anyredact.app/api/stripe/webhook', { method: 'POST', body, headers: { 'stripe-signature': await sign(body) } }), e);
   assert.equal((await send()).status, 500);
   broken = false;
   assert.equal((await send()).status, 200);
-  assert.equal(((await db.prepare('SELECT pack_pages FROM users WHERE id = ?').bind(userId).first()) as { pack_pages: number }).pack_pages, 500);
+  assert.equal(((await db.prepare('SELECT credits FROM users WHERE id = ?').bind(userId).first()) as { credits: number }).credits, 500);
 });
 
 test('invoice.paid reads the subscription from newer Stripe API versions', async () => {
   const db = d1();
   const e = env(db);
   const userId = await upsertUser(e, 'jane@example.com');
-  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', sub_id = 'sub_1', sub_pages = 1000, sub_used = 900 WHERE id = ?").bind(userId).run();
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', plan_subscription = 'sub_1', plan_credits = 1000, plan_used = 900 WHERE id = ?").bind(userId).run();
   const body = JSON.stringify({ id: 'evt_inv', type: 'invoice.paid', data: { object: { customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_1' } }, lines: { data: [{ period: { end: 4102444800 } }] } } } });
   await fetchWorker(new Request('https://anyredact.app/api/stripe/webhook', { method: 'POST', body, headers: { 'stripe-signature': await sign(body) } }), e);
-  const u = (await db.prepare('SELECT sub_used, sub_period_end FROM users WHERE id = ?').bind(userId).first()) as Record<string, number>;
-  assert.deepEqual({ ...u }, { sub_used: 0, sub_period_end: 4102444800 });
+  const u = (await db.prepare('SELECT plan_used, plan_period_end FROM users WHERE id = ?').bind(userId).first()) as Record<string, number>;
+  assert.deepEqual({ ...u }, { plan_used: 0, plan_period_end: 4102444800 });
 });
 
 test('stops sending sign-in links to one address after a few', async () => {
@@ -220,7 +221,7 @@ test('stops sending sign-in links to one address after a few', async () => {
   assert.equal(sent.length, 3);
 });
 
-test('refunds and disputes take pack credits back, and a negative balance blocks free use', async () => {
+test('refunds and disputes take one-off credits back, and a negative balance blocks free use', async () => {
   const db = d1();
   const e = env(db);
   const userId = await upsertUser(e, 'jane@example.com');
@@ -228,10 +229,10 @@ test('refunds and disputes take pack credits back, and a negative balance blocks
     const body = JSON.stringify(event);
     return fetchWorker(new Request('https://anyredact.app/api/stripe/webhook', { method: 'POST', body, headers: { 'stripe-signature': await sign(body) } }), e);
   };
-  const balance = async () => ((await db.prepare('SELECT pack_pages FROM users WHERE id = ?').bind(userId).first()) as { pack_pages: number }).pack_pages;
-  await send({ id: 'evt_buy', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_1', metadata: { user_id: userId, product: 'pack-100' } } } });
+  const balance = async () => ((await db.prepare('SELECT credits FROM users WHERE id = ?').bind(userId).first()) as { credits: number }).credits;
+  await send({ id: 'evt_buy', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_1', metadata: { user_id: userId, product: 'credits-100' } } } });
   assert.equal(await balance(), 100);
-  await spendPaidPages(e, userId, 80);
+  await spendCredits(e, userId, 80);
   // Half refunded, then the rest disputed: 100 taken back in all, even though 80 were spent.
   await send({ id: 'evt_ref', type: 'charge.refunded', data: { object: { payment_intent: 'pi_1', customer: 'cus_1', amount: 500, amount_refunded: 250 } } });
   assert.equal(await balance(), -30);
@@ -263,12 +264,12 @@ test('a plan paid by a bank debit starts only once the payment confirms', async 
   await db.prepare("UPDATE users SET stripe_customer = 'cus_1' WHERE id = ?").bind(userId).run();
   const session = { mode: 'subscription', payment_status: 'unpaid', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'plus' } };
   await send({ id: 'evt_c', type: 'checkout.session.completed', data: { object: session } });
-  const plan = async () => ((await db.prepare('SELECT sub_id, sub_pages FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>);
-  assert.deepEqual({ ...(await plan()) }, { sub_id: null, sub_pages: 0 });
+  const plan = async () => ((await db.prepare('SELECT plan_subscription, plan_credits FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>);
+  assert.deepEqual({ ...(await plan()) }, { plan_subscription: null, plan_credits: 0 });
   // The invoice can confirm before the session does, and carries the plan in its metadata.
   const invoice = { customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_1', metadata: { user_id: userId, product: 'plus' } } }, lines: { data: [{ period: { end: 4102444800 } }] } };
   await send({ id: 'evt_i', type: 'invoice.paid', data: { object: invoice } });
-  assert.deepEqual({ ...(await plan()) }, { sub_id: 'sub_1', sub_pages: 600 });
+  assert.deepEqual({ ...(await plan()) }, { plan_subscription: 'sub_1', plan_credits: 600 });
 });
 
 test('live keys ignore sandbox events', async () => {
@@ -276,17 +277,17 @@ test('live keys ignore sandbox events', async () => {
   const e = { ...env(db), STRIPE_SECRET_KEY: 'rk_live_x' } as Env;
   const send = webhook(e);
   const userId = await upsertUser(e, 'jane@example.com');
-  const object = { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_t', metadata: { user_id: userId, product: 'pack-100' } };
+  const object = { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_t', metadata: { user_id: userId, product: 'credits-100' } };
   assert.equal((await send({ id: 'evt_test', livemode: false, type: 'checkout.session.completed', data: { object } })).status, 200);
   await send({ id: 'evt_live', livemode: true, type: 'checkout.session.completed', data: { object: { ...object, payment_intent: 'pi_l' } } });
-  assert.equal(((await db.prepare('SELECT pack_pages FROM users WHERE id = ?').bind(userId).first()) as { pack_pages: number }).pack_pages, 100);
+  assert.equal(((await db.prepare('SELECT credits FROM users WHERE id = ?').bind(userId).first()) as { credits: number }).credits, 100);
 });
 
 test('a dispute on a plan payment ends the period\'s credits', async () => {
   const db = d1();
   const e = env(db);
   const userId = await upsertUser(e, 'jane@example.com');
-  await db.prepare("UPDATE users SET stripe_customer = 'cus_9', sub_id = 'sub_9', sub_pages = 600, sub_used = 10, sub_period_end = 4102444800 WHERE id = ?").bind(userId).run();
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_9', plan_subscription = 'sub_9', plan_credits = 600, plan_used = 10, plan_period_end = 4102444800 WHERE id = ?").bind(userId).run();
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     assert.match(String(input), /\/v1\/charges\/ch_9$/);
@@ -297,7 +298,7 @@ test('a dispute on a plan payment ends the period\'s credits', async () => {
   } finally {
     globalThis.fetch = realFetch;
   }
-  assert.equal(((await db.prepare('SELECT sub_used FROM users WHERE id = ?').bind(userId).first()) as { sub_used: number }).sub_used, 600);
+  assert.equal(((await db.prepare('SELECT plan_used FROM users WHERE id = ?').bind(userId).first()) as { plan_used: number }).plan_used, 600);
 });
 
 test('transcription takes only 16 kHz mono 16-bit WAV, so audio is billed by its real length', () => {
@@ -343,7 +344,7 @@ test('a second plan is cancelled and refunded, and leaves the first plan alone',
   const e = env(db);
   const send = webhook(e);
   const userId = await upsertUser(e, 'jane@example.com');
-  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', sub_id = 'sub_1', sub_pages = 600, sub_used = 5, sub_period_end = 4102444800 WHERE id = ?").bind(userId).run();
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', plan_subscription = 'sub_1', plan_credits = 600, plan_used = 5, plan_period_end = 4102444800 WHERE id = ?").bind(userId).run();
   const calls = await withStripe(
     (method, url) => (url.includes('/invoices/') ? { id: 'in_2', payments: { data: [{ payment: { payment_intent: 'pi_2' } }] } } : { id: 'x' }),
     async () => {
@@ -353,24 +354,25 @@ test('a second plan is cancelled and refunded, and leaves the first plan alone',
   );
   assert.deepEqual(
     calls.map((c) => `${c.method} ${new URL(c.url).pathname}`),
-    ['DELETE /v1/subscriptions/sub_2', 'GET /v1/invoices/in_2', 'POST /v1/refunds'],
+    ['GET /v1/invoices/in_2', 'POST /v1/refunds', 'DELETE /v1/subscriptions/sub_2'],
   );
-  assert.match(decodeURIComponent(calls[2].body), /payment_intent=pi_2/);
-  assert.ok(calls.every((c) => c.method === 'GET' || c.key));
+  assert.match(decodeURIComponent(calls[1].body), /payment_intent=pi_2/);
+  // A retried event sends the refund again, so Stripe must see the same key.
+  assert.ok(calls[1].key);
   // Its invoice and its refund don't touch the plan the account already has.
   const invoice = { customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_2', metadata: { product: 'pro' } } }, lines: { data: [{ period: { end: 4102444900 } }] } };
   await send({ id: 'evt_i2', type: 'invoice.paid', data: { object: invoice } });
   await send({ id: 'evt_r2', type: 'charge.refunded', data: { object: { payment_intent: 'pi_2', customer: 'cus_1', amount: 2400, amount_refunded: 2400 } } });
-  const u = (await db.prepare('SELECT sub_id, sub_pages, sub_used FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
-  assert.deepEqual({ ...u }, { sub_id: 'sub_1', sub_pages: 600, sub_used: 5 });
+  const u = (await db.prepare('SELECT plan_subscription, plan_credits, plan_used FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
+  assert.deepEqual({ ...u }, { plan_subscription: 'sub_1', plan_credits: 600, plan_used: 5 });
 });
 
 test('deleting an account removes the Stripe customer, then every row', async () => {
   const db = d1();
   const e = env(db);
   const userId = await upsertUser(e, 'jane@example.com');
-  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', pack_pages = 50 WHERE id = ?").bind(userId).run();
-  await db.prepare('INSERT INTO purchases (payment_intent, user_id, pages, created_at) VALUES (?, ?, 50, 0)').bind('pi_1', userId).run();
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', credits = 50 WHERE id = ?").bind(userId).run();
+  await db.prepare('INSERT INTO purchases (payment_intent, user_id, credits, created_at) VALUES (?, ?, 50, 0)').bind('pi_1', userId).run();
   await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), userId, 4102444800).run();
   const del = (headers: Record<string, string>) => fetchWorker(new Request('https://anyredact.app/api/me', { method: 'DELETE', headers }), e);
   assert.equal((await del({ cookie: 'session=tok', origin: 'https://evil.example' })).status, 403);
@@ -413,7 +415,7 @@ test('activity shows credits per file and payments, without file names', async (
   const send = webhook(e);
   const userId = await upsertUser(e, 'jane@example.com');
   await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), userId, 4102444800).run();
-  await send({ id: 'evt_pack', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_1', amount_total: 500, metadata: { user_id: userId, product: 'pack-100' } } } });
+  await send({ id: 'evt_buy', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_1', amount_total: 500, metadata: { user_id: userId, product: 'credits-100' } } } });
   const scan = (text: string, job: string, format: string) =>
     fetchWorker(
       new Request('https://anyredact.app/api/detect', {
@@ -429,7 +431,7 @@ test('activity shows credits per file and payments, without file names', async (
   const me = (await (await fetchWorker(new Request('https://anyredact.app/api/me', { headers: { cookie: 'session=tok' } }), e)).json()) as { user: { activity: Record<string, unknown>[] } };
   const rows = me.user.activity.map(({ kind, credits, cents }) => ({ kind, credits, cents }));
   assert.deepEqual(rows.sort((a, b) => String(a.kind).localeCompare(String(b.kind))), [
-    { kind: 'pack', credits: 100, cents: 500 },
+    { kind: 'credits', credits: 100, cents: 500 },
     { kind: 'pdf', credits: -3, cents: null },
   ]);
 });

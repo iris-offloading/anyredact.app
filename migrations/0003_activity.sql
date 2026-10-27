@@ -3,7 +3,7 @@
 CREATE TABLE activity (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   job TEXT NOT NULL,
-  -- A format (pdf, docx, pptx, sheet, text, image, audio), check, pack, plan, refund or dispute.
+  -- A format (pdf, docx, pptx, sheet, text, image, audio), check, credits, plan, refund or dispute.
   kind TEXT NOT NULL,
   -- Signed: spent credits are negative.
   credits INTEGER NOT NULL,

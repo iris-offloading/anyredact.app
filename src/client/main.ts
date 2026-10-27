@@ -1,13 +1,13 @@
 import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
 import { h } from './dom.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
-import { detectWithAi, freePagesLeft, QuotaError, startJob, type AiEntity } from './ai.ts';
+import { detectWithAi, freeCreditsLeft, QuotaError, startJob, type AiEntity } from './ai.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
-import { audioCredits, CHECK_CREDITS, pagesFor } from '../shared/pricing.ts';
+import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
 import { highlight, pieces, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
-import { isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
+import { groupBy, isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
@@ -31,6 +31,8 @@ const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 
 const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
 // Each page is one AI request, so very long PDFs only get the local pass after this.
 const MAX_AI_PICTURE_PAGES = 30;
+// Paragraphs drawn in the text preview; the download still covers the whole file.
+const MAX_PREVIEW_BLOCKS = 2000;
 
 const PLUS_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>';
@@ -140,9 +142,7 @@ class App {
   private redactPublic = store.get('redact-public') === '1';
   private terms = '';
   private visualKinds = new Set<VisualKind>();
-  // Per page, and the kinds they were computed for.
-  // Hits found so far per page, and the kinds already looked for, so ticking
-  // another kind only looks for that one and unticking needs no new pass.
+  // See PictureCache.
   private visualLocal = pictureCache();
   private visualAi = pictureCache();
   // Picture passes run one at a time, so a second analyze() sees the first one's results.
@@ -571,8 +571,7 @@ class App {
   }
 
   private renderList() {
-    const groups = new Map<EntityType, Finding[]>();
-    for (const f of this.findings) (groups.get(f.type) ?? groups.set(f.type, []).get(f.type)!).push(f);
+    const groups = groupBy(this.findings, (f) => f.type);
     const manual = this.boxes.length;
     if (!groups.size && !manual) {
       const visual = this.doc?.pages.length;
@@ -884,10 +883,13 @@ class App {
     this.drawCellBar();
     // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
     // Spreadsheet cells show in the grid above, so only comments, headers and footers are listed here.
-    const byUnit = new Map<string, Finding[]>();
-    for (const f of this.findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
+    const byUnit = groupBy(this.findings, (f) => f.unitId);
     const { sheet, layout } = this;
     if (sheet && layout) return this.refreshSheet(sheet, layout, byUnit, pictures);
+    if (doc.audio && !doc.units.length) {
+      this.textHost.replaceChildren(h('p', { className: 'hint' }, 'Drag on the timeline to bleep a stretch.'));
+      return;
+    }
     let section: string | undefined;
     let said = 0;
     const blocks = doc.units.flatMap((u, i) => {
@@ -901,20 +903,14 @@ class App {
       // The paragraph's time sits beside the text, so selections inside the text keep their offsets.
       return [...heading, h('div', { className: 'para' }, h('button', { type: 'button', className: 'at', textContent: clock(start), onclick: () => this.timeline?.seek(start, true) }), el)];
     });
-    const MAX = 2000;
-    if (doc.audio && !doc.units.length) {
-      this.textHost.replaceChildren(h('p', { className: 'hint' }, 'Drag on the timeline to bleep a stretch.'));
-      return;
-    }
     const text = [
-      h('div', { className: 'text-preview' + (isOffice(doc) || doc.kind === 'audio' ? ' flow' : '') }, ...blocks.slice(0, MAX)),
-      ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
+      h('div', { className: 'text-preview' + (isOffice(doc) || doc.kind === 'audio' ? ' flow' : '') }, ...blocks.slice(0, MAX_PREVIEW_BLOCKS)),
+      ...(blocks.length > MAX_PREVIEW_BLOCKS ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX_PREVIEW_BLOCKS} paragraphs; the download covers the whole file.`)] : []),
     ];
     if (doc.mountView) this.extras.replaceChildren(...(blocks.length ? text : []));
     else this.textHost.replaceChildren(h('p', { className: 'hint' }, doc.audio ? 'Click a word to jump there, or a highlight to keep it. Select words to bleep them.' : 'Click a highlight to redact or keep it. Select text to add more.'), ...text, ...pictures);
     if (!this.timeline) return;
-    const els = new Map<string, HTMLElement[]>();
-    for (const el of this.textHost.querySelectorAll<HTMLElement>('.w')) (els.get(el.dataset.w!) ?? els.set(el.dataset.w!, []).get(el.dataset.w!)!).push(el);
+    const els = groupBy(this.textHost.querySelectorAll<HTMLElement>('.w'), (el) => el.dataset.w!);
     this.spoken = doc.units.flatMap((u) => u.words ?? []).map((word, i) => ({ word, els: els.get(String(i)) ?? [] }));
     this.speaking = [];
     this.saying = null;
@@ -1061,7 +1057,7 @@ class App {
       h('a', { href: url, download: filename }).click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
-      if (this.consent !== 'yes') checkNote = ' The AI check was skipped because nothing is sent to our server, so review the file carefully.';
+      if (this.consent !== 'yes') checkNote = ' The final check was skipped because the file was not uploaded, so review it carefully.';
       this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`, false, true);
     } catch (err) {
       console.error(err);
@@ -1091,8 +1087,8 @@ class App {
     const images = `${isOffice(doc) ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
     const what = seconds ? `the recording (${clock(seconds)})` : words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
     // Speech runs at about 900 characters a minute, which detection then reads.
-    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + pagesFor((seconds / 60) * 900) : 0);
-    const cost = `Estimated cost: ${pages} credit${pages === 1 ? '' : 's'}`;
+    const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
+    const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
     const costLine = h('p', { className: 'hint' }, `${cost}.`);
     this.consentBox.replaceChildren(
       h('p', {}, `Upload ${what} to find personal info?`),
@@ -1100,9 +1096,9 @@ class App {
       h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
     );
     this.consentBox.hidden = false;
-    freePagesLeft().then((left) => {
+    freeCreditsLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      costLine.textContent = `${cost}, ${left >= pages ? '' : 'only '}${left} left today.`;
+      costLine.textContent = `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`;
     });
   }
 

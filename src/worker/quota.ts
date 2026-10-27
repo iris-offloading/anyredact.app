@@ -4,7 +4,7 @@
 // behind a shared office or mobile network don't block each other, but it
 // still stops someone who clears their browser ID to start over.
 
-import { FREE_CREDITS, PAGE_CHARS } from '../shared/pricing.ts';
+import { FREE_CREDITS, CREDIT_CHARS } from '../shared/pricing.ts';
 import { clientNetwork } from './http.ts';
 
 export interface QuotaEnv {
@@ -13,8 +13,10 @@ export interface QuotaEnv {
 }
 
 // 10 credits: 10 pages of dense text, or 3 minutes of audio.
-export const DEFAULT_FREE_CHARS = FREE_CREDITS * PAGE_CHARS;
+export const DEFAULT_FREE_CHARS = FREE_CREDITS * CREDIT_CHARS;
 export const IP_MULTIPLIER = 5;
+// An unused free-check pass is dropped after this, so a scan's Durable Object doesn't keep storage forever.
+const PASS_MS = 7 * 86_400_000;
 
 export interface QuotaState {
   used: number;
@@ -42,6 +44,7 @@ export class Quota {
     // A one-time pass for up to `limit` characters, such as a scan's free final check: granted once, redeemed once.
     if (grant) {
       await this.state.storage.put('pass', limit);
+      await this.state.storage.setAlarm(Date.now() + PASS_MS);
       return Response.json({ ok: true, used: 0, limit });
     }
     if (redeem) {
@@ -61,6 +64,10 @@ export class Quota {
     const next = Math.max(0, used + amount);
     await this.state.storage.put('usage', { day, used: next });
     return Response.json({ ok: true, used: next, limit });
+  }
+
+  async alarm(): Promise<void> {
+    await this.state.storage.deleteAll();
   }
 }
 

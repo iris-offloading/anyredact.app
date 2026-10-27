@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
+import { enabledTexts, outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
 import { enabledByUnit, linkHidesText, readRels, readXml, removePart, removeThumbnail, saveXml, scrubProperties, scrubRelationships } from './office.ts';
 import type { GridCell, SheetMeta } from './sheet-view.ts';
 
@@ -117,7 +117,7 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
 /** Rewrites every block with enabled findings; returns the old to new text of each changed cell. */
 function applyFindings(blocks: Block[], findings: Finding[], style: RedactStyle) {
   const byUnit = enabledByUnit(findings);
-  const redacted = new Set(findings.filter((f) => f.enabled).map((f) => f.text));
+  const redacted = enabledTexts(findings);
   const changed = new Map<string, string>();
   for (const b of blocks) {
     const spans = byUnit.get(b.unit.id);
@@ -415,6 +415,8 @@ async function readOds(zip: JSZip): Promise<Workbook> {
   const blocks: Block[] = [];
   const sheets: SheetMeta[] = [];
   const notes: Block[] = [];
+  // Counts every sheet's comments, so their ids stay unique across sheets.
+  let noteCount = 0;
   const inNote = (el: Element) => el.closest('annotation') !== null;
 
   const hiddenStyles = new Set(
@@ -438,7 +440,7 @@ async function readOds(zip: JSZip): Promise<Workbook> {
         for (const note of kids(cell, OFFICE, 'annotation')) {
           for (const who of [...kids(note, DC, 'creator'), ...kids(note, META, 'creator-initials')]) who.textContent = 'Redacted';
           const np = odfPieces(note);
-          if (np.map((p) => p.text).join('').trim()) notes.push(block(`content.xml#note${notes.length}`, `${name}: comments`, [nodeCell(np)]));
+          if (np.map((p) => p.text).join('').trim()) notes.push(block(`content.xml#note${noteCount++}`, `${name}: comments`, [nodeCell(np)]));
         }
       }
       if (cells.length) blocks.push(block(`content.xml!${name}!${r}`, name, cells, name));

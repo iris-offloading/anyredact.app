@@ -4,9 +4,15 @@ export const now = () => Math.floor(Date.now() / 1000);
 
 export const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-export function json(body: unknown, status = 200, cookies: string[] = []) {
-  const headers = new Headers({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+/** Headers with a Set-Cookie line per cookie. */
+export function withCookies(init: Record<string, string>, cookies: string[]): Headers {
+  const headers = new Headers(init);
   for (const c of cookies) headers.append('set-cookie', c);
+  return headers;
+}
+
+export function json(body: unknown, status = 200, cookies: string[] = []) {
+  const headers = withCookies({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, cookies);
   return new Response(JSON.stringify(body), { status, headers });
 }
 

@@ -55,7 +55,7 @@
     ]
   },
   // `npm run dev:local` runs without a Cloudflare login: no AI binding, so
-  // AI-assisted mode reports itself unavailable while private mode works.
+  // AI detection reports itself unavailable and files are redacted by hand.
   "env": {
     "local": {}
   }

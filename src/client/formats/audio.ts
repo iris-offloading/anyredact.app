@@ -138,7 +138,8 @@ async function transcribeChunk(wav: ArrayBuffer, language: string | null): Promi
 
 async function transcribe(input: Input, duration: number, progress: Progress): Promise<Word[]> {
   const chunks: { start: number; end: number; words: Word[] }[] = [];
-  for (let start = 0; start < duration; start += CHUNK_SECONDS) chunks.push({ start, end: Math.min(duration, start + CHUNK_SECONDS + CHUNK_OVERLAP), words: [] });
+  // A last stretch no longer than the overlap is already in the chunk before it.
+  for (let start = 0; start === 0 || start < duration - CHUNK_OVERLAP; start += CHUNK_SECONDS) chunks.push({ start, end: Math.min(duration, start + CHUNK_SECONDS + CHUNK_OVERLAP), words: [] });
   // Each chunk is decoded once, and the next few are decoded while earlier ones are being transcribed.
   const wavs: (Promise<ArrayBuffer> | null)[] = chunks.map(() => null);
   const wav = (i: number) => (wavs[i] ??= speechChunk(input, chunks[i].start, chunks[i].end));

@@ -2,7 +2,7 @@
 // vision model. The browser also runs a local detector; this pass catches the
 // small, turned and partly hidden faces it misses. Only used when the visitor
 // turned picture redaction on and agreed to send the file.
-import { PAGE_CHARS } from '../shared/pricing.ts';
+import { CREDIT_CHARS } from '../shared/pricing.ts';
 import { chargeUsage, responseContent, runWithRetry, type Env } from './detect.ts';
 import { json, modelJson, readAiPost } from './http.ts';
 
@@ -61,7 +61,7 @@ export async function handleVision(request: Request, env: Env): Promise<Response
   if (image.length > (MAX_IMAGE_BYTES * 4) / 3) return json({ error: 'Image is too large.' }, 413);
 
   // One picture counts as one page.
-  const quota = await chargeUsage(request, env, PAGE_CHARS);
+  const quota = await chargeUsage(request, env, CREDIT_CHARS);
   if (quota instanceof Response) return quota;
 
   try {

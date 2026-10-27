@@ -1,11 +1,11 @@
 import { chunkText, plausibleEntity } from '../shared/detect.ts';
 import { pool } from '../shared/pool.ts';
-import { MAX_CHARS, PAGE_CHARS, pagesFor } from '../shared/pricing.ts';
+import { MAX_CHARS, CREDIT_CHARS, creditsFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
 import { jobOf, logActivity, type ActivityKind } from './activity.ts';
-import { refundPaidPages, spendPaidPages, type BillingEnv } from './billing.ts';
+import { refundCredits, spendCredits, type BillingEnv } from './billing.ts';
 import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
-import { json, modelJson, readAiPost, trialsAllowed } from './http.ts';
+import { json, modelJson, readAiPost, trialsAllowed, type Limiter } from './http.ts';
 
 // AI detection endpoint. The browser sends the text it extracted from a file
 // and gets back the sensitive substrings; nothing is stored.
@@ -13,7 +13,7 @@ import { json, modelJson, readAiPost, trialsAllowed } from './http.ts';
 export interface Env extends QuotaEnv, BillingEnv {
   ASSETS: Fetcher;
   AI?: Ai;
-  DETECT_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
+  DETECT_LIMITER?: Limiter;
   AI_MODEL?: string;
   FALLBACK_MODEL?: string;
   VISION_MODEL?: string;
@@ -121,23 +121,6 @@ export function responseContent(result: unknown): unknown {
   return undefined;
 }
 
-// Clairic is an extraction model: instead of a prompt it takes typed fields
-// and returns list items with their offsets into the text.
-const CLAIRIC_FIELDS: Record<Entity['type'], string> = {
-  name: 'Every name of a private person, in each form it appears (full name, "Doe, Jane", first name only, surname only, initials with surname). Not businesses, public figures or job titles.',
-  address: 'Street addresses and postal addresses of private people, as written.',
-  email: 'Email addresses.',
-  phone: 'Phone and fax numbers of private people. Not helplines, toll-free or office numbers of businesses and public services.',
-  ssn: 'US Social Security numbers and ITINs (the number only).',
-  id: 'Passport, licence, tax, account, patient, employee, case, policy, PIN, national ID and other personal identifier numbers (the number only, never the label).',
-  date: 'Birth dates and other dates tied to a private person.',
-  org: 'Employers, schools and hospitals tied to a private person.',
-  card: 'Payment card numbers.',
-  iban: 'IBANs and bank account numbers.',
-  url: 'Personal links and profile URLs.',
-  other: 'Other sensitive values: usernames, passwords, session tokens, API keys, IP addresses, health conditions and medications of a person.',
-};
-
 /** One detection request: which model, plus what the benchmarks and the rate-limit fallback need. */
 interface Run {
   env: Env;
@@ -153,22 +136,6 @@ interface Run {
   fallback?: string;
   /** Characters per request (trials only). */
   chunkChars?: number;
-}
-
-async function detectClairic({ env, model, usage, raw }: Run, chunk: string): Promise<Entity[]> {
-  const fields = Object.fromEntries(
-    Object.entries(CLAIRIC_FIELDS).map(([type, instructions]) => [type, { type: 'list', items: 'text', instructions }]),
-  );
-  const result = (await env.AI!.run(model as Parameters<Ai['run']>[0], { model: 'clairic', state: chunk, fields } as never)) as {
-    answers?: Record<string, { value?: unknown }>;
-    usage?: { input_tokens?: number; prompt_tokens?: number };
-  };
-  raw?.push(result);
-  usage.prompt_tokens = (usage.prompt_tokens ?? 0) + (result?.usage?.input_tokens ?? result?.usage?.prompt_tokens ?? 0);
-  const entities = Object.entries(result?.answers ?? {}).flatMap(([type, a]) =>
-    Array.isArray(a?.value) ? a.value.filter((v) => typeof v === 'string').map((text) => ({ text, type })) : [],
-  );
-  return parseEntities({ entities }, chunk);
 }
 
 // Workers AI caps requests per minute per model (error 3021). Back off and retry
@@ -199,7 +166,6 @@ async function detectChunk(run: Run, chunk: string): Promise<Entity[]> {
 
 async function runModel(run: Run, chunk: string): Promise<Entity[]> {
   const { env, model, usage, raw, extra, waits } = run;
-  if (model.endsWith('/clairic')) return detectClairic(run, chunk);
   // Partner models (e.g. openai/…) go through AI Gateway with OpenAI's own
   // parameters: max_completion_tokens, a named strict schema, default temperature.
   const partner = !model.startsWith('@cf/');
@@ -258,31 +224,31 @@ export interface Charge {
 }
 
 /**
- * Charges the free daily allowance, then the account's paid pages. Returns a 402
+ * Charges the free daily allowance, then the account's paid credits. Returns a 402
  * response when neither covers it. A signed-in account's activity records the cost.
  */
 export async function chargeUsage(request: Request, env: Env, chars: number, kind?: ActivityKind): Promise<Response | Charge> {
-  const user = await currentUser(request, env);
+  const [user, quota] = await Promise.all([currentUser(request, env), chargeQuota(request, env, chars)]);
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
-  if (user && user.pack_pages < 0) {
+  if (user && user.credits < 0) {
+    await quota.refund();
     return json({ error: 'Your credit balance is below zero after a refund or dispute. Buy credits under Account to continue.', code: 'negative', signedIn: true }, 402);
   }
   const job = jobOf(request);
   if (kind) job.job += `:${kind}`;
   const log = (credits: number) => (user ? logActivity(env.DB, user.id, job.job, kind ?? job.kind, credits) : Promise.resolve());
-  const credits = pagesFor(chars);
-  const quota = await chargeQuota(request, env, chars);
+  const credits = creditsFor(chars);
   if (!quota.exceeded) {
     await log(-credits);
     return { state: quota.state, refund: async () => void (await Promise.all([quota.refund(), log(credits)])) };
   }
-  const paid = user ? await spendPaidPages(env, user.id, credits) : null;
+  const paid = user ? await spendCredits(env, user.id, credits) : null;
   if (paid) {
     await log(-credits);
     return {
       state: quota.state,
       refund: async () => {
-        await Promise.all([quota.refund(), refundPaidPages(env, user!.id, paid), log(credits)]);
+        await Promise.all([quota.refund(), refundCredits(env, user!.id, paid), log(credits)]);
       },
     };
   }
@@ -301,7 +267,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   if (trials && Array.isArray(texts) && texts.length <= 50) return detectBatch(env, texts, model, extra, chunkChars);
 
   if (typeof text !== 'string' || !text.trim()) return json({ entities: [] });
-  if (text.length > MAX_CHARS) return json({ error: `Text is too long for AI mode (max ${MAX_CHARS} characters).` }, 413);
+  if (text.length > MAX_CHARS) return json({ error: `Text is too long (max ${MAX_CHARS} characters).` }, 413);
 
   const quota = await chargeUsage(request, env, text.length);
   if (quota instanceof Response) return quota;
@@ -316,7 +282,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
     // The scan comes with one free final check of about its size (src/worker/check.ts).
-    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env, text.length * 2 + PAGE_CHARS) });
+    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env, text.length * 2 + CREDIT_CHARS) });
   } catch (err) {
     console.error('detect failed', err);
     await quota.refund();

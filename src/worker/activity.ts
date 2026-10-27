@@ -4,7 +4,7 @@
 import { now } from './http.ts';
 
 export const FORMATS = ['pdf', 'docx', 'pptx', 'sheet', 'text', 'image', 'audio'] as const;
-export type ActivityKind = (typeof FORMATS)[number] | 'check' | 'pack' | 'plan' | 'refund' | 'dispute';
+export type ActivityKind = (typeof FORMATS)[number] | 'check' | 'credits' | 'plan' | 'refund' | 'dispute';
 
 export interface Activity {
   kind: ActivityKind;

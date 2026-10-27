@@ -8,7 +8,7 @@
 // phone calls into speech with Deepgram Aura 2. Every labelled value is spoken
 // as its own clip, so its place in the recording is known to the millisecond.
 // `run` transcribes each recording, runs the app's detection on the transcript
-// and mutes what the app would mute (AI plus rules, default "Look for" types,
+// and mutes what the app would mute (AI findings and their other mentions, default "Look for" types,
 // ticked findings only). A value counts as muted when 90% of its speech is.
 // Results and transcripts go to <dir>/<model>.transcripts.json for a closer look.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
