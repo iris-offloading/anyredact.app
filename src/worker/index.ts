@@ -24,6 +24,8 @@ export default {
     if (account) return account;
     if (url.pathname === '/api/quota') return json({ quota: await quotaStatus(request, env) });
     if (url.pathname === '/api/health') return json({ ok: true });
+    // static/analytics.js asks for cookie consent in the countries that require it.
+    if (url.pathname === '/api/country') return json({ country: request.cf?.country ?? null });
     // Preview-only model catalogue, for picking models to benchmark.
     if (url.pathname === '/api/models' && trialsAllowed(request, env) && env.AI) {
       const search = url.searchParams.get('search');

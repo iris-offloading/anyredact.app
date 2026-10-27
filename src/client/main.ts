@@ -1073,10 +1073,8 @@ class App {
           ? await doc.exportTranscript(this.findings, this.boxes)
           : await doc.exportFile(this.findings, this.boxes, this.style, (m) => this.say(m, false, true));
       const url = URL.createObjectURL(blob);
-      const a = h('a', { href: url, download: filename });
-      document.body.append(a);
-      a.click();
-      a.remove();
+      // Clicked without joining the page, so no page listener (such as analytics) sees the file name.
+      h('a', { href: url, download: filename }).click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
       if (this.consent !== 'yes') checkNote = ' The AI check was skipped because nothing is sent to our server, so review the file carefully.';
