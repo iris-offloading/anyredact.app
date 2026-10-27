@@ -27,6 +27,11 @@ const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
 // Each page is one AI request, so very long PDFs only get the local pass after this.
 const MAX_AI_PICTURE_PAGES = 30;
 
+/** Whether the preview shows text: everything except PDF pages and images. */
+function hasText(doc: LoadedDoc) {
+  return doc.kind === 'text' || doc.kind === 'docx';
+}
+
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
@@ -77,7 +82,7 @@ class App {
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
   private aiError: string | null = null;
-  // Nothing leaves the browser until the user agrees, per file (or always, if they ticked that box).
+  // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
@@ -453,7 +458,7 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? `, p${f.page + 1}` : '';
+        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (this.doc?.kind === 'docx' ? `, picture ${f.page + 1}` : `, p${f.page + 1}`) : '';
         const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, (f.publicHint ? 'public? ' : '') + (f.source === 'ai' ? 'AI' : '') + where));
         row.addEventListener('mouseenter', () => this.focus(f));
         return row;
@@ -490,41 +495,37 @@ class App {
 
   private renderPreview() {
     const doc = this.doc!;
-    if (doc.pages.length) {
-      this.editors = doc.pages.map(
-        (page) =>
-          new PageEditor({
-            page,
-            overlays: () => this.overlaysFor(page.index),
-            onDraw: (rect) => {
-              this.boxes.push({ ...rect, page: page.index, id: crypto.randomUUID() });
-              this.renderList();
-              this.refreshPreview();
-            },
-            onClick: (o) => {
-              if (o.kind === 'manual') this.boxes = this.boxes.filter((b) => b.id !== o.id);
-              else {
-                const f = this.findings.find((x) => x.key === o.id);
-                if (f) return this.toggle([f.key], !f.enabled);
-              }
-              this.renderList();
-              this.refreshPreview();
-            },
-          }),
-      );
-      this.preview.replaceChildren(
-        h('p', { className: 'hint' }, 'Drag on a page to add a box. Click a box to turn it off or remove it.'),
-        ...this.editors.map((e) => e.el),
-      );
-    } else {
-      this.preview.replaceChildren();
-      this.preview.addEventListener('mouseup', this.onSelect);
-    }
+    this.editors = doc.pages.map(
+      (page) =>
+        new PageEditor({
+          page,
+          overlays: () => this.overlaysFor(page.index),
+          onDraw: (rect) => {
+            this.boxes.push({ ...rect, page: page.index, id: crypto.randomUUID() });
+            this.renderList();
+            this.refreshPreview();
+          },
+          onClick: (o) => {
+            if (o.kind === 'manual') this.boxes = this.boxes.filter((b) => b.id !== o.id);
+            else {
+              const f = this.findings.find((x) => x.key === o.id);
+              if (f) return this.toggle([f.key], !f.enabled);
+            }
+            this.renderList();
+            this.refreshPreview();
+          },
+        }),
+    );
+    // Pictures in a Word file show at their own size rather than full width.
+    if (doc.kind === 'docx') this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
+    this.preview.replaceChildren();
+    if (hasText(doc)) this.preview.addEventListener('mouseup', this.onSelect);
+    this.refreshPreview();
   }
 
   private onSelect = () => {
     const sel = getSelection()?.toString().trim();
-    if (!sel || sel.length < 2 || sel.length > 200 || !this.doc || this.doc.pages.length) return;
+    if (!sel || sel.length < 2 || sel.length > 200 || !this.doc || !hasText(this.doc)) return;
     this.preview.querySelector('.sel-add')?.remove();
     const btn = h('button', { type: 'button', className: 'btn sel-add', textContent: `Redact “${sel.length > 30 ? sel.slice(0, 28) + '…' : sel}” everywhere` });
     btn.addEventListener('click', () => {
@@ -544,14 +545,18 @@ class App {
   private refreshPreview() {
     const doc = this.doc;
     if (!doc) return;
-    if (doc.pages.length) {
-      for (const e of this.editors) e.draw();
+    for (const e of this.editors) e.draw();
+    const pictures = this.editors.length
+      ? [h('p', { className: 'hint' }, doc.kind === 'docx' ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...this.editors.map((e) => e.el)]
+      : [];
+    if (!hasText(doc)) {
+      if (!this.preview.childElementCount) this.preview.replaceChildren(...pictures);
       return;
     }
-    // Text preview: one block per unit with highlighted findings.
+    // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
     const byUnit = new Map<string, Finding[]>();
     for (const f of this.findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-    const blocks = doc.units.map((u) => {
+    const blocks = doc.units.filter((u) => u.page === undefined).map((u) => {
       const el = h('div', { className: 'unit' });
       let pos = 0;
       for (const f of (byUnit.get(u.id) ?? []).sort((a, b) => a.start - b.start)) {
@@ -570,6 +575,7 @@ class App {
       h('p', { className: 'hint' }, 'Click a highlight to keep it. Select any text to redact it everywhere.'),
       h('div', { className: 'text-preview' + (doc.kind === 'docx' ? ' docx' : '') }, ...blocks.slice(0, MAX)),
       ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
+      ...pictures,
     );
   }
 
@@ -627,7 +633,7 @@ class App {
       this.consentBox.hidden = true;
       this.analyze();
     };
-    const images = `page image${doc.pages.length > 1 ? 's' : ''}`;
+    const images = `${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
     const what = words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
     const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
     const cost = `Estimated cost: ${pages} credit${pages === 1 ? '' : 's'}`;

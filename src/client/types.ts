@@ -21,6 +21,8 @@ export interface Unit {
 export interface Page {
   index: number;
   canvas: HTMLCanvasElement;
+  /** Accessible name; defaults to "Page n". */
+  label?: string;
 }
 
 export interface Finding {
