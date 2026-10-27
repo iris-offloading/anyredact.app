@@ -202,7 +202,11 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   const priceData = {
     currency: 'usd',
     unit_amount: product.cents,
-    product_data: { name: product.monthly ? `AnyRedact ${product.name}, ${product.pages.toLocaleString('en-US')} credits a month` : `AnyRedact ${product.name}` },
+    product_data: {
+      name: product.monthly ? `AnyRedact ${product.name}, ${product.pages.toLocaleString('en-US')} credits a month` : `AnyRedact ${product.name}`,
+      // Managed Payments (on by default) rejects items without an eligible tax code. AI as a service, cloud based, personal use.
+      tax_code: 'txcd_10105001',
+    },
     ...(product.monthly ? { recurring: { interval: 'month' } } : {}),
   };
   const session = await stripe<{ url: string }>(env, 'checkout/sessions', {
