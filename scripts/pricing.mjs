@@ -1,4 +1,4 @@
-// The public /pricing page. Plans and packs come from src/shared/pricing.ts at
+// The public /pricing page. Plans and credits come from src/shared/pricing.ts at
 // build time; plan buttons go to /account?buy=<id>, which signs the visitor in
 // and then opens checkout.
 
@@ -17,7 +17,7 @@ export const PRICING = {
   slug: 'pricing',
   nav: 'Pricing',
   title: 'Pricing | AnyRedact',
-  description: 'AnyRedact pricing: 10 free AI redaction credits a day, monthly plans from $9 and credit packs from $5 that never expire. One credit covers about a page of text.',
+  description: 'AnyRedact pricing: 10 free AI redaction credits a day, monthly plans from $9 and credits from $5 that never expire. One credit covers about a page of text.',
   h1: 'Pricing',
 
   jsonLd({ PRODUCTS, FREE_CREDITS }, url) {
@@ -69,8 +69,8 @@ export const PRICING = {
     return `<article class="wrap pricing">
 <h1>Pricing</h1>
 <div class="cards plans">${plans}</div>
-<h2>Credit packs</h2>
-<p>Pack credits never expire. No subscription.</p>
+<h2>Credits</h2>
+<p>Paid once. They never expire.</p>
 <div class="packs">${packs}</div>
 <h2>Credits per format</h2>
 <table class="credit-table"><tbody>${rows}</tbody></table>
