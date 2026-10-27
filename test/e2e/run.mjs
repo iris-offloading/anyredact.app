@@ -290,16 +290,25 @@ if (existsSync(fx('sample.ods'))) {
   let sent = '';
   await page.route('**/api/check', (route) => {
     sent = JSON.parse(route.request().postData() || '{}').text;
-    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 }, free: true }) });
   });
   apiCalls.length = 0;
   await run('redact-text', fx('sample.txt'), '.consent');
   check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
   await page.click('.consent button.primary');
   await page.waitForSelector('.consent', { state: 'hidden' });
+  // Earlier downloads may have used the free check, which leaves the box unticked.
+  await page.evaluate(() => localStorage.removeItem('check-used'));
+  await run('redact-text', fx('sample.txt'), '.consent');
+  await page.click('.consent button.primary');
+  await page.waitForSelector('.consent', { state: 'hidden' });
+  check((await page.isChecked('.check-row input')) && /free/.test(await page.textContent('.check-row')), 'first final check is ticked and free');
   await page.click('.panel > button.primary');
   await page.waitForSelector('.warn-text');
   const warning = await page.textContent('.warn-text');
+  const notes = await page.$$eval('.warn-text', (els) => els.map((e) => e.textContent).join(' '));
+  check(/This check was free/.test(notes), `free check explained: ${notes}`);
+  check(!(await page.isChecked('.check-row input')) && /1 credit/.test(await page.textContent('.check-row')), 'later checks start unticked and cost a credit');
   check(/names may still be readable/.test(warning) && !/phone/.test(warning), `check warning: ${warning}`);
   check(sent.includes('████') && !sent.includes('jane@example.com'), 'check gets masked text only');
   await page.screenshot({ path: fx('check.png') });

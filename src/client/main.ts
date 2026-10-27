@@ -4,7 +4,7 @@ import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
 import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
-import { audioCredits, pagesFor } from '../shared/pricing.ts';
+import { audioCredits, CHECK_CREDITS, pagesFor } from '../shared/pricing.ts';
 import { highlight, pieces, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
 import { isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit } from './types.ts';
@@ -144,6 +144,8 @@ class App {
   private docName: HTMLElement;
   private download: HTMLButtonElement;
   private warn: HTMLElement;
+  private checkBox: HTMLInputElement;
+  private checkRow: HTMLElement;
   private styleRow: HTMLElement;
   private styleSel: HTMLSelectElement;
   private fileInput: HTMLInputElement;
@@ -242,6 +244,9 @@ class App {
 
     this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
+    // The first final check is free and starts ticked; later ones cost credits and start unticked.
+    this.checkBox = h('input', { type: 'checkbox', checked: store.get('check-used') !== '1' });
+    this.checkRow = h('label', { className: 'row check-row', hidden: true }, this.checkBox, checkLabel());
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
     this.metaBox = h('div', { className: 'meta', hidden: true });
@@ -262,6 +267,7 @@ class App {
       this.list,
       this.metaBox,
       this.styleRow,
+      this.checkRow,
       this.download,
       this.warn,
       this.notes,
@@ -339,6 +345,7 @@ class App {
     this.visualError = null;
     this.consent = 'ask';
     this.consentBox.hidden = true;
+    this.checkRow.hidden = true;
     this.overrides.clear();
     this.editors = [];
     this.sheet = null;
@@ -938,15 +945,21 @@ class App {
     let checkNote = '';
     try {
       // Ask a second model whether anything sensitive is still readable before handing over the file.
-      if (!skipCheck && this.consent === 'yes') {
+      if (!skipCheck && this.consent === 'yes' && this.checkBox.checked) {
         this.say('Checking the redacted file for anything left…', false, true);
         try {
-          const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
+          const { left, free } = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
+          // Once used, the check costs credits, so it is no longer ticked by default.
+          if (store.get('check-used') !== '1') {
+            store.set('check-used', '1');
+            this.checkBox.checked = false;
+            this.checkRow.replaceChildren(this.checkBox, checkLabel());
+          }
           if (this.doc !== doc) return;
-          if (left.length) return this.warnLeft(left);
+          if (left.length) return this.warnLeft(left, free);
         } catch (err) {
           console.warn(err);
-          checkNote = ' The final check could not run, so review the file carefully.';
+          checkNote = err instanceof QuotaError ? ' Not enough credits for the final check, so review the file carefully.' : ' The final check could not run, so review the file carefully.';
         }
       }
       this.say('Preparing your redacted file…', false, true);
@@ -982,6 +995,7 @@ class App {
     const upload = () => {
       this.consent = 'yes';
       this.consentBox.hidden = true;
+      this.checkRow.hidden = false;
       this.analyze();
     };
     const images = `${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
@@ -1002,12 +1016,13 @@ class App {
     });
   }
 
-  private warnLeft(left: string[]) {
+  private warnLeft(left: string[], free: boolean) {
     const list = left.map((k) => CHECK_LABELS[k]);
     const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
     this.say('');
     this.warn.replaceChildren(
       h('p', { className: 'warn-text' }, `The final check thinks some ${what} may still be readable. Look through the preview, tick anything that was missed, or select the text and redact it.`),
+      ...(free ? [h('p', { className: 'warn-text' }, `This check was free. To run it again, tick it above the download button (${credits(CHECK_CREDITS)}).`)] : []),
       h(
         'div',
         { className: 'warn-actions' },
@@ -1018,6 +1033,12 @@ class App {
     this.warn.hidden = false;
     this.warn.scrollIntoView({ block: 'nearest' });
   }
+}
+
+const credits = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
+
+function checkLabel(): string {
+  return `Check for anything left (${store.get('check-used') === '1' ? credits(CHECK_CREDITS) : 'free'})`;
 }
 
 function aiFailure(err: unknown, fallback: string): string {

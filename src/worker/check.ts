@@ -1,6 +1,7 @@
-import { MAX_CHARS } from '../shared/pricing.ts';
-import { runWithRetry, type Env } from './detect.ts';
+import { CHECK_CREDITS, MAX_CHARS, PAGE_CHARS } from '../shared/pricing.ts';
+import { chargeUsage, runWithRetry, type Env } from './detect.ts';
 import { json, readAiPost, trialsAllowed } from './http.ts';
+import { takeFreeCheck } from './quota.ts';
 
 // Final check before download: the browser sends the document text with every
 // redaction already masked (█), and a decision model estimates, per category,
@@ -47,6 +48,11 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
   if (typeof text !== 'string' || !text.replace(/[█\s]/g, '')) return json({ risks: {} });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long to check (max ${MAX_CHARS} characters).` }, 413);
 
+  // Each browser's first check is free; later ones cost credits like detection.
+  const free = await takeFreeCheck(request, env);
+  const quota = free ? null : await chargeUsage(request, env, CHECK_CREDITS * PAGE_CHARS);
+  if (quota instanceof Response) return quota;
+
   const questions = Object.fromEntries(
     Object.entries(CHECKS).map(([k, q]) => [k, { type: 'noul', instructions: `${q} ${NOT_COUNTED}` }]),
   );
@@ -59,8 +65,8 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
       const p = yesProbability(result?.answers?.[k]);
       if (p !== null) risks[k] = p;
     }
-    if (trialsAllowed(request, env)) return json({ risks, raw: result });
-    return json({ risks });
+    if (trialsAllowed(request, env)) return json({ risks, free, raw: result });
+    return json({ risks, free, quota: quota?.state });
   } catch (err) {
     console.error('check failed', err);
     return json({ error: 'The final check is unavailable right now.' }, 502);

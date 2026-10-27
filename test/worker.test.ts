@@ -74,7 +74,7 @@ test('check returns per-category risks', async () => {
     AI: { run: async () => ({ answers: { name: { type: 'noul', noul: 0.9 }, contact: { type: 'noul', noul: 0.1 } } }) } as unknown as Ai,
   };
   const req = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: 'Hi Jane, ████' }), headers: { origin: 'https://anyredact.app' } });
-  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 } });
+  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 }, free: false });
   const empty = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: '████ \n ██' }), headers: { origin: 'https://anyredact.app' } });
   assert.deepEqual(await (await worker.fetch(empty, e)).json(), { risks: {} });
 });
@@ -157,6 +157,22 @@ test('free allowance is enforced per browser, with a larger shared IP allowance'
   const res = await worker.fetch(req('device-gggg', 'x'.repeat(10)), e);
   assert.equal(res.status, 402);
   assert.equal(((await res.json()) as { code: string }).code, 'quota');
+});
+
+test('the first final check per browser is free, later ones use the allowance', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '5000' };
+  const req = (device: string) =>
+    new Request('https://anyredact.app/api/check', {
+      method: 'POST',
+      body: JSON.stringify({ text: 'Jane Doe' }),
+      headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9' },
+    });
+  const first = (await (await worker.fetch(req('device-aaaa'), e)).json()) as { free: boolean };
+  assert.equal(first.free, true);
+  const second = (await (await worker.fetch(req('device-aaaa'), e)).json()) as { free: boolean; quota: { used: number } };
+  assert.deepEqual([second.free, second.quota.used], [false, 3000]);
+  // 3000 of 5000 used, so a third paid check doesn't fit.
+  assert.equal((await worker.fetch(req('device-aaaa'), e)).status, 402);
 });
 
 test('vision regions are validated and scaled to thousandths', async () => {
