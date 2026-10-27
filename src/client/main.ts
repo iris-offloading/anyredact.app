@@ -630,17 +630,13 @@ class App {
       this.consentBox.hidden = true;
       this.analyze();
     };
+    const images = `page image${doc.pages.length > 1 ? 's' : ''}`;
+    const what = words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
     this.consentBox.replaceChildren(
-      h(
-        'p',
-        {},
-        h('strong', {}, 'Nothing has been sent yet. '),
-        words ? `To find names, addresses and other personal details, AnyRedact sends the text read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare.` : '',
-        pictures ? ` With picture redaction on, it also sends the page image${doc.pages.length > 1 ? 's' : ''}.` : '',
-      ),
-      h('button', { type: 'button', className: 'btn primary', textContent: 'Find personal info with AI', onclick: () => choose('yes') }),
-      h('button', { type: 'button', className: 'btn ghost', textContent: 'Use built-in rules only', onclick: () => choose('no') }),
-      h('label', { className: 'row' }, always, 'Always use AI on this device'),
+      h('p', {}, `Upload ${what} to find personal info?`),
+      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: () => choose('yes') }),
+      h('button', { type: 'button', className: 'btn ghost', textContent: "Don't upload", onclick: () => choose('no') }),
+      h('label', { className: 'row' }, always, 'Always upload on this device'),
     );
     this.consentBox.hidden = false;
     const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
