@@ -1,7 +1,7 @@
 import { findProduct, FREE_CREDITS, price, PRODUCTS, type Product } from '../shared/pricing.ts';
-import { freeCreditsLeft } from './ai.ts';
+import { freeCreditsLeft, lastFreeCredits } from './ai.ts';
 import { h } from './dom.ts';
-import { fetchMe, forgetPaidBase, paidBase, paidLeft, planLeft, post, rememberPaidBase, type Activity, type User } from './me.ts';
+import { fetchMe, forgetPaidBase, type Me, paidBase, paidLeft, planLeft, post, rememberPaidBase, type Activity, type User } from './me.ts';
 
 // The /account page: sign in, see balances, buy a plan or credits, manage a plan.
 
@@ -351,17 +351,37 @@ function confirmPayment(user: User | null) {
   history.replaceState(null, '', '/account');
 }
 
-async function render() {
+/** The account the Worker wrote into the page, so the first view needs no request. */
+function pageMe(): Me | null {
+  try {
+    return JSON.parse(document.getElementById('me')?.textContent || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function show(me: Me, free: number | null) {
+  root.parentElement!.classList.toggle('solo', !me.user);
+  root.replaceChildren(me.user ? balance(me.user, free) : signInForm(me.signIn ?? { email: false, google: false }));
+}
+
+async function render(initial: Me | null = null) {
   const token = new URLSearchParams(location.hash.slice(1)).get('signin');
   if (token) await signInWithLink(token);
   const params = new URLSearchParams(location.search);
   const paid = !!params.get('paid');
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
-  const [me, free] = await Promise.all([fetchMe(), freeCreditsLeft()]);
+  const me = (!token && initial) || (await fetchMe());
   currentUser = me.user;
   const buying = paid ? undefined : pendingBuy();
-  root.parentElement!.classList.toggle('solo', !me.user);
-  root.replaceChildren(me.user ? balance(me.user, free) : signInForm(me.signIn ?? { email: false, google: false }));
+  if (me.user) {
+    // The last known free credits show at once and the live count replaces them.
+    const shown = lastFreeCredits();
+    show(me, shown);
+    freeCreditsLeft().then((free) => {
+      if (free !== null && free !== shown && currentUser === me.user) show(me, free);
+    });
+  } else show(me, null);
   if (paid) {
     clearBuy();
     confirmPayment(me.user);
@@ -371,4 +391,4 @@ async function render() {
   }
 }
 
-render();
+render(pageMe());

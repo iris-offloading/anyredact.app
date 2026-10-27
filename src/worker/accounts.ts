@@ -167,6 +167,22 @@ async function planEnding(env: AccountsEnv, subscription: string): Promise<boole
 }
 
 /** Handles /api/auth/* and /api/me. Returns null for other paths. */
+/** What /api/me returns, also written into the /account page so it renders without a request. */
+export async function me(request: Request, env: AccountsEnv) {
+  const user = env.DB ? await currentUser(request, env) : null;
+  if (!user) return { user: null, signIn: { email: !!env.EMAIL, google: !!env.GOOGLE_CLIENT_ID } };
+  const planActive = !!user.plan_subscription && user.plan_period_end > now();
+  return {
+    user: {
+      email: user.email,
+      plan: planActive ? { credits: user.plan_credits, used: user.plan_used, renews: user.plan_period_end, ending: await planEnding(env, user.plan_subscription!) } : null,
+      credits: user.credits,
+      canManage: !!user.stripe_customer,
+      activity: (await recentActivity(env.DB!, user.id)).filter((a) => a.credits),
+    },
+  };
+}
+
 export async function handleAccounts(request: Request, env: AccountsEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
   if (!path.startsWith('/api/auth/') && path !== '/api/me') return null;
@@ -175,20 +191,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
 
   if (path === '/api/me' && request.method === 'DELETE') return deleteAccount(request, env);
 
-  if (path === '/api/me') {
-    const user = await currentUser(request, env);
-    if (!user) return json({ user: null, signIn: { email: !!env.EMAIL, google: !!env.GOOGLE_CLIENT_ID } });
-    const planActive = !!user.plan_subscription && user.plan_period_end > now();
-    return json({
-      user: {
-        email: user.email,
-        plan: planActive ? { credits: user.plan_credits, used: user.plan_used, renews: user.plan_period_end, ending: await planEnding(env, user.plan_subscription!) } : null,
-        credits: user.credits,
-        canManage: !!user.stripe_customer,
-        activity: (await recentActivity(env.DB, user.id)).filter((a) => a.credits),
-      },
-    });
-  }
+  if (path === '/api/me') return json(await me(request, env));
 
   if (path === '/api/auth/email' && request.method === 'POST') {
     if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);

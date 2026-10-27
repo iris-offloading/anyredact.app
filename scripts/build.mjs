@@ -291,7 +291,7 @@ await writeFile(
       jsonLd: false,
       script: accountSrc,
     },
-    `<article class="wrap solo"><div id="account"><div class="auth-card"><h1>Account</h1><p class="hint">Loading…</p></div></div></article>`,
+    `<article class="wrap solo"><div id="account"></div></article>`,
   ),
 );
 

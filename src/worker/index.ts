@@ -4,7 +4,7 @@ import { handleCheck } from './check.ts';
 import { handleDetect, type Env } from './detect.ts';
 import { pool } from '../shared/pool.ts';
 import { base64, json, rateLimited, trialsAllowed } from './http.ts';
-import { handleAccounts } from './accounts.ts';
+import { handleAccounts, me } from './accounts.ts';
 import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';
 import { handleTranscribe } from './transcribe.ts';
@@ -22,6 +22,7 @@ export default {
     if (url.pathname === '/api/transcribe') return handleTranscribe(request, env);
     const account = (await handleAccounts(request, env, url)) ?? (await handleBilling(request, env, url));
     if (account) return account;
+    if (url.pathname === '/account' && request.method === 'GET') return accountPage(request, env);
     if (url.pathname === '/api/quota') return json({ quota: await quotaStatus(request, env) });
     if (url.pathname === '/api/health') return json({ ok: true });
     // static/analytics.js asks for cookie consent in the countries that require it.
@@ -57,6 +58,24 @@ export default {
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
+
+// /account comes with the visitor's /api/me answer written in, so the page renders with no loading state.
+async function accountPage(request: Request, env: Env): Promise<Response> {
+  const [page, data] = await Promise.all([env.ASSETS.fetch(request), me(request, env).catch(() => null)]);
+  if (!page.ok || !data) return page;
+  const script = `<script type="application/json" id="me">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+  const res = new HTMLRewriter()
+    .on('head', {
+      element: (head) => {
+        head.append(script, { html: true });
+      },
+    })
+    .transform(page);
+  const headers = new Headers(res.headers);
+  headers.set('cache-control', 'private, no-store');
+  headers.delete('etag');
+  return new Response(res.body, { status: res.status, headers });
+}
 
 // Audio sent to a trial as { base64, contentType } reaches the model as raw bytes
 // (the Deepgram models' input shape). Whisper takes a plain base64 string instead.
