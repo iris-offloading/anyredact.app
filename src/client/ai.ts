@@ -1,5 +1,5 @@
 import { chunkText, type EntityType } from '../shared/detect.ts';
-import { MAX_CHARS, CREDIT_CHARS } from '../shared/pricing.ts';
+import { MAX_CHARS, CREDIT_CHARS, FREE_CREDITS } from '../shared/pricing.ts';
 
 export interface AiEntity {
   text: string;
@@ -58,9 +58,26 @@ export async function freeCreditsLeft(): Promise<number | null> {
   try {
     const res = await fetch('/api/quota', { headers: { 'x-device-id': deviceId() } });
     const { quota } = (await res.json()) as { quota?: { used: number; limit: number } | null };
-    return quota ? Math.max(0, Math.floor((quota.limit - quota.used) / CREDIT_CHARS)) : null;
+    const left = quota ? Math.max(0, Math.floor((quota.limit - quota.used) / CREDIT_CHARS)) : null;
+    try {
+      localStorage.setItem(FREE_KEY, JSON.stringify({ day: utcDay(), left }));
+    } catch {}
+    return left;
   } catch {
     return null;
+  }
+}
+
+const FREE_KEY = 'anyredact-free';
+const utcDay = () => new Date().toISOString().slice(0, 10);
+
+/** The free credits this browser last saw, shown until the live count arrives. They refill at midnight UTC. */
+export function lastFreeCredits(): number | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FREE_KEY) || 'null') as { day: string; left: number | null } | null;
+    return saved && (saved.day === utcDay() || saved.left === null) ? saved.left : FREE_CREDITS;
+  } catch {
+    return FREE_CREDITS;
   }
 }
 

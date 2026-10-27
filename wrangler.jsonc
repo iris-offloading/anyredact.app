@@ -17,7 +17,8 @@
     "html_handling": "drop-trailing-slash",
     "not_found_handling": "404-page",
     // Browser navigations (Google sign-in) would otherwise get the 404 page without reaching the Worker.
-    "run_worker_first": ["/api/*"]
+    // /account gets the visitor's account written into the page.
+    "run_worker_first": ["/api/*", "/account"]
   },
   "ai": { "binding": "AI" },
   // Free daily AI allowance per browser and per IP (src/worker/quota.ts).
