@@ -6,6 +6,7 @@ import { sha256, upsertUser } from '../src/worker/accounts.ts';
 import { spendPaidPages, stripeForm, verifyStripeSignature } from '../src/worker/billing.ts';
 import type { Env } from '../src/worker/detect.ts';
 import entry from '../src/worker/index.ts';
+import { audioCredits } from '../src/shared/pricing.ts';
 
 // Minimal D1 over node:sqlite, with the real schema.
 function d1(): D1Database {
@@ -66,19 +67,19 @@ test('webhook credits packs once and starts the monthly plan', async () => {
     const body = JSON.stringify(event);
     return fetchWorker(new Request('https://anyredact.app/api/stripe/webhook', { method: 'POST', body, headers: { 'stripe-signature': await sign(body) } }), e);
   };
-  const pack = { id: 'evt_pack', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', metadata: { user_id: userId, product: 'pack-300' } } } };
+  const pack = { id: 'evt_pack', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', metadata: { user_id: userId, product: 'pack-500' } } } };
   assert.equal((await send(pack)).status, 200);
   await send(pack); // Stripe retries must not double-credit.
-  const sub = { id: 'evt_sub', type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'monthly' } } } };
+  const sub = { id: 'evt_sub', type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'plus' } } } };
   await send(sub);
   const u = (await db.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
-  assert.equal(u.pack_pages, 300);
-  assert.equal(u.sub_pages, 1000);
+  assert.equal(u.pack_pages, 500);
+  assert.equal(u.sub_pages, 600);
   assert.equal(u.sub_id, 'sub_1');
 
   await send({ id: 'evt_del', type: 'customer.subscription.deleted', data: { object: { id: 'sub_1' } } });
   const after = (await db.prepare('SELECT sub_id, sub_pages, pack_pages FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
-  assert.deepEqual({ ...after }, { sub_id: null, sub_pages: 0, pack_pages: 300 });
+  assert.deepEqual({ ...after }, { sub_id: null, sub_pages: 0, pack_pages: 500 });
 });
 
 test('spends the monthly plan before packs and never overspends', async () => {
@@ -144,4 +145,10 @@ test('email sign-in sends a one-time link that starts a session', async () => {
   assert.equal(verify.headers.get('location'), '/account');
   assert.match(verify.headers.get('set-cookie') || '', /^session=/);
   assert.equal((await fetchWorker(new Request(link), e)).headers.get('location'), '/account?error=link');
+});
+
+test('audio costs three credits per started minute', () => {
+  assert.equal(audioCredits(30), 3);
+  assert.equal(audioCredits(60), 3);
+  assert.equal(audioCredits(61), 6);
 });

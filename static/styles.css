@@ -230,6 +230,7 @@ mark.saying { outline: 2px solid var(--accent); }
 .site-footer li { margin-bottom: 4px; }
 .site-footer strong { color: var(--text); }
 .plans { margin: 16px 0 32px; }
+.plans + .plans { margin-top: -16px; }
 .plan { gap: 10px; }
 .plan .plan-price { font-size: 1.4rem; font-weight: 700; color: var(--text); }
 .signin { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }

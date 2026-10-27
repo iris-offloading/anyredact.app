@@ -1,7 +1,7 @@
 import { PRODUCTS, price } from '../shared/pricing.ts';
 import { h } from './dom.ts';
 
-// The /account page: sign in, see balances, buy the monthly plan or packs.
+// The /account page: sign in, see balances, buy a monthly plan or packs.
 
 interface Me {
   user: {
@@ -27,11 +27,11 @@ async function post(path: string, body: unknown = {}): Promise<{ url?: string; e
   return res.json().catch(() => ({ error: `Request failed (${res.status}).` }));
 }
 
-function pricing(signedIn: boolean) {
+function pricing(signedIn: boolean, monthly: boolean) {
   return h(
     'div',
     { className: 'cards plans' },
-    ...PRODUCTS.map((p) =>
+    ...PRODUCTS.filter((p) => !!p.monthly === monthly).map((p) =>
       h(
         'div',
         { className: 'card plan' },
@@ -129,8 +129,9 @@ async function render() {
     status,
     me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }),
     h('h2', {}, 'Plans and packs'),
-    h('p', {}, 'Free every day: about 30 credits. One credit covers about one page of text or one picture. The daily credits are used first, then the monthly plan, then packs.'),
-    pricing(!!me.user),
+    h('p', {}, 'Free every day: 10 credits. One credit covers one page of text or one picture, and a minute of audio takes 3. The daily credits are used first, then the monthly plan, then packs.'),
+    pricing(!!me.user, true),
+    pricing(!!me.user, false),
   );
   if (params.get('paid')) setTimeout(render, 4000);
 }
