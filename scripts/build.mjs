@@ -83,7 +83,7 @@ function nav(current) {
 }
 
 function footer() {
-  const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.h1)}</a></li>`).join('');
+  const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
   <div><strong>AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
@@ -160,13 +160,13 @@ function toolPage(page) {
     .join('');
   const faq = page.faq.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
   const others = TOOLS.filter((t) => t.slug !== page.slug)
-    .map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.h1)}</strong><span>${esc(t.lead)}</span></a>`)
+    .map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.name)}</strong><span>${esc(t.lead)}</span></a>`)
     .join('');
   return layout(
     { ...page, tool: true },
     `<section class="hero wrap">
   <h1>${esc(page.h1)}</h1>
-  <p class="lead">${esc(page.lead)}</p>
+  <p class="lead">${esc(page.also ? `${page.lead} ${page.also}` : page.lead)}</p>
 </section>
 <section class="wrap">
   <div id="tool" class="tool" data-format="${page.format}" data-hint="${esc(page.hint)}">
