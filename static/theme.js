@@ -9,11 +9,20 @@
       return null;
     }
   };
+  // Hover fades would otherwise make a few elements lag behind the rest of the page.
+  const still = () => {
+    root.classList.add('theme-changing');
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-changing')));
+  };
   const apply = (theme) => {
+    if (document.body) still();
     if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
     else delete root.dataset.theme;
   };
   apply(read());
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (!root.dataset.theme) still();
+  });
 
   document.addEventListener('DOMContentLoaded', () => {
     // The sign-in link becomes "Account" once a session exists (cookie set by the Worker).
