@@ -73,3 +73,12 @@ test('plain text is unchanged from before', () => {
   assert.equal(redactStructured(text, s, 'block', 'plain'), 'API_KEY=██████ # owner jane');
   assert.equal(redactStructured(text, s, 'label', 'plain'), 'API_KEY=[OTHER SENSITIVE] # owner jane');
 });
+
+test('subtitles keep cue numbers, timings and tags', () => {
+  assert.equal(syntaxOf('call.srt', ''), 'subtitle');
+  assert.equal(syntaxOf('call.vtt', ''), 'subtitle');
+  const text = 'WEBVTT\n\n1\n00:00:01.000 --> 00:00:04.000\n<v Jane Doe>I am <i>Jane Doe</i>, call 12 34\n\n2\r\n00:00:05,000 --> 00:00:06,000\r\n12\r\n';
+  const s = spans(text, [['Jane Doe', 'name'], ['12', 'phone'], ['00', 'other']]);
+  const out = redactStructured(text, s, 'label', 'subtitle');
+  assert.equal(out, 'WEBVTT\n\n1\n00:00:01.000 --> 00:00:04.000\n<v [NAME]>I am <i>[NAME]</i>, call [PHONE] 34\n\n2\r\n00:00:05,000 --> 00:00:06,000\r\n12\r\n');
+});

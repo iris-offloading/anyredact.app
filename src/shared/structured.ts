@@ -4,15 +4,17 @@ import { ENTITY_LABELS, labelText, maskText, type Span } from './detect.ts';
 // Redaction for text files with a syntax, so the download still parses.
 // Quotes, brackets, keys' quotes and markup are never covered, escapes and
 // entities are covered whole or not at all, and a redacted JSON number,
-// boolean or null becomes a string.
+// boolean or null becomes a string. Subtitles keep their cue numbers, timings
+// and formatting tags, so players still read them.
 
-export type Syntax = 'json' | 'jsonl' | 'xml' | 'plain';
+export type Syntax = 'json' | 'jsonl' | 'xml' | 'subtitle' | 'plain';
 
 export function syntaxOf(name: string, text: string): Syntax {
   const n = name.toLowerCase();
   if (/\.(jsonl|ndjson)$/.test(n)) return 'jsonl';
   if (/\.(json|jsonc|geojson|webmanifest)$/.test(n)) return 'json';
   if (/\.(xml|xhtml|html?|plist|svg|xaml|csproj)$/.test(n)) return 'xml';
+  if (/\.(srt|vtt)$/.test(n)) return 'subtitle';
   // Pasted text and .txt files are checked by content.
   if (/\.(txt|text)$/.test(n) || !n.includes('.')) {
     const t = text.trimStart();
@@ -52,6 +54,7 @@ function shapeOf(text: string, syntax: Syntax): Shape | null {
     return shape;
   }
   if (syntax === 'xml') return xmlShape(text, shape);
+  if (syntax === 'subtitle') return subtitleShape(text, shape);
   return null;
 }
 
@@ -103,6 +106,17 @@ function xmlShape(text: string, shape: Shape): Shape {
     }
   }
   for (const m of text.matchAll(/&(#x?[0-9a-fA-F]+|[\w.-]+);/g)) shape.atoms.push([m.index, m.index + m[0].length]);
+  return shape;
+}
+
+function subtitleShape(text: string, shape: Shape): Shape {
+  let pos = 0;
+  for (const [i, line] of text.split('\n').entries()) {
+    if (/^\s*\d+\s*$/.test(line) || line.includes('-->') || (i === 0 && /^\uFEFF?WEBVTT/.test(line))) shape.keep.fill(1, pos, pos + line.length);
+    pos += line.length + 1;
+  }
+  // Tags with a speaker name, such as <v Jane Doe>, stay redactable.
+  for (const m of text.matchAll(/<\/?[\w.:]+>|\{\\[^}]*\}/g)) shape.keep.fill(1, m.index, m.index + m[0].length);
   return shape;
 }
 

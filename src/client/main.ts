@@ -12,13 +12,16 @@ import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit,
 
 type Kind = LoadedDoc['kind'];
 
+// Source code and scripts, opened as plain text. TypeScript's .ts is left out because it is also a video format.
+const CODE_EXTENSIONS = ['js', 'mjs', 'cjs', 'jsx', 'tsx', 'py', 'rb', 'php', 'java', 'kt', 'swift', 'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'sh', 'bash', 'ps1', 'bat', 'r', 'lua', 'pl', 'scala', 'dart', 'css', 'scss'];
+
 const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
-  image: 'image/png,image/jpeg,image/webp,image/heic,image/heif,.png,.jpg,.jpeg,.webp,.heic,.heif',
+  image: 'image/png,image/jpeg,image/webp,image/heic,image/heif,image/avif,image/gif,image/bmp,image/tiff,image/svg+xml,.png,.jpg,.jpeg,.webp,.heic,.heif,.avif,.gif,.bmp,.tif,.tiff,.svg',
   docx: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   pptx: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation',
   sheet: '.xlsx,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,text/csv',
-  text: '.txt,.md,.csv,.tsv,.json,.jsonl,.ndjson,.log,.xml,.html,.yaml,.yml,.toml,.ini,.cfg,.conf,.properties,.env,text/*,application/json,application/xml',
+  text: `.txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.ndjson,.log,.xml,.html,.htm,.yaml,.yml,.toml,.ini,.cfg,.conf,.properties,.env,.srt,.vtt,.vcf,.ics,.sql,.tex,.rst,.${CODE_EXTENSIONS.join(',.')},text/*,application/json,application/xml`,
   audio: 'audio/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.aac,.weba',
   all: '',
 };
@@ -49,12 +52,12 @@ function isOffice(doc: LoadedDoc | null) {
 }
 
 // Config files are named .env, .env.local or prod.env.
-const TEXT_NAME = /\.(txt|md|csv|tsv|jsonl?|ndjson|log|xml|html?|ya?ml|toml|ini|cfg|conf|properties)$|(^|\.)env(\.[\w-]+)?$/;
+const TEXT_NAME = new RegExp(`\\.(txt|md|markdown|csv|tsv|jsonl?|ndjson|log|xml|html?|ya?ml|toml|ini|cfg|conf|properties|srt|vtt|vcf|ics|sql|tex|rst|${CODE_EXTENSIONS.join('|')})$|(^|\\.)env(\\.[\\w-]+)?$`);
 
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
-  if (/^image\/(png|jpeg|webp|heic|heif)$/.test(file.type) || /\.(png|jpe?g|webp|heic|heif)$/.test(n)) return 'image';
+  if (/^image\/(png|jpeg|webp|heic|heif|avif|gif|bmp|tiff|svg\+xml)$/.test(file.type) || /\.(png|jpe?g|webp|heic|heif|avif|gif|bmp|tiff?|svg)$/.test(n)) return 'image';
   if (n.endsWith('.docx')) return 'docx';
   if (n.endsWith('.pptx')) return 'pptx';
   if (/\.(xlsx|ods)$/.test(n)) return 'sheet';
@@ -81,7 +84,7 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
     case 'audio':
       return (await import('./formats/audio.ts')).loadAudio(file, progress);
     default:
-      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, HEIC, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
+      throw new Error('This file type is not supported yet. Try PDF, an image, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
   }
 }
 
@@ -192,7 +195,7 @@ class App {
       }),
       h('span', { className: 'drop-title' }, h('u', {}, 'Choose a file'), h('span', { className: 'drop-here' }, ' or drop it here')),
       h('span', { className: 'drop-or' }, 'or paste with ', h('kbd', {}, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V')),
-      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio'),
+      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, images, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, () => drop.classList.remove('over'));
