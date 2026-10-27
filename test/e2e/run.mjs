@@ -71,6 +71,8 @@ async function download(name) {
 {
   const found = await run('redact-text', fx('sample.txt'));
   check(found.includes('jane@example.com') && found.includes('415-555-0132') && found.includes('10.0.0.12'), `text findings: ${found.join(', ')}`);
+  const chips = await page.$$eval('label.chip', (els) => els.filter((e) => !e.hidden).map((e) => [e.textContent, e.querySelector('input').checked]));
+  check(chips.length > 0 && chips.every(([, on]) => on) && !chips.some(([t]) => t === 'URL') && (await page.isHidden('text=In pictures')), `only ticked chips after upload: ${chips.map(([t]) => t).join(', ')}`);
   await page.fill('textarea[aria-label="Words to always redact"]', 'Jane Doe');
   await page.waitForFunction(() => [...document.querySelectorAll('.ftext')].some((e) => e.textContent === 'Jane Doe'));
   await page.screenshot({ path: fx('text.png'), fullPage: false });
@@ -275,6 +277,7 @@ async function download(name) {
   check(visionCalls.length === 1 && /^data:image\/jpeg;base64,/.test(visionCalls[0].image) && visionCalls[0].kinds.join() === 'plate', 'picture sent after consent with the ticked kinds');
   await page.screenshot({ path: fx('pictures.png') });
   await pictureChips.click(); // leave the option off for later tests
+  check(await pictureChips.isVisible(), 'a ticked chip stays after it is unticked');
   await page.unroute('**/api/vision');
   await page.unroute('**/api/detect');
 }

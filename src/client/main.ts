@@ -106,6 +106,9 @@ class App {
   private pictureQueue: Promise<unknown> = Promise.resolve();
   private visualError: string | null = null;
   private pictureBox: HTMLElement;
+  // "Look for" and "In pictures" chips, locked once the file is sent.
+  private chips: HTMLLabelElement[] = [];
+  private lookFor: HTMLElement;
   private style: RedactStyle = 'block';
   private busy = false;
 
@@ -174,7 +177,9 @@ class App {
         cb.checked ? this.types.add(t) : this.types.delete(t);
         this.analyze();
       });
-      typeBoxes.append(h('label', { className: 'chip' }, cb, ENTITY_LABELS[t]));
+      const chip = h('label', { className: 'chip' }, cb, ENTITY_LABELS[t]);
+      this.chips.push(chip);
+      typeBoxes.append(chip);
     }
 
     const saved = (store.get('picture-kinds') || '').split(',');
@@ -187,7 +192,9 @@ class App {
         store.set('picture-kinds', [...this.visualKinds].join(','));
         this.analyze();
       });
-      pictureChips.append(h('label', { className: 'chip' }, cb, VISUAL_LABELS[k]));
+      const chip = h('label', { className: 'chip' }, cb, VISUAL_LABELS[k]);
+      this.chips.push(chip);
+      pictureChips.append(chip);
     }
     this.pictureBox = h(
       'div',
@@ -229,8 +236,7 @@ class App {
       { className: 'panel' },
       this.panelHead,
       this.consentBox,
-      h('h3', {}, 'Look for'),
-      typeBoxes,
+      (this.lookFor = h('div', {}, h('h3', {}, 'Look for'), typeBoxes)),
       this.pictureBox,
       h('h3', {}, 'Always redact'),
       termsArea,
@@ -307,6 +313,7 @@ class App {
     this.visualError = null;
     this.consent = 'ask';
     this.consentBox.hidden = true;
+    this.lockChips(false);
     this.overrides.clear();
     this.editors = [];
     this.sheet = null;
@@ -780,6 +787,15 @@ class App {
     }
   }
 
+  /** Once the file is sent, hides the unticked chips; ticked ones can still be unticked. */
+  private lockChips(locked: boolean) {
+    for (const chip of this.chips) chip.hidden = locked && !chip.querySelector('input')!.checked;
+    // A section left with no chips goes too. open() decides whether pictures show again.
+    const empty = (box: HTMLElement) => ![...box.querySelectorAll<HTMLElement>('.chip')].some((c) => !c.hidden);
+    this.lookFor.hidden = locked && empty(this.lookFor);
+    if (locked && empty(this.pictureBox)) this.pictureBox.hidden = true;
+  }
+
   private askConsent(doc: LoadedDoc) {
     if (!this.consentBox.hidden) return;
     const text = doc.units.map((u) => u.text).join(' ');
@@ -792,6 +808,7 @@ class App {
     const upload = () => {
       this.consent = 'yes';
       this.consentBox.hidden = true;
+      this.lockChips(true);
       this.analyze();
     };
     const images = `${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
