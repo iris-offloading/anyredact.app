@@ -105,7 +105,19 @@ function signInForm(opts: { email: boolean; google: boolean }) {
     if (r.ok) say(`Check ${email.value} for a sign-in link. It expires in 15 minutes.`);
     else say(r.error || 'Could not send the link.', true);
   });
-  const google = h('a', { className: 'btn google', href: '/api/auth/google', 'aria-disabled': String(!opts.google), onclick: (e: Event) => !opts.google && e.preventDefault() }, 'Continue with Google');
+  const google = h(
+    'a',
+    {
+      className: 'btn google',
+      href: '/api/auth/google',
+      'aria-disabled': String(!opts.google),
+      // An onclick that returns false cancels the link, so this one returns nothing.
+      onclick: (e: Event) => {
+        if (!opts.google) e.preventDefault();
+      },
+    },
+    'Continue with Google',
+  );
   google.insertAdjacentHTML('afterbegin', GOOGLE_G);
   return card(
     'Sign in to AnyRedact',
