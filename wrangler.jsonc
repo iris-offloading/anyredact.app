@@ -21,7 +21,7 @@
   // Free daily AI allowance per browser and per IP (src/worker/quota.ts).
   "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Quota"] }],
-  "vars": { "FREE_CHARS_PER_DAY": "100000", "EMAIL_FROM": "sign-in@anyredact.app" },
+  "vars": { "FREE_CHARS_PER_DAY": "30000", "EMAIL_FROM": "sign-in@anyredact.app" },
   // Accounts and paid page balances (migrations/). Secrets set in the dashboard:
   // STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
   // and TRIAL_KEY, which benchmark requests to previews must send.
@@ -38,7 +38,7 @@
   "previews": {
     "ai": { "binding": "AI" },
     // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
-    "vars": { "MODEL_TRIALS": "1", "FREE_CHARS_PER_DAY": "100000", "EMAIL_FROM": "sign-in@anyredact.app" },
+    "vars": { "MODEL_TRIALS": "1", "FREE_CHARS_PER_DAY": "30000", "EMAIL_FROM": "sign-in@anyredact.app" },
     "send_email": [{ "name": "EMAIL" }],
     "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "76fdd406-5e72-4528-8702-d04104d017e5" }],
     "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },

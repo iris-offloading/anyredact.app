@@ -1,4 +1,4 @@
-// Paid pages through Stripe: Checkout for the monthly plan and one-off packs,
+// Paid pages through Stripe: Checkout for the monthly plans and one-off packs,
 // the customer portal for managing the plan, and a webhook that credits
 // accounts. Pages are spent after the free daily allowance: the monthly plan
 // first, then packs, which never expire.
@@ -152,12 +152,12 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   const product: Product | undefined = PRODUCTS.find((p) => p.id === id);
   if (!product) return json({ error: 'Unknown product.' }, 400);
   // A second plan would charge twice while the account tracks only one.
-  if (product.monthly && user.sub_id && user.sub_period_end > now()) return json({ error: 'You already have the monthly plan. Manage it from your account.' }, 409);
+  if (product.monthly && user.sub_id && user.sub_period_end > now()) return json({ error: 'You already have a plan. Cancel it under Manage plan first.' }, 409);
   const customer = await customerFor(env, user);
   const priceData = {
     currency: 'usd',
     unit_amount: product.cents,
-    product_data: { name: product.monthly ? `AnyRedact monthly plan, ${product.pages.toLocaleString('en-US')} credits a month` : `AnyRedact ${product.name}` },
+    product_data: { name: product.monthly ? `AnyRedact ${product.name}, ${product.pages.toLocaleString('en-US')} credits a month` : `AnyRedact ${product.name}` },
     ...(product.monthly ? { recurring: { interval: 'month' } } : {}),
   };
   const session = await stripe<{ url: string }>(env, 'checkout/sessions', {
