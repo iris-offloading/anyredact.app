@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { outputName, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
-import { collectAlts, drawingText, dropEmbeddings, enabledByUnit, loadPictures, readXml, relsOf, removeThumbnail, renamePictures, resolveTarget, scrubProperties, scrubRelationships, writeAlts, writePictures, writeRun, type Alt, type Picture, type TextRun } from './office.ts';
+import { TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { collectAlts, drawingText, enabledByUnit, loadPictures, officeNotes, packOffice, readRels, readXml, renamePictures, writeAlts, writeRun, type Alt, type Picture, type Rel, type TextRun } from './office.ts';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -12,19 +12,8 @@ interface Body extends TextRun {
   slides: number[];
 }
 
-interface Rel {
-  type: string;
-  target: string;
-}
-
 async function relsFor(zip: JSZip, part: string): Promise<Map<string, Rel>> {
-  const out = new Map<string, Rel>();
-  const xml = await readXml(zip, relsOf(part));
-  for (const rel of Array.from(xml?.getElementsByTagName('Relationship') ?? [])) {
-    if (rel.getAttribute('TargetMode') === 'External') continue;
-    out.set(rel.getAttribute('Id') ?? '', { type: rel.getAttribute('Type') ?? '', target: resolveTarget(relsOf(part), rel.getAttribute('Target') ?? '') });
-  }
-  return out;
+  return new Map([...(await readRels(zip, part)).rels].filter(([, r]) => !r.external));
 }
 
 const relsOfType = (rels: Map<string, Rel>, type: RegExp) => [...rels.values()].filter((r) => type.test(r.type)).map((r) => r.target);
@@ -111,10 +100,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
 
   const { pictures, pages, units: pictureUnits, unreadable } = await loadPictures(zip, 'ppt/media/', progress);
 
-  const notes = ['Author names and document properties are removed on download.'];
-  if (hidden.length) notes.push(`Includes hidden slides: ${hidden.join(', ')}`);
-  if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} in EMF, WMF or TIFF format could not be opened and stay as they are.`);
-  if (Object.keys(zip.files).some((n) => /^ppt\/embeddings\/[^/]+$/.test(n))) notes.push('Embedded files and chart data are removed on download.');
+  const notes = officeNotes(zip, 'ppt', unreadable, hidden.length ? [`Includes hidden slides: ${hidden.join(', ')}`] : []);
 
   const size = presentation.getElementsByTagNameNS(P, 'sldSz')[0];
   const width = Math.round(Number(size?.getAttribute('cx') ?? 12192000) / EMU_PER_PX);
@@ -123,17 +109,15 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
   return {
     kind: 'pptx',
     styles: TEXT_STYLES,
-    name: file.name,
     units: [...units, ...[...alts.values()].map((a) => ({ ...a.unit, section: 'Alt text' })), ...pictureUnits],
     pages,
     notes,
     render: (container) => render(file, zip, slides.length, width, height, [...bodies.values()], pictures, container),
-    async exportFile(findings, boxes, style) {
+    async exportFile(findings, boxes, style, say = progress) {
       const byUnit = enabledByUnit(findings);
-      const redacted = new Set<string>();
+      const redacted = new Set(findings.filter((f) => f.enabled).map((f) => f.text));
       for (const b of bodies.values()) {
         const spans = byUnit.get(b.unit.id) ?? [];
-        for (const f of spans) redacted.add(f.text);
         writeRun(b, spans, style);
       }
       writeAlts(alts, byUnit, style, redacted);
@@ -153,19 +137,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
         }
         zip.file('docProps/app.xml', ser.serializeToString(app));
       }
-      await dropEmbeddings(zip, parts, 'ppt');
-      progress('Redacting pictures…');
-      await writePictures(zip, pictures, findings, boxes);
-      await scrubRelationships(zip, redacted, /^ppt\/.*_rels\/.*\.rels$/);
-      await scrubProperties(zip);
-      await removeThumbnail(zip);
-      progress('Packing presentation…');
-      const blob = await zip.generateAsync({
-        type: 'blob',
-        compression: 'DEFLATE',
-        mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      });
-      return { blob, filename: outputName(file.name, 'pptx') };
+      return packOffice(zip, { root: 'ppt', parts, pictures, findings, marks: boxes, redacted, name: file.name, progress: say, mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
     },
   };
 }

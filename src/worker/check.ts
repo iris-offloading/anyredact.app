@@ -1,7 +1,7 @@
 import { CHECK_CREDITS, MAX_CHARS, PAGE_CHARS } from '../shared/pricing.ts';
 import { chargeUsage, runWithRetry, type Env } from './detect.ts';
 import { json, readAiPost, trialsAllowed } from './http.ts';
-import { redeemFreeCheck } from './quota.ts';
+import { grantFreeCheck, redeemFreeCheck } from './quota.ts';
 
 // Final check before download: the browser sends the document text with every
 // redaction already masked (█), and a decision model estimates, per category,
@@ -49,7 +49,7 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
   if (text.length > MAX_CHARS) return json({ error: `Text is too long to check (max ${MAX_CHARS} characters).` }, 413);
 
   // Each scan's first check is free; later ones cost credits like detection.
-  const free = await redeemFreeCheck(env, checkToken);
+  const free = await redeemFreeCheck(env, checkToken, text.length);
   const quota = free ? null : await chargeUsage(request, env, CHECK_CREDITS * PAGE_CHARS);
   if (quota instanceof Response) return quota;
 
@@ -69,6 +69,8 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
     return json({ risks, free, quota: quota?.state });
   } catch (err) {
     console.error('check failed', err);
+    if (free) await grantFreeCheck(env, text.length, checkToken as string);
+    else await quota?.refund();
     return json({ error: 'The final check is unavailable right now.' }, 502);
   }
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { chunkText, type Env } from '../src/worker/detect.ts';
+import { chunkText } from '../src/shared/detect.ts';
+import type { Env } from '../src/worker/detect.ts';
 import entry from '../src/worker/index.ts';
 
 const worker = { fetch: (req: Request, e: Env) => entry.fetch(req as Parameters<typeof entry.fetch>[0], e) };
@@ -179,6 +180,40 @@ test('each scan comes with one free final check, later ones use the allowance', 
   assert.equal(((await (await post('/api/check', { text: 'Jane Doe', checkToken: crypto.randomUUID() })).json()) as { free?: boolean }).free, undefined);
 });
 
+test('a failed model call gives the charge back', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '5000' };
+  const req = (text: string) =>
+    new Request('https://anyredact.app/api/detect', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' },
+    });
+  const run = e.AI!.run;
+  e.AI!.run = (async () => {
+    throw new Error('model down');
+  }) as never;
+  assert.equal((await worker.fetch(req('x'.repeat(100)), e)).status, 502);
+  e.AI!.run = run;
+  const ok = (await (await worker.fetch(req('x'.repeat(10)), e)).json()) as { quota: { used: number } };
+  assert.equal(ok.quota.used, 10);
+});
+
+test('a free final check covers about the size of its scan', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '100000' };
+  const post = (path: string, body: object) =>
+    worker.fetch(
+      new Request(`https://anyredact.app${path}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' },
+      }),
+      e,
+    );
+  const { checkToken } = (await (await post('/api/detect', { text: 'ab' })).json()) as { checkToken: string };
+  const big = (await (await post('/api/check', { text: 'Jane '.repeat(2000), checkToken })).json()) as { free: boolean };
+  assert.equal(big.free, false);
+});
+
 test('vision regions are validated and scaled to thousandths', async () => {
   const { parseRegions } = await import('../src/worker/vision.ts');
   const out = parseRegions(
@@ -200,6 +235,7 @@ test('limits IPv6 visitors by their /64 network', async () => {
   assert.equal(net('2001:db8:aa:1::1'), '2001:db8:aa:1::/64');
   assert.equal(net('2001:0db8:00aa:0001:ffff:1:2:3'), '2001:db8:aa:1::/64');
   assert.equal(net('2001:db8::5'), '2001:db8:0:0::/64');
+  assert.equal(net('::ffff:198.51.100.4'), '198.51.100.4');
 });
 
 test('preview benchmark features need the trial key', async () => {

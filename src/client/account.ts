@@ -138,6 +138,9 @@ function confirmSignIn(token: string) {
   root.replaceChildren(status, h('section', {}, h('h2', {}, 'Sign in to AnyRedact'), button));
 }
 
+// After checkout, refresh the balance a few times while the payment is confirmed.
+let paidChecks = 5;
+
 async function render() {
   const token = new URLSearchParams(location.hash.slice(1)).get('signin');
   if (token) return confirmSignIn(token);
@@ -149,7 +152,7 @@ async function render() {
   root.replaceChildren(status, me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }));
   if (params.get('paid')) {
     clearBuy();
-    setTimeout(render, 4000);
+    if (paidChecks-- > 0) setTimeout(render, 4000);
   } else if (me.user && buying) {
     clearBuy();
     checkout(buying);

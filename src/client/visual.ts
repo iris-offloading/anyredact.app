@@ -34,28 +34,41 @@ const OBJECT_KINDS: Record<string, VisualKind> = {
   'stop sign': 'sign',
 };
 
-let detectors: Promise<{ face: FaceDetector; objects: ObjectDetector }> | null = null;
+// Each model loads on first use, so ticking only Faces skips the larger object model.
+type Vision = typeof import('@mediapipe/tasks-vision');
+let files: Promise<{ vision: Vision; fileset: Awaited<ReturnType<Vision['FilesetResolver']['forVisionTasks']>> }> | null = null;
+let faceDetector: Promise<FaceDetector> | null = null;
+let objectDetector: Promise<ObjectDetector> | null = null;
 
-function load() {
-  detectors ??= import('@mediapipe/tasks-vision').then(async ({ FilesetResolver, FaceDetector, ObjectDetector }) => {
-    const files = await FilesetResolver.forVisionTasks(__MEDIAPIPE_WASM__);
-    const [face, objects] = await Promise.all([
-      FaceDetector.createFromOptions(files, {
-        baseOptions: { modelAssetPath: '/models/blaze_face_short_range.tflite', delegate: 'CPU' },
-        runningMode: 'IMAGE',
-        minDetectionConfidence: 0.5,
-      }),
-      ObjectDetector.createFromOptions(files, {
-        baseOptions: { modelAssetPath: '/models/efficientdet_lite2.tflite', delegate: 'CPU' },
-        runningMode: 'IMAGE',
-        scoreThreshold: 0.35,
-        categoryAllowlist: Object.keys(OBJECT_KINDS),
-      }),
-    ]);
-    return { face, objects };
-  });
-  detectors.catch(() => (detectors = null));
-  return detectors;
+function wasm() {
+  files ??= import('@mediapipe/tasks-vision').then(async (vision) => ({ vision, fileset: await vision.FilesetResolver.forVisionTasks(__MEDIAPIPE_WASM__) }));
+  files.catch(() => (files = null));
+  return files;
+}
+
+function faces() {
+  faceDetector ??= wasm().then(({ vision, fileset }) =>
+    vision.FaceDetector.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: '/models/blaze_face_short_range.tflite', delegate: 'CPU' },
+      runningMode: 'IMAGE',
+      minDetectionConfidence: 0.5,
+    }),
+  );
+  faceDetector.catch(() => (faceDetector = null));
+  return faceDetector;
+}
+
+function objects() {
+  objectDetector ??= wasm().then(({ vision, fileset }) =>
+    vision.ObjectDetector.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: '/models/efficientdet_lite2.tflite', delegate: 'CPU' },
+      runningMode: 'IMAGE',
+      scoreThreshold: 0.35,
+      categoryAllowlist: Object.keys(OBJECT_KINDS),
+    }),
+  );
+  objectDetector.catch(() => (objectDetector = null));
+  return objectDetector;
 }
 
 /** Square-ish crops at several zoom levels, so small faces fill enough of the model's input. */
@@ -140,18 +153,19 @@ function scan(canvas: HTMLCanvasElement, levels: number[], detect: (c: HTMLCanva
 /** Finds faces, screens and stop signs on a page bitmap, without uploading it. */
 export async function detectVisual(canvas: HTMLCanvasElement, kinds: Set<VisualKind>): Promise<VisualHit[]> {
   if (!kinds.size) return [];
-  const { face, objects } = await load();
+  const wantObjects = kinds.has('screen') || kinds.has('sign');
+  const [face, objectModel] = await Promise.all([kinds.has('face') ? faces() : null, wantObjects ? objects() : null]);
   const { width, height } = canvas;
   const hits: VisualHit[] = [];
-  if (kinds.has('face')) {
+  if (face) {
     hits.push(
       // The model's box covers eyes to chin; grow it to take in hair and ears.
       ...scan(canvas, [1, 2, 4], (c) => face.detect(c).detections, (d, rect) => ({ kind: 'face', rect: pad(rect, 0.3, width, height), score: d.categories[0]?.score ?? 0 })),
     );
   }
-  if (kinds.has('screen') || kinds.has('sign')) {
+  if (objectModel) {
     hits.push(
-      ...scan(canvas, [1, 2], (c) => objects.detect(c).detections, (d, rect) => {
+      ...scan(canvas, [1, 2], (c) => objectModel.detect(c).detections, (d, rect) => {
         const kind = OBJECT_KINDS[d.categories[0]?.categoryName ?? ''];
         return kind && kinds.has(kind) ? { kind, rect: pad(rect, 0.05, width, height), score: d.categories[0].score } : null;
       }),

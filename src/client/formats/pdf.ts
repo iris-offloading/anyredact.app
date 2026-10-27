@@ -1,6 +1,5 @@
 import * as pdfjs from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { PDFDocument } from 'pdf-lib';
 import { burnBoxes, canvasToBlob, outputName, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
 import { ocrUnit, pad } from './ocr.ts';
 
@@ -164,14 +163,15 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
 
   return {
     kind: 'pdf',
-    name: file.name,
     units,
     pages,
     notes,
-    async exportFile(findings, boxes) {
+    async exportFile(findings, boxes, _style, say = progress) {
+      // Only needed for the download, so it loads then.
+      const { PDFDocument } = await import('pdf-lib');
       const out = await PDFDocument.create();
       for (const p of pages) {
-        progress(`Writing page ${p.index + 1} of ${pages.length}…`);
+        say(`Writing page ${p.index + 1} of ${pages.length}…`);
         const burned = burnBoxes(p.canvas, rectsForPage(p.index, findings, boxes));
         const jpg = await out.embedJpg(await (await canvasToBlob(burned, 'image/jpeg', 0.9)).arrayBuffer());
         const { w, h } = sizes[p.index];
