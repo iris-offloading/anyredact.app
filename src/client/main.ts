@@ -82,8 +82,8 @@ class App {
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
   private aiError: string | null = null;
-  // Nothing leaves the browser until the user agrees, per file (or always, if they ticked that box).
-  private consent: 'ask' | 'yes' | 'no' = 'ask';
+  // Nothing leaves the browser until the user presses Upload for this file.
+  private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   private terms = '';
@@ -286,7 +286,7 @@ class App {
     this.visualLocal = pictureCache();
     this.visualAi = pictureCache();
     this.visualError = null;
-    this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
+    this.consent = 'ask';
     this.consentBox.hidden = true;
     this.overrides.clear();
     this.editors = [];
@@ -357,7 +357,6 @@ class App {
     this.warn.hidden = true;
     if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
     else if (this.visualError) this.say(this.visualError, true);
-    else if (this.consent === 'no') this.say('Using the built-in rules only. Nothing was sent to our server, but names and addresses are easy to miss this way. Review carefully.');
     else if (this.consent === 'ask') this.say('The list shows what the built-in rules found so far.');
     else this.say('');
     this.renderList();
@@ -629,32 +628,25 @@ class App {
       this.consentBox.hidden = true;
       return;
     }
-    const always = h('input', { type: 'checkbox' });
-    const choose = (answer: 'yes' | 'no') => {
-      if (answer === 'yes' && always.checked) store.set('ai-consent', 'always');
-      this.consent = answer;
+    const upload = () => {
+      this.consent = 'yes';
       this.consentBox.hidden = true;
       this.analyze();
     };
+    const images = `${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
+    const what = words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
+    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
+    const cost = `Estimated cost: ${pages} credit${pages === 1 ? '' : 's'}`;
+    const costLine = h('p', { className: 'hint' }, `${cost}.`);
     this.consentBox.replaceChildren(
-      h(
-        'p',
-        {},
-        h('strong', {}, 'Nothing has been sent yet. '),
-        words ? `To find names, addresses and other personal details, AnyRedact sends the text read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare.` : '',
-        pictures ? ` With picture redaction on, it also sends the ${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}.` : '',
-      ),
-      h('button', { type: 'button', className: 'btn primary', textContent: 'Find personal info with AI', onclick: () => choose('yes') }),
-      h('button', { type: 'button', className: 'btn ghost', textContent: 'Use built-in rules only', onclick: () => choose('no') }),
-      h('label', { className: 'row' }, always, 'Always use AI on this device'),
+      h('p', {}, `Upload ${what} to find personal info?`),
+      costLine,
+      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
     );
     this.consentBox.hidden = false;
-    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
     freePagesLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      this.consentBox.append(
-        h('p', { className: 'hint' }, left >= pages ? `Uses about ${pages} credit${pages === 1 ? '' : 's'} of ${left} left today.` : `Needs about ${pages} credit${pages === 1 ? '' : 's'}; ${left} left today.`),
-      );
+      costLine.textContent = `${cost}, ${left >= pages ? '' : 'only '}${left} left today.`;
     });
   }
 

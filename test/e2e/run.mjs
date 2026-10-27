@@ -158,7 +158,7 @@ async function download(name) {
   apiCalls.length = 0;
   await run('redact-text', fx('sample.txt'));
   check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
-  await page.click('text=Find personal info with AI');
+  await page.click('.consent button.primary');
   await page.waitForSelector('.consent', { state: 'hidden' });
   await page.click('.panel > button.primary');
   await page.waitForSelector('.warn-text');
@@ -185,7 +185,7 @@ async function download(name) {
   await pictureChips.click();
   await page.waitForFunction(() => !/Looking for faces/.test(document.querySelector('.status')?.textContent ?? ''), null, { timeout: 60_000 });
   check(visionCalls.length === 0, 'no picture sent before consent');
-  await page.click('text=Find personal info with AI');
+  await page.click('.consent button.primary');
   await page.waitForSelector('label.finding:has-text("Number plate 1")', { timeout: 30_000 });
   check(visionCalls.length === 1 && /^data:image\/jpeg;base64,/.test(visionCalls[0].image) && visionCalls[0].kinds.join() === 'plate', 'picture sent after consent with the ticked kinds');
   await page.screenshot({ path: fx('pictures.png') });
@@ -200,7 +200,7 @@ async function download(name) {
   await page.screenshot({ path: fx('home.png'), fullPage: true });
   await page.setInputFiles('#file-input', fx('sample.txt'));
   await page.waitForSelector('label.finding');
-  await page.click('text=Find personal info with AI');
+  await page.click('.consent button.primary');
   await page.waitForFunction(() => /built-in rules only/i.test(document.querySelector('.status')?.textContent ?? ''));
   const status = await page.textContent('.status');
   check(/built-in rules only/i.test(status), `ai fallback status: ${status}`);
