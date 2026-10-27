@@ -67,7 +67,12 @@ const ART = {
     base: [bar(40, 24, 30, 8), bar(40, 46, 30, 8), bar(40, 68, 30, 8), bar(40, 90, 30, 8), bar(150, 46, 60, 8), bar(150, 90, 40, 8)],
     spots: [bar(80, 24, 120, 8), bar(80, 46, 62, 8), bar(80, 68, 90, 8), bar(80, 90, 62, 8)],
   },
-  audio: { wave: true, spots: [bar(118, 40, 46, 60)] },
+  audio: {
+    // Waveform on top, the transcript below it; the same words are found in both.
+    wave: [bar(118, 18, 46, 52)],
+    base: [bar(46, 92, 22, 8), bar(46, 114, 22, 8), bar(78, 92, 36, 8), bar(184, 92, 90, 8), bar(78, 114, 120, 8)],
+    spots: [bar(120, 92, 58, 8)],
+  },
 };
 const WAVE = [14, 30, 22, 46, 34, 18, 40, 56, 28, 44, 60, 38, 24, 48, 32, 20, 42, 26, 36, 16, 30, 50, 22, 12];
 
@@ -85,15 +90,15 @@ function art(kind, stage) {
     for (const c of g.cols.slice(0, -1)) b += `<path class="dg-grid" d="M${(x += c)} ${g.y}v${g.rows * g.h}"/>`;
   }
   if (a.wave) {
-    // Found: a marker behind the words. Redacted: the stretch becomes one flat tone.
-    if (stage === 1) for (const s of a.spots) b += `<rect class="dg-found" x="${s.x - 4}" y="${s.y - 4}" width="${s.w + 8}" height="${s.h + 8}" rx="4"/>`;
-    if (stage === 2) for (const s of a.spots) b += `<rect class="dg-bar" x="${s.x - 2}" y="64" width="${s.w + 2}" height="12" rx="6"/>`;
+    // Found: a marker behind the sound. Redacted: the stretch becomes one flat tone.
+    if (stage === 1) for (const s of a.wave) b += `<rect class="dg-found" x="${s.x - 4}" y="${s.y - 4}" width="${s.w + 8}" height="${s.h + 8}" rx="4"/>`;
+    if (stage === 2) for (const s of a.wave) b += `<rect class="dg-bar" x="${s.x - 2}" y="${s.y + s.h / 2 - 5}" width="${s.w + 2}" height="10" rx="5"/>`;
     WAVE.forEach((h, i) => {
       const x = 46 + i * 10;
-      if (stage === 2 && a.spots.some((s) => x >= s.x && x < s.x + s.w)) return;
-      b += `<rect class="dg-line" x="${x}" y="${70 - h / 2}" width="5" height="${h}" rx="2.5"/>`;
+      if (stage === 2 && a.wave.some((s) => x >= s.x && x < s.x + s.w)) return;
+      b += `<rect class="dg-line" x="${x}" y="${44 - h * 0.4}" width="5" height="${h * 0.8}" rx="2.5"/>`;
     });
-    return b;
+    b += `<path class="dg-grid" d="M40 80h240"/>`;
   }
   for (const r of a.base) b += `<rect class="dg-line" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${r.h / 2}"/>`;
   for (const r of a.spots) {
