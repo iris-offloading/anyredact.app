@@ -1,5 +1,5 @@
-import { contactPublicHint, dedupe, SSN_SHAPE, detectPatterns, findTerms, plausibleEntity, type EntityType, type Span } from './detect.ts';
-import { detectNames, nameVariants } from './names.ts';
+import { contactPublicHint, dedupe, SSN_SHAPE, findTerms, plausibleEntity, type EntityType, type Span } from './detect.ts';
+import { nameVariants } from './names.ts';
 
 export interface Term {
   text: string;
@@ -12,13 +12,9 @@ const CONTACT_TYPES = new Set<EntityType>(['phone', 'email', 'url', 'address']);
 // Types the AI may mark as an organisation's: contact details plus company registration and VAT numbers.
 const ORG_TYPES = new Set<EntityType>([...CONTACT_TYPES, 'id']);
 
-/**
- * Whether a finding starts ticked. Public contacts start unticked, and so do
- * dates only the date rule matched: the AI reports birth dates and other
- * personal dates, while the rule also matches every invoice and letter date.
- */
+/** Whether a finding starts ticked: business and public-service contacts start unticked. */
 export function startsTicked(s: Span): boolean {
-  return !s.publicHint && !(s.type === 'date' && s.source === 'pattern');
+  return !s.publicHint;
 }
 
 export interface UnitSpan extends Span {
@@ -26,15 +22,12 @@ export interface UnitSpan extends Span {
 }
 
 /**
- * Runs every detector over the whole document at once, so matches can cross
- * unit boundaries (a phone number wrapped onto the next paragraph), then
- * splits each match back into unit-relative pieces.
+ * Finds every mention of the user's terms and the AI's findings over the
+ * whole document at once, so matches can cross unit boundaries (a phone
+ * number wrapped onto the next paragraph), then splits each match back into
+ * unit-relative pieces.
  */
-export function analyzeUnits(
-  units: { id: string; text: string }[],
-  opts: { types: Iterable<EntityType>; terms?: Term[]; ai?: Term[] | null },
-): UnitSpan[] {
-  const types = new Set(opts.types);
+export function analyzeUnits(units: { id: string; text: string }[], opts: { terms?: Term[]; ai?: Term[] | null }): UnitSpan[] {
   const starts: number[] = [];
   let text = '';
   for (const u of units) {
@@ -43,27 +36,18 @@ export function analyzeUnits(
     text += u.text;
   }
 
-  const spans: Span[] = [...findTerms(text, opts.terms ?? []), ...detectPatterns(text, types)];
-  const names: string[] = [];
-  if (types.has('name')) {
-    const found = detectNames(text);
-    spans.push(...found);
-    names.push(...found.map((s) => text.slice(s.start, s.end)));
-  }
-  const ai = opts.ai?.filter((e) => plausibleEntity(e.text, e.type));
-  if (ai) {
-    const orgOwned = new Set(ai.filter((e) => e.owner === 'organization' && ORG_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
-    for (let s of findTerms(text, ai, 'ai')) {
-      // Models sometimes call an SSN/ITIN-shaped number a phone number.
-      if (s.type === 'phone' && SSN_SHAPE.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
-      if (ORG_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };
-      spans.push(s);
-    }
-    names.push(...ai.filter((e) => e.type === 'name').map((e) => e.text));
+  const spans: Span[] = findTerms(text, opts.terms ?? []);
+  const ai = opts.ai?.filter((e) => plausibleEntity(e.text, e.type)) ?? [];
+  const orgOwned = new Set(ai.filter((e) => e.owner === 'organization' && ORG_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
+  for (let s of findTerms(text, ai, 'ai')) {
+    // Models sometimes call an SSN/ITIN-shaped number a phone number.
+    if (s.type === 'phone' && SSN_SHAPE.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
+    if (ORG_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };
+    spans.push(s);
   }
   // Once a name is known, catch every other mention of it, including first or last name alone.
-  const variants = nameVariants(names).map((t) => ({ text: t, type: 'name' as EntityType }));
-  spans.push(...findTerms(text, variants, 'pattern', true));
+  const variants = nameVariants(ai.filter((e) => e.type === 'name').map((e) => e.text)).map((t) => ({ text: t, type: 'name' as EntityType }));
+  spans.push(...findTerms(text, variants, 'ai', true));
 
   // Business and public-service contact details start unticked. The same
   // number or address is treated the same everywhere: if any mention looks

@@ -19,7 +19,7 @@ const ACCEPT: Record<Kind | 'all', string> = {
 };
 ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
 
-// What the "Look for" chips offer. AI and pattern findings are both filtered by these.
+// What the "Look for" chips offer. AI findings are filtered by these.
 const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
 const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'date', 'card', 'iban', 'ip', 'other'];
 // Picture regions are opt-in: plenty of people want faces left visible.
@@ -307,8 +307,7 @@ class App {
       .filter(Boolean)
       .map((text) => ({ text, type: 'custom' as EntityType }));
 
-    // Ask the model once per document, and only after the user agreed to send
-    // the text; pattern rules run alongside it as a safety net.
+    // Ask the model once per document, and only after the user agreed to send the text.
     if (this.consent === 'ask') this.askConsent(doc);
     if (this.consent === 'yes' && !this.aiEntities && !this.aiError) {
       const text = doc.units.map((u) => u.text).join('\n\n');
@@ -329,11 +328,7 @@ class App {
     }
 
     const byId = new Map(doc.units.map((u) => [u.id, u]));
-    const spans = analyzeUnits(doc.units, {
-      types: this.types,
-      terms,
-      ai: this.aiEntities,
-    }).filter((s) => s.type === 'custom' || this.types.has(s.type));
+    const spans = analyzeUnits(doc.units, { terms, ai: this.aiEntities }).filter((s) => s.type === 'custom' || this.types.has(s.type));
     const findings: Finding[] = spans.map((s) => {
       const unit = byId.get(s.unitId)!;
       const key = `${unit.id}:${s.start}:${s.end}`;
@@ -355,9 +350,9 @@ class App {
     if (this.doc !== doc) return;
     this.findings = [...findings, ...pictures];
     this.warn.hidden = true;
-    if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
+    // Without the AI the list is empty and says how to redact by hand.
+    if (this.aiError) this.say(this.aiError, true);
     else if (this.visualError) this.say(this.visualError, true);
-    else if (this.consent === 'ask') this.say('The list shows what the built-in rules found so far.');
     else this.say('');
     this.renderList();
     this.refreshPreview();
@@ -458,8 +453,9 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (this.doc?.kind === 'docx' ? `, picture ${f.page + 1}` : `, p${f.page + 1}`) : '';
-        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, (f.publicHint ? 'public? ' : '') + (f.source === 'ai' ? 'AI' : '') + where));
+        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (this.doc?.kind === 'docx' ? `picture ${f.page + 1}` : `p${f.page + 1}`) : '';
+        const tag = [f.publicHint ? 'public?' : '', where].filter(Boolean).join(', ');
+        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, tag));
         row.addEventListener('mouseenter', () => this.focus(f));
         return row;
       });
