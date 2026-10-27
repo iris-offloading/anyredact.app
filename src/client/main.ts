@@ -14,10 +14,10 @@ type Kind = LoadedDoc['kind'];
 
 const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
-  image: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp',
+  image: 'image/png,image/jpeg,image/webp,image/heic,image/heif,.png,.jpg,.jpeg,.webp,.heic,.heif',
   docx: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   sheet: '.xlsx,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,text/csv',
-  text: '.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.yaml,.yml,text/*',
+  text: '.txt,.md,.csv,.tsv,.json,.jsonl,.ndjson,.log,.xml,.html,.yaml,.yml,.toml,.ini,.cfg,.conf,.properties,.env,text/*,application/json,application/xml',
   audio: 'audio/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.aac,.weba',
   all: '',
 };
@@ -36,15 +36,18 @@ function hasText(doc: LoadedDoc) {
   return doc.kind === 'text' || doc.kind === 'docx' || doc.kind === 'sheet' || doc.kind === 'audio';
 }
 
+// Config files are named .env, .env.local or prod.env.
+const TEXT_NAME = /\.(txt|md|csv|tsv|jsonl?|ndjson|log|xml|html?|ya?ml|toml|ini|cfg|conf|properties)$|(^|\.)env(\.[\w-]+)?$/;
+
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
-  if (/^image\/(png|jpeg|webp)$/.test(file.type) || /\.(png|jpe?g|webp)$/.test(n)) return 'image';
+  if (/^image\/(png|jpeg|webp|heic|heif)$/.test(file.type) || /\.(png|jpe?g|webp|heic|heif)$/.test(n)) return 'image';
   if (n.endsWith('.docx')) return 'docx';
   if (/\.(xlsx|ods)$/.test(n)) return 'sheet';
   if (file.type.startsWith('audio/') || /\.(mp3|m4a|wav|flac|ogg|opus|aac|weba)$/.test(n)) return 'audio';
   if (/\.(doc|xls)$/.test(n)) return null;
-  if (file.type.startsWith('text/') || /\.(txt|md|csv|tsv|json|log|xml|html?|ya?ml)$/.test(n) || !file.type) return 'text';
+  if (file.type.startsWith('text/') || /^application\/(json|xml)$/.test(file.type) || TEXT_NAME.test(n) || !file.type) return 'text';
   return null;
 }
 
@@ -63,7 +66,7 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
     case 'audio':
       return (await import('./formats/audio.ts')).loadAudio(file, progress);
     default:
-      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, DOCX, XLSX, ODS, a text file or audio. Old .doc and .xls files need to be saved as .docx or .xlsx first.');
+      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, HEIC, DOCX, XLSX, ODS, a text file or audio. Old .doc and .xls files need to be saved as .docx or .xlsx first.');
   }
 }
 
@@ -162,7 +165,7 @@ class App {
       this.fileInput,
       h('span', { className: 'drop-icon', 'aria-hidden': 'true' }, '⬆'),
       h('span', { className: 'drop-title' }, 'Drop a file here or ', h('u', {}, 'choose one')),
-      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio'),
+      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, () => drop.classList.remove('over'));

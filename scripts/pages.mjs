@@ -41,13 +41,13 @@ export const TOOLS = [
     format: 'image',
     name: 'Redact images',
     nav: 'Image',
-    title: 'Auto Redact Images Online with AI: JPG, PNG, WebP | AnyRedact',
+    title: 'Auto Redact Images Online with AI: JPG, PNG, WebP, HEIC | AnyRedact',
     description:
-      'Auto redact images online with AI. Text in the picture is read, personal details get solid black boxes, and EXIF and GPS data are stripped. Works with JPG, PNG, WebP and screenshots.',
+      'Auto redact images online with AI. Text in the picture is read, personal details get solid black boxes, and EXIF and GPS data are stripped. Works with JPG, PNG, WebP, HEIC and screenshots.',
     h1: 'Auto redact images online with AI',
     lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
-    also: 'Works with JPG, PNG and WebP.',
-    hint: 'PNG, JPG or WebP, or paste a screenshot',
+    also: 'Works with JPG, PNG, WebP and HEIC.',
+    hint: 'PNG, JPG, WebP or HEIC, or paste a screenshot',
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
@@ -61,6 +61,10 @@ export const TOOLS = [
       {
         q: 'Why not blur instead of a black box?',
         a: 'Blurred or pixelated text can sometimes be reconstructed. A solid box replaces the pixels.',
+      },
+      {
+        q: 'Can I upload iPhone photos?',
+        a: 'Yes. HEIC and HEIF photos open here and download as JPG.',
       },
     ],
   },
@@ -130,11 +134,11 @@ export const TOOLS = [
     nav: 'Text',
     title: 'Auto Redact Text Online with AI: CSV, JSON, Logs | AnyRedact',
     description:
-      'Auto redact text online with AI. Paste text or upload a CSV, JSON or log file to mask emails, phone numbers, IP addresses and card numbers before sharing.',
+      'Auto redact text online with AI. Paste text or upload a CSV, JSON, XML, YAML, .env or log file to mask emails, phone numbers, IP addresses and card numbers before sharing.',
     h1: 'Auto redact text online with AI',
     lead: 'Paste text or upload a file to mask personal info, passwords, API keys, and other secrets in seconds.',
-    also: 'Works with CSV, JSON, Markdown and log files.',
-    hint: 'TXT, CSV, JSON, Markdown or logs',
+    also: 'Works with CSV, JSON, XML, YAML, .env, Markdown and log files.',
+    hint: 'TXT, CSV, JSON, XML, YAML, .env or logs',
     points: [
       ['Great for logs and support tickets', 'Strip customer details before sharing logs, transcripts or datasets.'],
       ['Mask or label', 'Keep the shape of the text with █ blocks, or replace values with labels like [EMAIL].'],
@@ -144,6 +148,10 @@ export const TOOLS = [
       {
         q: 'Can I keep the layout of a CSV or log?',
         a: 'Yes. Black out keeps every line and column in place, using █ for each removed character.',
+      },
+      {
+        q: 'Will a redacted JSON or XML file still parse?',
+        a: 'Yes. Quotes, brackets and tags are left alone, and a redacted number becomes a string.',
       },
     ],
   },
@@ -185,7 +193,7 @@ export const HOME = {
     'Redact PDFs, images, Word documents, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
   lead: 'Upload PDFs, images, Word, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
-  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
+  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
@@ -210,7 +218,7 @@ export const HOME = {
     },
     {
       q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, text files such as TXT, CSV, JSON and logs, and audio such as MP3, M4A and WAV. Video is planned.',
+      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, HEIC, text files such as TXT, CSV, JSON, XML, YAML, .env and logs, and audio such as MP3, M4A and WAV. Video is planned.',
     },
   ],
 };
