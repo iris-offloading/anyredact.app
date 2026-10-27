@@ -3,7 +3,7 @@
 import { handleCheck } from './check.ts';
 import { handleDetect, type Env } from './detect.ts';
 import { pool } from '../shared/pool.ts';
-import { base64, json } from './http.ts';
+import { base64, json, rateLimited, trialsAllowed } from './http.ts';
 import { handleAccounts } from './accounts.ts';
 import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';
@@ -25,15 +25,15 @@ export default {
     if (url.pathname === '/api/quota') return json({ quota: await quotaStatus(request, env) });
     if (url.pathname === '/api/health') return json({ ok: true });
     // Preview-only model catalogue, for picking models to benchmark.
-    if (url.pathname === '/api/models' && env.MODEL_TRIALS === '1' && env.AI) {
+    if (url.pathname === '/api/models' && trialsAllowed(request, env) && env.AI) {
       const search = url.searchParams.get('search');
       const models = await env.AI.models((search ? { search, per_page: 50 } : { task: url.searchParams.get('task') || 'Text Generation', per_page: 200 }) as never);
       return json(search ? models : models.map((m) => m.name));
     }
     // Preview-only raw model call, for trying inputs such as images before building on them.
     // `inputs` runs several calls in one request (scripts/bench-audio.mjs sends many short speech clips).
-    if (url.pathname === '/api/trial' && request.method === 'POST' && env.MODEL_TRIALS === '1' && env.AI) {
-      if (env.DETECT_LIMITER && !(await env.DETECT_LIMITER.limit({ key: `trial:${request.headers.get('cf-connecting-ip')}` })).success) return json({ error: 'rate limited' }, 429);
+    if (url.pathname === '/api/trial' && request.method === 'POST' && trialsAllowed(request, env) && env.AI) {
+      if (await rateLimited(request, env.DETECT_LIMITER, 'trial:')) return json({ error: 'rate limited' }, 429);
       const { model, input, inputs, options } = (await request.json()) as { model: string; input?: Record<string, unknown>; inputs?: Record<string, unknown>[]; options?: Record<string, unknown> };
       const ai = env.AI;
       const call = async (one: Record<string, unknown>) => {

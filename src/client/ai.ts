@@ -7,6 +7,8 @@ export interface AiEntity {
   owner?: 'person' | 'organization';
 }
 
+let pageId: string | undefined;
+
 /** Random per-browser ID for the free daily allowance. It identifies nothing about the person. */
 export function deviceId(): string {
   try {
@@ -14,7 +16,8 @@ export function deviceId(): string {
     if (!id) localStorage.setItem('device-id', (id = crypto.randomUUID()));
     return id;
   } catch {
-    return 'no-storage';
+    // Without storage, one ID for this page, so such browsers don't all share one allowance.
+    return (pageId ??= crypto.randomUUID());
   }
 }
 
@@ -67,15 +70,15 @@ function batches(text: string): string[] {
   return out;
 }
 
-async function detectBatch(text: string): Promise<AiEntity[]> {
-  const data = await postApi<{ entities?: AiEntity[] }>('/api/detect', { text }, 'AI detection failed');
-  return data.entities ?? [];
-}
-
-/** Sends extracted text (never the file) to the Worker for model-based detection. */
-export async function detectWithAi(text: string): Promise<AiEntity[]> {
-  const out: AiEntity[] = [];
+/** Sends extracted text (never the file) to the Worker for model-based detection. The token pays for the scan's free final check. */
+export async function detectWithAi(text: string): Promise<{ entities: AiEntity[]; checkToken?: string }> {
+  const entities: AiEntity[] = [];
+  let checkToken: string | undefined;
   // Sequential, so a long document doesn't trip the per-IP rate limit in one burst.
-  for (const batch of batches(text)) out.push(...(await detectBatch(batch)));
-  return out;
+  for (const batch of batches(text)) {
+    const data = await postApi<{ entities?: AiEntity[]; checkToken?: string }>('/api/detect', { text: batch }, 'AI detection failed');
+    entities.push(...(data.entities ?? []));
+    checkToken = data.checkToken ?? checkToken;
+  }
+  return { entities, checkToken };
 }

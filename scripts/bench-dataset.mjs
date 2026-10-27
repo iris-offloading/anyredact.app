@@ -97,7 +97,7 @@ async function run(base, spec, file, limit) {
     for (let t = 0; t < 5; t++) {
       const res = await fetch(new URL('/api/detect', base), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', origin: new URL(base).origin },
+        headers: { 'content-type': 'application/json', origin: new URL(base).origin, 'x-trial-key': process.env.TRIAL_KEY ?? '' },
         body: JSON.stringify({ texts: batch.map((d) => d.text), model, options }),
       });
       if (res.status !== 429) {

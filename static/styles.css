@@ -149,7 +149,7 @@ textarea, select {
 .finding.off .ftext { color: var(--muted); text-decoration: line-through; }
 .finding small { color: var(--muted); }
 .public-pref { display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; padding: 10px 12px; border: 1px dashed #e8590c; border-radius: 10px; background: var(--mark-off); font-size: 0.9rem; cursor: pointer; }
-.public-pref input { accent-color: var(--accent); }
+.public-pref input, .check-row input { accent-color: var(--accent); }
 .empty, .manual-count, .hint { color: var(--muted); font-size: 0.9rem; }
 .row { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 0.9rem; }
 .row select { flex: 1; }
