@@ -319,3 +319,89 @@ test('transcription takes only 16 kHz mono 16-bit WAV, so audio is billed by its
   assert.ok(!isWav(wav(16000, 2)));
   assert.ok(!isWav(wav(16000, 1, 8)));
 });
+
+/** Runs `fn` with Stripe API calls answered by `answer`, and returns the calls made. */
+async function withStripe(answer: (method: string, url: string) => unknown, fn: () => Promise<void>) {
+  const calls: { method: string; url: string; body: string; key: string | null }[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const call = { method: init.method ?? 'GET', url: String(input), body: String(init.body ?? ''), key: new Headers(init.headers).get('idempotency-key') };
+    calls.push(call);
+    return Response.json(answer(call.method, call.url));
+  }) as typeof fetch;
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  return calls;
+}
+
+test('a second plan is cancelled and refunded, and leaves the first plan alone', async () => {
+  const db = d1();
+  const e = env(db);
+  const send = webhook(e);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', sub_id = 'sub_1', sub_pages = 600, sub_used = 5, sub_period_end = 4102444800 WHERE id = ?").bind(userId).run();
+  const calls = await withStripe(
+    (method, url) => (url.includes('/invoices/') ? { id: 'in_2', payments: { data: [{ payment: { payment_intent: 'pi_2' } }] } } : { id: 'x' }),
+    async () => {
+      const session = { mode: 'subscription', payment_status: 'paid', subscription: 'sub_2', invoice: 'in_2', customer: 'cus_1', metadata: { user_id: userId, product: 'pro' } };
+      assert.equal((await send({ id: 'evt_2', type: 'checkout.session.completed', data: { object: session } })).status, 200);
+    },
+  );
+  assert.deepEqual(
+    calls.map((c) => `${c.method} ${new URL(c.url).pathname}`),
+    ['DELETE /v1/subscriptions/sub_2', 'GET /v1/invoices/in_2', 'POST /v1/refunds'],
+  );
+  assert.match(decodeURIComponent(calls[2].body), /payment_intent=pi_2/);
+  assert.ok(calls.every((c) => c.method === 'GET' || c.key));
+  // Its invoice and its refund don't touch the plan the account already has.
+  const invoice = { customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_2', metadata: { product: 'pro' } } }, lines: { data: [{ period: { end: 4102444900 } }] } };
+  await send({ id: 'evt_i2', type: 'invoice.paid', data: { object: invoice } });
+  await send({ id: 'evt_r2', type: 'charge.refunded', data: { object: { payment_intent: 'pi_2', customer: 'cus_1', amount: 2400, amount_refunded: 2400 } } });
+  const u = (await db.prepare('SELECT sub_id, sub_pages, sub_used FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
+  assert.deepEqual({ ...u }, { sub_id: 'sub_1', sub_pages: 600, sub_used: 5 });
+});
+
+test('deleting an account removes the Stripe customer, then every row', async () => {
+  const db = d1();
+  const e = env(db);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', pack_pages = 50 WHERE id = ?").bind(userId).run();
+  await db.prepare('INSERT INTO purchases (payment_intent, user_id, pages, created_at) VALUES (?, ?, 50, 0)').bind('pi_1', userId).run();
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), userId, 4102444800).run();
+  const del = (headers: Record<string, string>) => fetchWorker(new Request('https://anyredact.app/api/me', { method: 'DELETE', headers }), e);
+  assert.equal((await del({ cookie: 'session=tok', origin: 'https://evil.example' })).status, 403);
+  let res!: Response;
+  const calls = await withStripe(
+    () => ({ id: 'cus_1', deleted: true }),
+    async () => {
+      res = await del({ cookie: 'session=tok', origin: 'https://anyredact.app' });
+    },
+  );
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('set-cookie') || '', /session=; /);
+  assert.deepEqual(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`), ['DELETE /v1/customers/cus_1']);
+  for (const table of ['users', 'sessions', 'purchases']) {
+    assert.equal(((await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()) as { n: number }).n, 0, table);
+  }
+  assert.equal((await del({ cookie: 'session=tok' })).status, 401);
+});
+
+test('an account stays when Stripe could not cancel its plan', async () => {
+  const db = d1();
+  const e = env(db);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1' WHERE id = ?").bind(userId).run();
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), userId, 4102444800).run();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => Response.json({ error: { message: 'API unavailable' } }, { status: 500 })) as typeof fetch;
+  try {
+    const res = await fetchWorker(new Request('https://anyredact.app/api/me', { method: 'DELETE', headers: { cookie: 'session=tok' } }), e);
+    assert.equal(res.status, 502);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(((await db.prepare('SELECT COUNT(*) AS n FROM users').first()) as { n: number }).n, 1);
+});

@@ -1,6 +1,7 @@
 // Sign-in for paying users: an emailed link (via Cloudflare Email Service) or Google. Free use
 // needs no account. Sessions are random tokens in an HttpOnly cookie; only
 // their SHA-256 hashes are stored.
+import { stripe } from './billing.ts';
 import { crossOrigin, hex, json, now, rateLimited, type Limiter } from './http.ts';
 
 export interface AccountsEnv {
@@ -10,6 +11,7 @@ export interface AccountsEnv {
   EMAIL_FROM?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  STRIPE_SECRET_KEY?: string;
 }
 
 export interface User {
@@ -121,12 +123,45 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
   return json({ ok: true });
 }
 
+/**
+ * Deletes the signed-in account: its Stripe customer first, which cancels a plan
+ * at once so it can't renew, then its sessions, purchases and row. Stripe keeps
+ * its own payment records, which tax law needs.
+ */
+async function deleteAccount(request: Request, env: AccountsEnv): Promise<Response> {
+  if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
+  const user = await currentUser(request, env);
+  if (!user) return json({ error: 'Please sign in first.' }, 401);
+  if (user.stripe_customer) {
+    if (!env.STRIPE_SECRET_KEY) return json({ error: 'Could not delete the account. Please try again.' }, 503);
+    try {
+      await stripe(env, `customers/${encodeURIComponent(user.stripe_customer)}`, {}, { method: 'DELETE' });
+    } catch (err) {
+      // Already deleted in Stripe: nothing left to cancel.
+      if (!/No such customer/i.test((err as Error).message)) {
+        console.error('stripe customer delete failed', err);
+        return json({ error: 'Could not delete the account. Please try again.' }, 502);
+      }
+    }
+  }
+  const db = env.DB!;
+  await db.batch([
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM purchases WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM login_tokens WHERE email = ?').bind(user.email ?? ''),
+    db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
+  ]);
+  return json({ ok: true }, 200, [setCookie('session', '', 0), signedInHint(false)]);
+}
+
 /** Handles /api/auth/* and /api/me. Returns null for other paths. */
 export async function handleAccounts(request: Request, env: AccountsEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
   if (!path.startsWith('/api/auth/') && path !== '/api/me') return null;
   if (!env.DB) return json({ error: 'Accounts are not set up on this server.' }, 503);
   const origin = url.origin;
+
+  if (path === '/api/me' && request.method === 'DELETE') return deleteAccount(request, env);
 
   if (path === '/api/me') {
     const user = await currentUser(request, env);

@@ -22,12 +22,20 @@ export function stripeForm(params: Record<string, unknown>, prefix = '', out = n
   return out;
 }
 
-async function stripe<T>(env: BillingEnv, path: string, params: Record<string, unknown>): Promise<T> {
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'content-type': 'application/x-www-form-urlencoded' },
-    body: stripeForm(params),
-  });
+/** Calls the Stripe API. GET and DELETE send `params` in the query; an idempotency key makes a retried write safe. */
+export async function stripe<T>(
+  env: { STRIPE_SECRET_KEY?: string },
+  path: string,
+  params: Record<string, unknown> = {},
+  opts: { method?: 'GET' | 'POST' | 'DELETE'; idempotencyKey?: string } = {},
+): Promise<T> {
+  const method = opts.method ?? 'POST';
+  const form = stripeForm(params);
+  const query = method !== 'POST' && form.size ? `?${form}` : '';
+  const headers: Record<string, string> = { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` };
+  if (method === 'POST') headers['content-type'] = 'application/x-www-form-urlencoded';
+  if (opts.idempotencyKey) headers['idempotency-key'] = opts.idempotencyKey;
+  const res = await fetch(`https://api.stripe.com/v1/${path}${query}`, { method, headers, body: method === 'POST' ? form : undefined });
   const data = (await res.json()) as T & { error?: { message?: string } };
   if (!res.ok) throw new Error(data.error?.message || `Stripe ${path} failed (${res.status})`);
   return data;
@@ -36,9 +44,29 @@ async function stripe<T>(env: BillingEnv, path: string, params: Record<string, u
 /** The customer a charge belongs to, for a dispute, which doesn't name one. */
 async function chargeCustomer(env: BillingEnv, charge: unknown): Promise<string | null> {
   if (typeof charge !== 'string') return null;
-  const res = await fetch(`https://api.stripe.com/v1/charges/${encodeURIComponent(charge)}`, { headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
-  if (!res.ok) throw new Error(`Stripe charge lookup failed (${res.status})`);
-  return ((await res.json()) as { customer?: string | null }).customer ?? null;
+  return (await stripe<{ customer?: string | null }>(env, `charges/${encodeURIComponent(charge)}`, {}, { method: 'GET' })).customer ?? null;
+}
+
+/**
+ * A second plan for an account that already has one (two checkouts finished in
+ * different tabs): cancels it at once and refunds its first payment. The
+ * payment is recorded as a purchase of no credits, so its refund leaves the
+ * first plan alone.
+ */
+async function refundSecondPlan(env: BillingEnv, userId: string, subscription: string, invoice: unknown): Promise<void> {
+  await stripe(env, `subscriptions/${encodeURIComponent(subscription)}`, {}, { method: 'DELETE', idempotencyKey: `second-plan-cancel-${subscription}` });
+  if (typeof invoice !== 'string') return;
+  // Older API versions name the payment intent on the invoice, newer ones under its payments.
+  const inv = await stripe<{ payment_intent?: string | null; payments?: { data?: { payment?: { payment_intent?: string } }[] } }>(
+    env,
+    `invoices/${encodeURIComponent(invoice)}`,
+    { expand: ['payments'] },
+    { method: 'GET' },
+  );
+  const paymentIntent = inv.payment_intent ?? inv.payments?.data?.[0]?.payment?.payment_intent;
+  if (!paymentIntent) return;
+  await env.DB!.prepare('INSERT OR IGNORE INTO purchases (payment_intent, user_id, pages, created_at) VALUES (?, ?, 0, ?)').bind(paymentIntent, userId, now()).run();
+  await stripe(env, 'refunds', { payment_intent: paymentIntent, metadata: { reason: 'second plan' } }, { idempotencyKey: `second-plan-refund-${subscription}` });
 }
 
 async function customerFor(env: BillingEnv, user: User): Promise<string> {
@@ -126,6 +154,11 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
         .bind(obj.payment_intent, product.pages, now(), userId);
       await (obj.payment_intent ? db.batch([grant, record]) : grant.run());
     } else if (obj.mode === 'subscription' && paid) {
+      const current = await db.prepare('SELECT sub_id, sub_period_end FROM users WHERE id = ?').bind(userId).first<Pick<User, 'sub_id' | 'sub_period_end'>>();
+      if (current?.sub_id && current.sub_id !== obj.subscription && current.sub_period_end > now()) {
+        await refundSecondPlan(env, userId, obj.subscription, obj.invoice);
+        return;
+      }
       // invoice.paid sets the exact period end; until then allow a month.
       await db
         .prepare('UPDATE users SET sub_id = ?, sub_pages = ?, sub_used = 0, sub_period_end = MAX(sub_period_end, ?), stripe_customer = COALESCE(stripe_customer, ?) WHERE id = ?')
@@ -137,9 +170,10 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
     // The plan's size, for a plan whose first payment confirmed after checkout (a bank debit).
     const meta = obj.parent?.subscription_details?.metadata ?? obj.subscription_details?.metadata;
     const plan = PRODUCTS.find((p) => p.monthly && p.id === meta?.product);
+    // Renews the account's plan, or starts one when it has none; a second plan's invoice changes nothing.
     await db
-      .prepare('UPDATE users SET sub_id = ?, sub_pages = COALESCE(?, sub_pages), sub_used = 0, sub_period_end = ? WHERE stripe_customer = ?')
-      .bind(invoiceSubscription(obj), plan?.pages ?? null, periodEnd, obj.customer)
+      .prepare('UPDATE users SET sub_id = ?1, sub_pages = COALESCE(?2, sub_pages), sub_used = 0, sub_period_end = ?3 WHERE stripe_customer = ?4 AND (sub_id IS NULL OR sub_id = ?1 OR sub_period_end <= ?5)')
+      .bind(invoiceSubscription(obj), plan?.pages ?? null, periodEnd, obj.customer, now())
       .run();
   } else if (event.type === 'charge.refunded' && obj.amount > 0) {
     await takeBack(db, obj.payment_intent, async () => obj.customer ?? null, obj.amount_refunded / obj.amount);
