@@ -171,13 +171,6 @@ class App {
       });
       typeBoxes.append(h('label', { className: 'chip' }, cb, ENTITY_LABELS[t]));
     }
-    const publicCb = h('input', { type: 'checkbox', checked: this.redactPublic });
-    publicCb.addEventListener('change', () => {
-      this.redactPublic = publicCb.checked;
-      store.set('redact-public', publicCb.checked ? '1' : '0');
-      this.analyze();
-    });
-    typeBoxes.append(h('label', { className: 'chip' }, publicCb, 'Public contacts'));
 
     const saved = (store.get('picture-kinds') || '').split(',');
     for (const k of VISUAL_KINDS) if (saved.includes(k)) this.visualKinds.add(k);
@@ -474,6 +467,16 @@ class App {
       return;
     }
     const out: HTMLElement[] = [];
+    const publicKeys = this.findings.filter((f) => f.publicHint).map((f) => f.key);
+    if (publicKeys.length) {
+      const cb = h('input', { type: 'checkbox', checked: this.redactPublic });
+      cb.addEventListener('change', () => {
+        this.redactPublic = cb.checked;
+        store.set('redact-public', cb.checked ? '1' : '0');
+        this.toggle(publicKeys, cb.checked);
+      });
+      out.push(h('label', { className: 'public-pref' }, cb, 'Redact company and public contacts'));
+    }
     for (const [type, items] of groups) {
       const on = items.filter((f) => f.enabled).length;
       const all = h('input', { type: 'checkbox', checked: on === items.length, indeterminate: on > 0 && on < items.length });
