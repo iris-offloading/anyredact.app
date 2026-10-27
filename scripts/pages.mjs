@@ -18,7 +18,7 @@ export const TOOLS = [
     description:
       'Auto redact PDF files online with AI. Names, addresses and account numbers are marked on every page, including scans, and the download is flattened so the text is gone.',
     h1: 'Auto redact PDF online with AI',
-    lead: 'Bank statements, contracts and forms come back with names, addresses and account numbers removed.',
+    lead: 'Drop a PDF and our AI will find and permanently remove names, numbers, signatures, and other sensitive details, including on scanned pages.',
     hint: 'PDF up to 60 pages',
     points: [
       ['True redaction', 'Pages are flattened to images on export, so the original text, links, form fields and metadata are gone, not just covered.'],
@@ -45,8 +45,8 @@ export const TOOLS = [
     description:
       'Auto redact JPG photos online with AI. Text in the picture is read, personal details get solid black boxes, and EXIF and GPS data are stripped. PNG, WebP and screenshots work too.',
     h1: 'Auto redact JPG online with AI',
-    lead: 'Photos, ID scans and receipts are read for text, and emails, card numbers and names are boxed out.',
-    also: 'Also works with PNG, WebP and pasted screenshots.',
+    lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
+    also: 'Also works with PNG and WebP.',
     hint: 'PNG, JPG or WebP, or paste a screenshot',
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
@@ -73,7 +73,7 @@ export const TOOLS = [
     description:
       'Auto redact Word (DOCX) files online with AI. Personal details are removed from the body, headers, footers, comments and tracked changes, and author names are cleared.',
     h1: 'Auto redact Word online with AI',
-    lead: 'Contracts, CVs and letters keep their layout while names, emails and phone numbers are taken out.',
+    lead: 'Upload a .docx to redact sensitive text, comments, tracked changes, and metadata while keeping your formatting intact.',
     hint: 'Word .docx files',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
@@ -100,7 +100,7 @@ export const TOOLS = [
     description:
       'Auto redact Excel (XLSX) workbooks online with AI. Names, emails and account numbers are found on every sheet, hidden sheets included. Accepts ODS and CSV as well.',
     h1: 'Auto redact Excel online with AI',
-    lead: 'Customer lists, payroll sheets and exports are cleaned cell by cell, and the rest of the workbook is saved untouched.',
+    lead: 'Upload a spreadsheet to redact personal data in columns, cells, hidden sheets, and comments without breaking your layout.',
     also: 'Also works with ODS and CSV.',
     hint: 'Excel .xlsx, OpenDocument .ods or CSV',
     points: [
@@ -132,7 +132,7 @@ export const TOOLS = [
     description:
       'Auto redact text online with AI. Paste text or upload a CSV, JSON or log file to mask emails, phone numbers, IP addresses and card numbers before sharing.',
     h1: 'Auto redact text online with AI',
-    lead: 'Paste text or drop a file, and emails, phone numbers, IP addresses and card numbers are masked before you send it on.',
+    lead: 'Paste text or upload a file to mask personal info, passwords, and other secrets in seconds.',
     also: 'Also works with CSV, JSON, Markdown and log files.',
     hint: 'TXT, CSV, JSON, Markdown or logs',
     points: [
@@ -156,7 +156,7 @@ export const TOOLS = [
     description:
       'Auto redact MP3 recordings online with AI. The speech is transcribed, and names, phone numbers and card numbers are bleeped in a new file. Handles M4A, WAV, FLAC, OGG and Opus.',
     h1: 'Auto redact MP3 online with AI',
-    lead: 'Calls, interviews and voice notes are transcribed, and names, numbers and addresses are bleeped in a new file.',
+    lead: 'Upload a recording and we’ll bleep spoken sensitive details, then give you a new file to download.',
     also: 'Also works with M4A, WAV, FLAC, OGG and Opus.',
     hint: 'MP3, M4A, WAV, FLAC, OGG or Opus, up to 2 hours',
     points: [
@@ -184,7 +184,7 @@ export const HOME = {
   description:
     'Redact PDFs, images, Word documents, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
-  lead: 'Drop a PDF, image, Word document, spreadsheet, text file or recording. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
+  lead: 'Upload PDFs, images, Word, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
   hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
