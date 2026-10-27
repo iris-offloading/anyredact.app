@@ -63,7 +63,7 @@ async function run(slug, file, wait = 'label.finding') {
 }
 
 async function download(name) {
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.panel > button.primary')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.panel-foot > button.primary')]);
   const p = fx(name);
   await dl.saveAs(p);
   return { path: p, filename: dl.suggestedFilename() };
@@ -331,6 +331,8 @@ if (existsSync(fx('sample.ods'))) {
   await page.locator('.meta').scrollIntoViewIfNeeded();
   await page.screenshot({ path: fx('metadata.png') });
   await page.setViewportSize({ width: 390, height: 844 });
+  // Phones show the panel under the Found tab.
+  await page.click('.tabs [data-view="found"]');
   await page.locator('.meta').scrollIntoViewIfNeeded();
   await page.screenshot({ path: fx('metadata-phone.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -405,7 +407,7 @@ if (existsSync(fx('sample.ods'))) {
   await page.waitForSelector('.consent', { state: 'hidden' });
   await page.waitForSelector('.check-row:has-text("free")');
   check(await page.isChecked('.check-row input'), "the scan's free final check is ticked");
-  await page.click('.panel > button.primary');
+  await page.click('.panel-foot > button.primary');
   await page.waitForSelector('.warn-text');
   const warning = await page.textContent('.warn-text');
   const notes = await page.$$eval('.warn-text', (els) => els.map((e) => e.textContent).join(' '));

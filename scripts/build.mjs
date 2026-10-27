@@ -51,6 +51,9 @@ const accountSrc = entrySrc('account');
 await cp(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'), path.join(dist, pdfWorker));
 await cp(path.join(root, 'node_modules/@univerjs/preset-sheets-core/lib/index.css'), path.join(dist, univerCss));
 await cp(path.join(root, 'static'), dist, { recursive: true });
+// Geist is served from this domain: the CSP allows fonts from 'self' only, and pages make no third-party requests.
+const fontFiles = ['geist/files/geist-latin-wght-normal.woff2', 'geist/files/geist-latin-ext-wght-normal.woff2', 'geist-mono/files/geist-mono-latin-wght-normal.woff2'];
+for (const f of fontFiles) await cp(path.join(root, 'node_modules/@fontsource-variable', f), path.join(dist, 'fonts', path.basename(f)));
 // Only the CDN packages the app loads may run: the whole of jsDelivr serves any npm package or GitHub file.
 const tesseractVersion = require('tesseract.js/package.json').version;
 const tesseractCore = require('tesseract.js/package.json').dependencies['tesseract.js-core'].replace(/^\D*/, '');
@@ -65,34 +68,35 @@ const themeHash = (await import('node:crypto')).createHash('sha256').update(awai
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const url = (slug) => `${SITE.origin}/${slug}`;
 
-// Three-way theme switch; static/theme.js wires it up and reveals it.
+// Theme button: system, light and dark in turn; static/theme.js wires it up and reveals it.
 const ICONS = {
   system: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   dark: '<path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/>',
 };
-const themeSwitch = `<div class="theme-switch" role="radiogroup" aria-label="Theme" hidden>${Object.entries(ICONS)
-  .map(
-    ([value, path]) =>
-      `<button type="button" role="radio" aria-checked="false" data-theme-value="${value}" title="${value[0].toUpperCase() + value.slice(1)} theme"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg><span class="visually-hidden">${value[0].toUpperCase() + value.slice(1)}</span></button>`,
-  )
-  .join('')}</div>`;
+const themeButton = `<button type="button" class="theme-button" aria-label="Theme: system" hidden>${Object.entries(ICONS)
+  .map(([value, path]) => `<svg data-theme-icon="${value}" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`)
+  .join('')}</button>`;
+
+// The mark takes its colours from CSS, so it can flip in dark mode and in the footer.
+const logoMark = (size) =>
+  `<svg class="logo-mark" width="${size}" height="${size}" viewBox="0 0 28 28" aria-hidden="true"><rect class="lm-bg" width="28" height="28" rx="7"/><rect class="lm-bar" x="6" y="9" width="16" height="4" rx="1"/><rect class="lm-accent" x="6" y="15" width="10" height="4" rx="1"/></svg>`;
 
 function nav(current) {
   const links = [{ slug: '', nav: 'All formats' }, ...TOOLS]
     .map((t) => `<a href="/${t.slug}"${t.slug === current ? ' aria-current="page"' : ''}>${esc(t.nav)}</a>`)
     .join('');
   return `<header class="site-header"><div class="wrap">
-  <a class="logo" href="/"><img class="logo-mark" src="/favicon.svg" width="26" height="26" alt="">AnyRedact</a>
+  <a class="logo" href="/">${logoMark(28)}AnyRedact</a>
   <nav aria-label="Tools">${links}</nav>
-  <div class="header-actions">${themeSwitch}<a class="btn signin-link" href="/account">Sign in</a></div>
+  <div class="header-actions">${themeButton}<a class="btn signin-link" href="/account">Sign in</a></div>
 </div></header>`;
 }
 
 function footer() {
   const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
-  <div><strong>AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
+  <div><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
   <div><h2>About</h2><ul><li><a href="/privacy">Privacy</a></li></ul></div>
 </div></footer>`;
@@ -138,7 +142,8 @@ function layout(page, main) {
 <title>${esc(page.title)}</title>
 <meta name="description" content="${esc(page.description)}">
 <link rel="canonical" href="${url(page.slug)}">
-<meta name="theme-color" content="#111318">
+<meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111216" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${SITE.name}">
 <meta property="og:title" content="${esc(page.title)}">
@@ -146,6 +151,7 @@ function layout(page, main) {
 <meta property="og:url" content="${url(page.slug)}">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css?v=${cssHash}">
 <script src="/theme.js?v=${themeHash}"></script>
 ${page.jsonLd === false ? '' : `<script type="application/ld+json">${jsonLd(page)}</script>`}
@@ -162,35 +168,21 @@ ${footer()}
 }
 
 function toolPage(page) {
-  const points = page.points
-    .map(([t, d]) => `<div class="point"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`)
-    .join('');
-  const faq = page.faq.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
-  const others = TOOLS.filter((t) => t.slug !== page.slug)
-    .map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.name)}</strong><span>${esc(t.lead)}</span></a>`)
-    .join('');
+  const points = page.points.map(([t, d]) => `<div class="point"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join('');
+  const faq = page.faq.map((f, i) => `<details${i ? '' : ' open'}><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
   return layout(
     { ...page, tool: true },
     `<section class="hero wrap">
-  <h1>${esc(page.h1)}</h1>
-  <p class="lead">${esc(page.also ? `${page.lead} ${page.also}` : page.lead)}</p>
-</section>
-<section class="wrap">
+  <div class="hero-copy">
+    <h1>${page.slug ? esc(page.h1) : esc(page.h1).replace('finds', '<span class="redacted">finds</span>')}</h1>
+    <p class="lead">${esc(page.also ? `${page.lead} ${page.also}` : page.lead)}</p>
+  </div>
   <div id="tool" class="tool" data-format="${page.format}" data-hint="${esc(page.hint)}">
     <noscript><p class="status error">AnyRedact runs in your browser and needs JavaScript enabled.</p></noscript>
   </div>
 </section>
-<section class="wrap points">${points}</section>
-<section class="wrap how">
-  <h2>How it works</h2>
-  <ol>
-    <li><strong>Open your file.</strong> Our AI finds the personal information in it.</li>
-    <li><strong>Review what was found.</strong> Untick anything you want to keep, or mark more by hand.</li>
-    <li><strong>Download the redacted copy.</strong> The sensitive content is removed from the file itself.</li>
-  </ol>
-</section>
-<section class="wrap faq"><h2>Frequently asked questions</h2>${faq}</section>
-<section class="wrap more"><h2>${page.slug ? 'More redaction tools' : 'Tools for each format'}</h2><div class="cards">${others}</div></section>`,
+<section class="band"><div class="wrap points">${points}</div></section>
+<section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>`,
   );
 }
 
