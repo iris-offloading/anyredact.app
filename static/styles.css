@@ -428,7 +428,7 @@ mark.saying { outline: 2px solid var(--accent); }
 .plans + .plans { margin-top: -16px; }
 .plan { gap: 10px; }
 .plan .plan-price { font-size: 1.4rem; font-weight: 700; color: var(--text); }
-.plan .btn { margin-top: auto; min-height: 48px; border-radius: 12px; }
+.plan .btn { min-height: 48px; border-radius: 12px; }
 .pricing { padding-top: 48px; padding-bottom: 48px; }
 .pricing h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.03em; margin: 0 0 24px; }
 .pricing h2 { margin: 48px 0 0; }
@@ -436,6 +436,10 @@ mark.saying { outline: 2px solid var(--accent); }
 .pricing .plans { margin: 0; align-items: stretch; }
 .plan small { font-size: 0.95rem; font-weight: 500; color: var(--muted); }
 .plan .plan-covers { color: var(--text); font-size: 1rem; }
+.plan .btn { margin: 6px 0 4px; }
+.plan-points { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; color: var(--muted); font-size: 0.92rem; }
+.plan-points li { display: flex; align-items: center; gap: 8px; margin: 0; }
+.plan-points svg { flex: none; color: var(--accent); }
 .plan.main { border: 2px solid var(--ink); padding: 19px; position: relative; }
 .plan.main:hover { border-color: var(--ink); }
 .plan-badge { position: absolute; top: -12px; left: 18px; padding: 2px 10px; border-radius: 999px; background: var(--ink); color: var(--ink-text) !important; font-size: 0.8rem !important; font-weight: 600; }

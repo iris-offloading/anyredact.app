@@ -45,13 +45,14 @@ export const PRICING = {
     const n = (v) => v.toLocaleString('en-US');
     // Credits mean nothing on their own, so each amount is shown as pages and audio minutes.
     const covers = (credits) => `${n(credits)} pages or ${n(Math.floor(credits / AUDIO_CREDITS_PER_MINUTE))} audio minutes`;
-    const plan = ({ name, amount, per, detail, resets, button, href, main }) =>
-      `<div class="card plan${main ? ' main' : ''}">${main ? '<span class="plan-badge">Recommended</span>' : ''}<strong>${esc(name)}</strong><span class="plan-price">${esc(amount)}${per ? `<small> / ${per}</small>` : ''}</span><span class="plan-covers">${esc(detail)}</span><span>${esc(resets)}</span><a class="btn${main ? ' primary' : ''}" href="${href}">${esc(button)}</a></div>`;
+    const tick = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    const plan = ({ name, amount, per, detail, points, button, href, main }) =>
+      `<div class="card plan${main ? ' main' : ''}">${main ? '<span class="plan-badge">Recommended</span>' : ''}<strong>${esc(name)}</strong><span class="plan-price">${esc(amount)}${per ? `<small> / ${per}</small>` : ''}</span><span class="plan-covers">${esc(detail)}</span><a class="btn${main ? ' primary' : ''}" href="${href}">${esc(button)}</a><ul class="plan-points">${points.map((p) => `<li>${tick}${esc(p)}</li>`).join('')}</ul></div>`;
     const monthly = PRODUCTS.filter((p) => p.monthly);
     const plans = [
-      plan({ name: 'Free', amount: '$0', detail: `Up to ${FREE_CREDITS} pages or ${Math.floor(FREE_CREDITS / AUDIO_CREDITS_PER_MINUTE)} audio minutes a day`, resets: 'Resets daily', button: 'Redact a file', href: '/' }),
+      plan({ name: 'Free', amount: '$0', detail: `Up to ${FREE_CREDITS} pages or ${Math.floor(FREE_CREDITS / AUDIO_CREDITS_PER_MINUTE)} audio minutes a day`, points: ['No sign-in needed', 'Every format', 'Resets daily'], button: 'Redact a file', href: '/' }),
       ...monthly.map((p, i) =>
-        plan({ name: p.name, amount: price(p.cents), per: 'month', detail: covers(p.pages), resets: 'Resets monthly', button: 'Subscribe', href: `/account?buy=${p.id}`, main: i === 0 }),
+        plan({ name: p.name, amount: price(p.cents), per: 'month', detail: covers(p.pages), points: ['Every format', 'Resets monthly', 'Cancel any time'], button: 'Subscribe', href: `/account?buy=${p.id}`, main: i === 0 }),
       ),
     ].join('');
     const packs = PRODUCTS.filter((p) => !p.monthly)
@@ -69,7 +70,7 @@ export const PRICING = {
 <h1>Pricing</h1>
 <div class="cards plans">${plans}</div>
 <h2>Credit packs</h2>
-<p>Pack credits never expire.</p>
+<p>Pack credits never expire. No subscription.</p>
 <div class="packs">${packs}</div>
 <h2>Credits per format</h2>
 <table class="credit-table"><tbody>${rows}</tbody></table>
