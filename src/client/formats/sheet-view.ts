@@ -228,6 +228,8 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
   });
   const book = univerAPI.createWorkbook(data);
   book.setEditable(false);
+  // Typing or double-clicking a read-only cell would otherwise open a "range is protected" alert.
+  univerAPI.setPermissionDialogVisible(false);
 
   const original = (sheet: string, r: number, c: number): ICellData => data.sheets[ids.get(sheet)!]?.cellData?.[r]?.[c] ?? {};
   let marked = new Map<string, { sheet: string; row: number; col: number; keys: string[]; on: boolean }>();
