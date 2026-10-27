@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import exifr from 'exifr';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
+import sharp from 'sharp';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -29,9 +30,32 @@ const check = (cond, msg) => {
   if (!cond) failed++;
 };
 
+// Stands in for the model: returns each known value as it appears in the text.
+const AI_VALUES = [
+  ['Jane Doe', 'name'], ['Maria Gonzalez', 'name'], ['jane@example.com', 'email'], ['jane.doe@example.com', 'email'], ['bob@corp.io', 'email'],
+  ['+1 (415) 555-0132', 'phone'], ['415-555- 0132', 'phone'], ['415-555- 0199', 'phone'], ['0800 123 4567', 'phone', 'organization'],
+  ['10.0.0.12', 'other'], ['123-45-6789', 'ssn'], ['4111 1111 1111 1111', 'card'],
+];
+async function fakeDetect(route) {
+  const { text } = JSON.parse(route.request().postData() || '{}');
+  const entities = [];
+  for (const [value, type, owner] of AI_VALUES) {
+    const re = new RegExp(value.split(/\s+/).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'));
+    const m = text.match(re);
+    if (m) entities.push({ text: m[0], type, owner: owner ?? 'person' });
+  }
+  route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities }) });
+}
+await page.route('**/api/detect', fakeDetect);
+
+/** Opens a file and, unless waiting for something else, agrees to the upload. */
 async function run(slug, file, wait = 'label.finding') {
   await page.goto(`${BASE}/${slug}`);
   await page.setInputFiles('#file-input', file);
+  if (wait === 'label.finding') {
+    await page.waitForSelector('.consent button.primary', { timeout: 90_000 });
+    await page.click('.consent button.primary');
+  }
   await page.waitForSelector(wait, { timeout: 90_000 });
   return page.$$eval('label.finding .ftext', (els) => els.map((e) => e.textContent));
 }
@@ -103,6 +127,32 @@ async function download(name) {
   check(!rels.includes('mailto'), 'docx hyperlink target removed');
 }
 
+// DOCX with pictures
+{
+  const found = await run('redact-word', fx('pictures.docx'));
+  check(found.includes('123-45-6789') && found.includes('415-555-0132'), `docx picture and alt text findings: ${found.join(', ')}`);
+  check((await page.$$('.page')).length === 2 && (await page.$$('.text-preview .unit')).length >= 2, 'docx shows text and both pictures');
+  await page.screenshot({ path: fx('docx-pictures.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('docx-pictures-phone.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { path: p } = await download('out-pictures.docx');
+  const zip = await JSZip.loadAsync(readFileSync(p));
+  const photo = await zip.file('word/media/image1.jpeg').async('nodebuffer');
+  const tags = await exifr.parse(photo, { gps: true }).catch(() => null);
+  check(!tags?.latitude && !tags?.Artist && !tags?.Make, `docx picture metadata stripped: ${JSON.stringify(tags)}`);
+  // The SSN number sits at x 150 to 430, y 170 to 215 in the 900x300 photo; a burned box makes it dark.
+  const { channels } = await sharp(await sharp(photo).extract({ left: 160, top: 178, width: 250, height: 30 }).toBuffer()).stats();
+  check(channels[0].mean < 60, `docx picture SSN covered (mean ${channels[0].mean.toFixed(0)})`);
+  const doc = await zip.file('word/document.xml').async('string');
+  check(!doc.includes('0132') && !doc.includes('passport'), 'docx alt text and picture file names redacted');
+  const rels = await zip.file('word/_rels/document.xml.rels').async('string');
+  const types = await zip.file('[Content_Types].xml').async('string');
+  check(!zip.file('word/media/image2.gif') && zip.file('word/media/image2.png') && rels.includes('media/image2.png') && types.includes('Extension="png"'), 'docx GIF saved as PNG and relinked');
+  const root = await zip.file('_rels/.rels').async('string');
+  check(!zip.file('docProps/thumbnail.jpeg') && !root.includes('thumbnail'), 'docx thumbnail removed');
+}
+
 // PDF
 {
   const found = await run('redact-pdf', fx('sample.pdf'));
@@ -159,9 +209,9 @@ async function download(name) {
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
   });
   apiCalls.length = 0;
-  await run('redact-text', fx('sample.txt'));
+  await run('redact-text', fx('sample.txt'), '.consent');
   check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
-  await page.click('text=Find personal info with AI');
+  await page.click('.consent button.primary');
   await page.waitForSelector('.consent', { state: 'hidden' });
   await page.click('.panel > button.primary');
   await page.waitForSelector('.warn-text');
@@ -181,14 +231,15 @@ async function download(name) {
     visionCalls.push(JSON.parse(route.request().postData() || '{}'));
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ regions: [{ kind: 'plate', box: [100, 100, 300, 200] }] }) });
   });
+  await page.unroute('**/api/detect');
   await page.route('**/api/detect', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities: [] }) }));
-  await run('redact-image', fx('sample.png'));
+  await run('redact-image', fx('sample.png'), '.consent');
   const pictureChips = page.locator('label.chip', { hasText: 'Number plates' });
   check((await pictureChips.count()) === 1 && !(await pictureChips.locator('input').isChecked()), 'picture options shown and off by default');
   await pictureChips.click();
   await page.waitForFunction(() => !/Looking for faces/.test(document.querySelector('.status')?.textContent ?? ''), null, { timeout: 60_000 });
   check(visionCalls.length === 0, 'no picture sent before consent');
-  await page.click('text=Find personal info with AI');
+  await page.click('.consent button.primary');
   await page.waitForSelector('label.finding:has-text("Number plate 1")', { timeout: 30_000 });
   check(visionCalls.length === 1 && /^data:image\/jpeg;base64,/.test(visionCalls[0].image) && visionCalls[0].kinds.join() === 'plate', 'picture sent after consent with the ticked kinds');
   await page.screenshot({ path: fx('pictures.png') });
@@ -202,11 +253,12 @@ async function download(name) {
   await page.goto(BASE);
   await page.screenshot({ path: fx('home.png'), fullPage: true });
   await page.setInputFiles('#file-input', fx('sample.txt'));
-  await page.waitForSelector('label.finding');
-  await page.click('text=Find personal info with AI');
-  await page.waitForFunction(() => /built-in rules only/i.test(document.querySelector('.status')?.textContent ?? ''));
+  await page.click('.consent button.primary');
+  await page.waitForSelector('.status.error');
   const status = await page.textContent('.status');
-  check(/built-in rules only/i.test(status), `ai fallback status: ${status}`);
+  const empty = await page.textContent('.findings .empty');
+  check(/not configured/i.test(status) && /^Nothing detected/.test(empty), `ai fallback: ${status} ${empty}`);
+  await page.screenshot({ path: fx('fallback.png') });
 }
 
 check(errors.filter((e) => !/api\/detect|503/.test(e)).length === 0, `no page errors ${JSON.stringify(errors)}`);

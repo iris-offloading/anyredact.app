@@ -46,7 +46,7 @@ export const TOOLS = [
     lead: 'Hide emails, phone numbers, card numbers and names in screenshots, scans and photos. Text is read automatically and checked by AI.',
     hint: 'PNG, JPG or WebP, or paste a screenshot',
     points: [
-      ['Automatic text detection', 'On-device OCR reads the image and highlights sensitive details for you.'],
+      ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
       ['Metadata removed', 'The download is re-encoded, which strips EXIF, XMP and IPTC data such as GPS location and camera details.'],
     ],
@@ -73,7 +73,7 @@ export const TOOLS = [
     hint: 'Word .docx files',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
-      ['Hidden places too', 'Tracked changes, comments, headers, footers and hyperlink targets are redacted along with the body.'],
+      ['Hidden places too', 'Tracked changes, comments, headers, footers, hyperlink targets, pictures and their alt text are redacted along with the body.'],
       ['Author names removed', 'Document properties and the names on comments and revisions are cleared.'],
     ],
     faq: [
@@ -128,7 +128,7 @@ export const HOME = {
   faq: [
     {
       q: 'Is AnyRedact free?',
-      a: 'Yes. You get about 30 credits a day, and one credit covers about one page of text or one picture. The built-in rules need no credits. For more, buy a monthly plan or a credit pack that never expires. There is no watermark.',
+      a: 'Yes. You get about 30 credits a day, and one credit covers about one page of text or one picture. For more, buy a monthly plan or a credit pack that never expires. There is no watermark.',
     },
     {
       q: 'Do I need an account?',

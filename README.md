@@ -5,14 +5,14 @@ Free online redaction for PDF, images, Word (DOCX) and text, served from Cloudfl
 ## How it works
 
 - **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
-- **Rules alongside the model:** `src/shared/detect.ts` adds checksum-verified card numbers and IBANs, emails, phones (including ones wrapped across a line), SSNs and IPs, and `src/shared/names.ts` adds names found from titles, labels and greetings. `src/shared/analyze.ts` merges everything and matches every later mention of each name. If the AI endpoint fails, these rules still run and the user is warned.
+- **Matching:** `src/shared/analyze.ts` finds every mention of what the model returned and of the user's own terms, including first or last name alone (`src/shared/names.ts`), and leaves business and helpline contacts unticked. There are no local detection rules: if the AI endpoint fails, the user is told and redacts by hand.
 - **Redaction** happens in the browser. Today only extracted text is sent to the server; future formats such as audio or video may need the media itself, so user-facing copy promises "processed, never stored" rather than "never uploaded".
 
 | Format | What the download contains |
 | --- | --- |
 | PDF | Every page flattened to an image with solid boxes. Original text, links, forms and metadata are gone. Up to 60 pages. |
 | Image (PNG/JPG/WebP) | Re-encoded image with solid boxes; EXIF, GPS, XMP and IPTC metadata is listed in the editor and dropped from the download. |
-| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded images are not scanned yet. |
+| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded pictures are read with OCR, can take picture redaction and drawn boxes, and are re-encoded so their metadata is dropped (GIF and BMP become PNG); alt text and the first-page thumbnail are handled too. EMF, WMF and TIFF pictures are left as they are. |
 | Text (TXT, CSV, JSON, logs…) | Masked or labelled text. |
 
 Users can untick any detection, add their own terms, select text to redact everywhere, and draw boxes on PDF pages and images.
@@ -49,5 +49,5 @@ The Workers AI model defaults to `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (wit
 ## Roadmap
 
 - Audio and video (speech-to-text with Whisper on Workers AI, then bleep/mute and blur)
-- Redact images embedded in DOCX and keep a text layer in redacted PDFs
-- More languages for OCR and patterns
+- Keep a text layer in redacted PDFs
+- More languages for OCR

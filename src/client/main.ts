@@ -19,13 +19,18 @@ const ACCEPT: Record<Kind | 'all', string> = {
 };
 ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
 
-// What the "Look for" chips offer. AI and pattern findings are both filtered by these.
+// What the "Look for" chips offer. AI findings are filtered by these.
 const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
 const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'date', 'card', 'iban', 'ip', 'other'];
 // Picture regions are opt-in: plenty of people want faces left visible.
 const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
 // Each page is one AI request, so very long PDFs only get the local pass after this.
 const MAX_AI_PICTURE_PAGES = 30;
+
+/** Whether the preview shows text: everything except PDF pages and images. */
+function hasText(doc: LoadedDoc) {
+  return doc.kind === 'text' || doc.kind === 'docx';
+}
 
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
@@ -79,8 +84,8 @@ class App {
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
   private aiError: string | null = null;
-  // Nothing leaves the browser until the user agrees, per file (or always, if they ticked that box).
-  private consent: 'ask' | 'yes' | 'no' = 'ask';
+  // Nothing leaves the browser until the user presses Upload for this file.
+  private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   private terms = '';
@@ -284,7 +289,7 @@ class App {
     this.visualLocal = pictureCache();
     this.visualAi = pictureCache();
     this.visualError = null;
-    this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
+    this.consent = 'ask';
     this.consentBox.hidden = true;
     this.overrides.clear();
     this.editors = [];
@@ -305,8 +310,7 @@ class App {
       .filter(Boolean)
       .map((text) => ({ text, type: 'custom' as EntityType }));
 
-    // Ask the model once per document, and only after the user agreed to send
-    // the text; pattern rules run alongside it as a safety net.
+    // Ask the model once per document, and only after the user agreed to send the text.
     if (this.consent === 'ask') this.askConsent(doc);
     if (this.consent === 'yes' && !this.aiEntities && !this.aiError) {
       const text = doc.units.map((u) => u.text).join('\n\n');
@@ -327,11 +331,7 @@ class App {
     }
 
     const byId = new Map(doc.units.map((u) => [u.id, u]));
-    const spans = analyzeUnits(doc.units, {
-      types: this.types,
-      terms,
-      ai: this.aiEntities,
-    }).filter((s) => s.type === 'custom' || this.types.has(s.type));
+    const spans = analyzeUnits(doc.units, { terms, ai: this.aiEntities }).filter((s) => s.type === 'custom' || this.types.has(s.type));
     const findings: Finding[] = spans.map((s) => {
       const unit = byId.get(s.unitId)!;
       const key = `${unit.id}:${s.start}:${s.end}`;
@@ -369,10 +369,9 @@ class App {
     if (this.doc !== doc) return;
     this.findings = [...findings, ...pictures];
     this.warn.hidden = true;
-    if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
+    // Without the AI the list is empty and says how to redact by hand.
+    if (this.aiError) this.say(this.aiError, true);
     else if (this.visualError) this.say(this.visualError, true);
-    else if (this.consent === 'no') this.say('Using the built-in rules only. Nothing was sent to our server, but names and addresses are easy to miss this way. Review carefully.');
-    else if (this.consent === 'ask') this.say('The list shows what the built-in rules found so far.');
     else this.say('');
     this.renderList();
     this.refreshPreview();
@@ -473,8 +472,9 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? `, p${f.page + 1}` : '';
-        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, (f.publicHint ? 'public? ' : '') + (f.source === 'ai' ? 'AI' : '') + where));
+        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (this.doc?.kind === 'docx' ? `picture ${f.page + 1}` : `p${f.page + 1}`) : '';
+        const tag = [f.publicHint ? 'public?' : '', where].filter(Boolean).join(', ');
+        const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, tag));
         row.addEventListener('mouseenter', () => this.focus(f));
         return row;
       });
@@ -510,37 +510,35 @@ class App {
 
   private renderPreview() {
     const doc = this.doc!;
-    if (doc.pages.length) {
-      this.editors = doc.pages.map(
-        (page) =>
-          new PageEditor({
-            page,
-            overlays: () => this.overlaysFor(page.index),
-            onDraw: (rect) => {
-              this.boxes.push({ ...rect, page: page.index, id: crypto.randomUUID() });
-              this.renderList();
-              this.refreshPreview();
-            },
-            onClick: (o) => {
-              if (o.kind === 'manual') this.boxes = this.boxes.filter((b) => b.id !== o.id);
-              else {
-                const f = this.findings.find((x) => x.key === o.id);
-                if (f) return this.toggle([f.key], !f.enabled);
-              }
-              this.renderList();
-              this.refreshPreview();
-            },
-          }),
-      );
-      this.preview.replaceChildren(
-        h('p', { className: 'hint' }, 'Drag on a page to add a box. Click a box to turn it off or remove it.'),
-        ...this.editors.map((e) => e.el),
-      );
-    } else {
-      this.preview.replaceChildren();
+    this.editors = doc.pages.map(
+      (page) =>
+        new PageEditor({
+          page,
+          overlays: () => this.overlaysFor(page.index),
+          onDraw: (rect) => {
+            this.boxes.push({ ...rect, page: page.index, id: crypto.randomUUID() });
+            this.renderList();
+            this.refreshPreview();
+          },
+          onClick: (o) => {
+            if (o.kind === 'manual') this.boxes = this.boxes.filter((b) => b.id !== o.id);
+            else {
+              const f = this.findings.find((x) => x.key === o.id);
+              if (f) return this.toggle([f.key], !f.enabled);
+            }
+            this.renderList();
+            this.refreshPreview();
+          },
+        }),
+    );
+    // Pictures in a Word file show at their own size rather than full width.
+    if (doc.kind === 'docx') this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
+    this.preview.replaceChildren();
+    if (hasText(doc)) {
       this.preview.addEventListener('mouseup', this.onSelect);
       this.preview.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
     }
+    this.refreshPreview();
   }
 
   private onSelect = (e?: Event) => {
@@ -548,7 +546,7 @@ class App {
     const range = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0) : null;
     const sel = range?.toString().trim();
     this.preview.querySelector('.sel-add')?.remove();
-    if (!range || !sel || sel.length < 2 || sel.length > 200 || !this.doc || this.doc.pages.length) return;
+    if (!range || !sel || sel.length < 2 || sel.length > 200 || !this.doc || !hasText(this.doc)) return;
     const picks = this.selectedSpans(range);
     if (!picks.length) return;
     const done = (fn: () => void) => () => {
@@ -605,14 +603,19 @@ class App {
   private refreshPreview() {
     const doc = this.doc;
     if (!doc) return;
-    if (doc.pages.length) {
-      for (const e of this.editors) e.draw();
+    for (const e of this.editors) e.draw();
+    const pictures = this.editors.length
+      ? [h('p', { className: 'hint' }, doc.kind === 'docx' ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...this.editors.map((e) => e.el)]
+      : [];
+    if (!hasText(doc)) {
+      if (!this.preview.childElementCount) this.preview.replaceChildren(...pictures);
       return;
     }
-    // Text preview: one block per unit with highlighted findings.
+    // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
     const byUnit = new Map<string, Finding[]>();
     for (const f of this.findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-    const blocks = doc.units.map((u, i) => {
+    const blocks = doc.units.flatMap((u, i) => {
+      if (u.page !== undefined) return [];
       const el = h('div', { className: 'unit', 'data-unit': String(i) });
       const spans = byUnit.get(u.id) ?? [];
       // Spans can overlap (a spot picked inside a kept finding), so cut the text at every
@@ -639,13 +642,14 @@ class App {
         top = next;
       }
       flush(u.text.length);
-      return el;
+      return [el];
     });
     const MAX = 2000;
     this.preview.replaceChildren(
       h('p', { className: 'hint' }, 'Click a highlight to keep it. Select text to redact it.'),
       h('div', { className: 'text-preview' + (doc.kind === 'docx' ? ' docx' : '') }, ...blocks.slice(0, MAX)),
       ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
+      ...pictures,
     );
   }
 
@@ -698,32 +702,25 @@ class App {
       this.consentBox.hidden = true;
       return;
     }
-    const always = h('input', { type: 'checkbox' });
-    const choose = (answer: 'yes' | 'no') => {
-      if (answer === 'yes' && always.checked) store.set('ai-consent', 'always');
-      this.consent = answer;
+    const upload = () => {
+      this.consent = 'yes';
       this.consentBox.hidden = true;
       this.analyze();
     };
+    const images = `${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
+    const what = words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
+    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
+    const cost = `Estimated cost: ${pages} credit${pages === 1 ? '' : 's'}`;
+    const costLine = h('p', { className: 'hint' }, `${cost}.`);
     this.consentBox.replaceChildren(
-      h(
-        'p',
-        {},
-        h('strong', {}, 'Nothing has been sent yet. '),
-        words ? `To find names, addresses and other personal details, AnyRedact sends the text read from this file (about ${words.toLocaleString()} word${words === 1 ? '' : 's'}) to its AI on Cloudflare.` : '',
-        pictures ? ` With picture redaction on, it also sends the page image${doc.pages.length > 1 ? 's' : ''}.` : '',
-      ),
-      h('button', { type: 'button', className: 'btn primary', textContent: 'Find personal info with AI', onclick: () => choose('yes') }),
-      h('button', { type: 'button', className: 'btn ghost', textContent: 'Use built-in rules only', onclick: () => choose('no') }),
-      h('label', { className: 'row' }, always, 'Always use AI on this device'),
+      h('p', {}, `Upload ${what} to find personal info?`),
+      costLine,
+      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
     );
     this.consentBox.hidden = false;
-    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
     freePagesLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      this.consentBox.append(
-        h('p', { className: 'hint' }, left >= pages ? `Uses about ${pages} credit${pages === 1 ? '' : 's'} of ${left} left today.` : `Needs about ${pages} credit${pages === 1 ? '' : 's'}; ${left} left today.`),
-      );
+      costLine.textContent = `${cost}, ${left >= pages ? '' : 'only '}${left} left today.`;
     });
   }
 
