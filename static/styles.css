@@ -467,10 +467,22 @@ mark.saying { outline: 2px solid var(--accent); }
 .auth-card p { margin: 0 0 10px; }
 .auth-card .btn { width: 100%; min-height: 48px; border-radius: 12px; }
 .auth-card .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
-.auth-card .credit-line { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.auth-card .credit-line span { color: var(--muted); }
-.auth-card .who { color: var(--muted); text-align: center; overflow-wrap: anywhere; margin-bottom: 16px; }
-.auth-card .who strong { color: var(--text); }
+.account-card { width: min(100%, 460px); }
+.who { display: flex; align-items: center; gap: 12px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.who strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: var(--ink-text); font-weight: 700; }
+.link-button { flex: none; font: inherit; font-size: 0.875rem; color: var(--muted); background: none; border: 0; padding: 8px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-button:hover { color: var(--text); }
+.total { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; }
+.total-num { font-size: 3rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.total-label { color: var(--muted); }
+.meters { display: flex; flex-direction: column; gap: 10px; }
+.meter { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); }
+.meter-head { display: flex; justify-content: space-between; gap: 12px; }
+.meter-head strong { font-variant-numeric: tabular-nums; }
+.meter-bar { height: 6px; margin-top: 10px; border-radius: 999px; background: var(--chip-bg); overflow: hidden; }
+.meter-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.auth-card .meter-note { margin: 6px 0 0; color: var(--muted); font-size: 0.875rem; }
 .or { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: 0.875rem; }
 .or::before, .or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
 .signin { display: flex; flex-direction: column; gap: 10px; }

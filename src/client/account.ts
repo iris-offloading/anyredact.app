@@ -1,4 +1,5 @@
-import { PRODUCTS, type Product } from '../shared/pricing.ts';
+import { FREE_CREDITS, PRODUCTS, type Product } from '../shared/pricing.ts';
+import { freePagesLeft } from './ai.ts';
 import { h } from './dom.ts';
 
 // The /account page: sign in, see balances, manage a plan. Plans and packs are bought from /pricing.
@@ -90,18 +91,46 @@ function signInForm(opts: { email: boolean; google: boolean }) {
   );
 }
 
-function balance(user: NonNullable<Me['user']>) {
+function meter(label: string, left: number | string, total: number | null, note?: string) {
+  const bar = total ? h('div', { className: 'meter-bar' }, h('span', { style: `width: ${Math.min(100, (Number(left) / total) * 100)}%` } as Record<string, unknown>)) : null;
+  return h(
+    'div',
+    { className: 'meter' },
+    h('div', { className: 'meter-head' }, h('span', {}, label), h('strong', {}, total ? `${left.toLocaleString()} of ${total.toLocaleString()}` : left.toLocaleString())),
+    ...(bar ? [bar] : []),
+    ...(note ? [h('p', { className: 'meter-note' }, note)] : []),
+  );
+}
+
+function balance(user: NonNullable<Me['user']>, free: number | null) {
   const sub = user.subscription;
-  const line = (label: string, value: string) => h('p', { className: 'credit-line' }, h('span', {}, label), h('strong', {}, value));
-  const rows = [
-    h('p', { className: 'who' }, 'Signed in as ', h('strong', {}, user.email ?? 'Google account')),
+  const plan = sub && PRODUCTS.find((p) => p.monthly && p.pages === sub.pages);
+  const planLeft = sub ? Math.max(0, sub.pages - sub.used) : 0;
+  const total = (free ?? 0) + planLeft + user.packPages;
+  const name = user.email ?? 'Google account';
+  const who = h(
+    'div',
+    { className: 'who' },
+    h('span', { className: 'avatar', 'aria-hidden': 'true' }, name[0].toUpperCase()),
+    h('strong', {}, name),
+    h('button', {
+      type: 'button',
+      className: 'link-button',
+      textContent: 'Sign out',
+      onclick: async () => {
+        await post('/auth/logout');
+        location.reload();
+      },
+    }),
+  );
+  const meters = [
+    ...(free === null ? [] : [meter('Free today', free, FREE_CREDITS)]),
     sub
-      ? line(`Monthly plan, renews ${new Date(sub.renews * 1000).toLocaleDateString()}`, `${(sub.pages - sub.used).toLocaleString()} of ${sub.pages.toLocaleString()}`)
-      : line('Monthly plan', 'None'),
-    line('Packs', user.packPages.toLocaleString()),
+      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, `Renews ${new Date(sub.renews * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`)
+      : meter('Monthly plan', 'None', null),
+    meter('Packs', user.packPages, null, 'Never expire'),
   ];
-  const actions = h('div', { className: 'actions' });
-  actions.append(h('a', { className: 'btn primary', href: '/pricing' }, 'Buy credits'));
+  const actions = h('div', { className: 'actions' }, h('a', { className: 'btn primary', href: '/pricing' }, sub ? 'Buy more credits' : 'Get a plan or pack'));
   if (user.canManage) {
     actions.append(
       h('button', {
@@ -116,18 +145,15 @@ function balance(user: NonNullable<Me['user']>) {
       }),
     );
   }
-  actions.append(
-    h('button', {
-      type: 'button',
-      className: 'btn ghost',
-      textContent: 'Sign out',
-      onclick: async () => {
-        await post('/auth/logout');
-        location.reload();
-      },
-    }),
+  return h(
+    'div',
+    { className: 'auth-card account-card' },
+    who,
+    status,
+    h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString()), h('span', { className: 'total-label' }, 'credits left')),
+    h('div', { className: 'meters' }, ...meters),
+    actions,
   );
-  return card('Your credits', ...rows, actions);
 }
 
 /** The emailed link opens this page, and the token is spent here, so a plain fetch of the link spends nothing. */
@@ -148,9 +174,9 @@ async function render() {
   const params = new URLSearchParams(location.search);
   if (params.get('paid')) say('Thanks! Your credits appear once the payment is confirmed, usually within seconds.');
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
-  const me = (await fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null }))) as Me;
+  const [me, free] = await Promise.all([fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null })) as Promise<Me>, freePagesLeft()]);
   const buying = params.get('paid') ? undefined : pendingBuy();
-  root.replaceChildren(me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }));
+  root.replaceChildren(me.user ? balance(me.user, free) : signInForm(me.signIn ?? { email: false, google: false }));
   if (params.get('paid')) {
     clearBuy();
     if (paidChecks-- > 0) setTimeout(render, 4000);
