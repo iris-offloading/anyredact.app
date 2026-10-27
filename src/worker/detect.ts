@@ -37,7 +37,7 @@ const MODEL_OPTIONS: Record<string, object> = {
 // (about 55,000 characters each), the app caught 72.6% of personal values with
 // whole documents against 71.4% with 3,000-character chunks, for about half the
 // tokens and a twentieth of the requests. The model alone finds less in long
-// input (80% against 86%); the rules and name matching make up the difference.
+// input (80% against 86%); name matching in the browser makes up the difference.
 const CHUNK_CHARS = MAX_CHARS;
 
 export const AI_TYPES = ['name', 'address', 'email', 'phone', 'ssn', 'id', 'date', 'org', 'card', 'iban', 'url', 'other'] as const;

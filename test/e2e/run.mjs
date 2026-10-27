@@ -29,6 +29,31 @@ const check = (cond, msg) => {
   if (!cond) failed++;
 };
 
+// Stands in for the model: returns each known value as it appears in the text.
+const AI_VALUES = [
+  ['Jane Doe', 'name'], ['Maria Gonzalez', 'name'], ['jane@example.com', 'email'], ['jane.doe@example.com', 'email'], ['bob@corp.io', 'email'],
+  ['+1 (415) 555-0132', 'phone'], ['415-555- 0132', 'phone'], ['415-555- 0199', 'phone'], ['0800 123 4567', 'phone', 'organization'],
+  ['10.0.0.12', 'other'], ['123-45-6789', 'ssn'], ['4111 1111 1111 1111', 'card'],
+];
+async function fakeDetect(route) {
+  const { text } = JSON.parse(route.request().postData() || '{}');
+  const entities = [];
+  for (const [value, type, owner] of AI_VALUES) {
+    const re = new RegExp(value.split(/\s+/).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'));
+    const m = text.match(re);
+    if (m) entities.push({ text: m[0], type, owner: owner ?? 'person' });
+  }
+  route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities }) });
+}
+await page.route('**/api/detect', fakeDetect);
+
+/** Sets whether the consent prompt shows or files go straight to the (fake) AI. */
+async function alwaysConsent(on) {
+  await page.goto(BASE);
+  await page.evaluate((v) => (v ? localStorage.setItem('ai-consent', 'always') : localStorage.removeItem('ai-consent')), on);
+}
+await alwaysConsent(true);
+
 async function run(slug, file, wait = 'label.finding') {
   await page.goto(`${BASE}/${slug}`);
   await page.setInputFiles('#file-input', file);
@@ -129,9 +154,10 @@ async function download(name) {
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
   });
   apiCalls.length = 0;
-  await run('redact-text', fx('sample.txt'));
+  await alwaysConsent(false);
+  await run('redact-text', fx('sample.txt'), '.consent');
   check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
-  await page.click('text=Find personal info with AI');
+  await page.click('.consent button.primary');
   await page.waitForSelector('.consent', { state: 'hidden' });
   await page.click('.panel > button.primary');
   await page.waitForSelector('.warn-text');
@@ -151,14 +177,16 @@ async function download(name) {
     visionCalls.push(JSON.parse(route.request().postData() || '{}'));
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ regions: [{ kind: 'plate', box: [100, 100, 300, 200] }] }) });
   });
+  await page.unroute('**/api/detect');
   await page.route('**/api/detect', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities: [] }) }));
-  await run('redact-image', fx('sample.png'));
+  await page.evaluate(() => localStorage.removeItem('ai-consent'));
+  await run('redact-image', fx('sample.png'), '.consent');
   const pictureChips = page.locator('label.chip', { hasText: 'Number plates' });
   check((await pictureChips.count()) === 1 && !(await pictureChips.locator('input').isChecked()), 'picture options shown and off by default');
   await pictureChips.click();
   await page.waitForFunction(() => !/Looking for faces/.test(document.querySelector('.status')?.textContent ?? ''), null, { timeout: 60_000 });
   check(visionCalls.length === 0, 'no picture sent before consent');
-  await page.click('text=Find personal info with AI');
+  await page.click('.consent button.primary');
   await page.waitForSelector('label.finding:has-text("Number plate 1")', { timeout: 30_000 });
   check(visionCalls.length === 1 && /^data:image\/jpeg;base64,/.test(visionCalls[0].image) && visionCalls[0].kinds.join() === 'plate', 'picture sent after consent with the ticked kinds');
   await page.screenshot({ path: fx('pictures.png') });
@@ -172,11 +200,12 @@ async function download(name) {
   await page.goto(BASE);
   await page.screenshot({ path: fx('home.png'), fullPage: true });
   await page.setInputFiles('#file-input', fx('sample.txt'));
-  await page.waitForSelector('label.finding');
-  await page.click('text=Find personal info with AI');
-  await page.waitForFunction(() => /built-in rules only/i.test(document.querySelector('.status')?.textContent ?? ''));
+  await page.click('.consent button.primary');
+  await page.waitForSelector('.status.error');
   const status = await page.textContent('.status');
-  check(/built-in rules only/i.test(status), `ai fallback status: ${status}`);
+  const empty = await page.textContent('.findings .empty');
+  check(/not configured/i.test(status) && /^Nothing detected/.test(empty), `ai fallback: ${status} ${empty}`);
+  await page.screenshot({ path: fx('fallback.png') });
 }
 
 check(errors.filter((e) => !/api\/detect|503/.test(e)).length === 0, `no page errors ${JSON.stringify(errors)}`);

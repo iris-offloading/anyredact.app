@@ -1,40 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dedupe, detectPatterns, findTerms, labelText, luhn, maskText, validIban } from '../src/shared/detect.ts';
+import { dedupe, findTerms, labelText, maskText } from '../src/shared/detect.ts';
+import { analyzeUnits, startsTicked, type Term } from '../src/shared/analyze.ts';
 import { rewriteSegments } from '../src/shared/segments.ts';
-
-const found = (text: string) => detectPatterns(text).map((s) => [s.type, text.slice(s.start, s.end)]);
-
-test('finds common identifiers', () => {
-  const text = `Contact jane.doe@example.com or +1 (415) 555-0132.
-SSN 123-45-6789, card 4111 1111 1111 1111, IBAN GB82 WEST 1234 5698 7654 32.
-Server 192.168.1.20, see https://example.com/u/jane.`;
-  const got = found(text);
-  assert.deepEqual(
-    got.filter(([t]) => t !== 'date'),
-    [
-      ['email', 'jane.doe@example.com'],
-      ['phone', '+1 (415) 555-0132'],
-      ['ssn', '123-45-6789'],
-      ['card', '4111 1111 1111 1111'],
-      ['iban', 'GB82 WEST 1234 5698 7654 32'],
-      ['ip', '192.168.1.20'],
-      ['url', 'https://example.com/u/jane'],
-    ],
-  );
-});
-
-test('rejects numbers that fail checksums', () => {
-  assert.equal(luhn('4111 1111 1111 1112'), false);
-  assert.equal(validIban('GB82 WEST 1234 5698 7654 33'), false);
-  assert.deepEqual(found('Order 4111 1111 1111 1112 shipped'), []);
-});
-
-test('does not treat dates or short numbers as phones', () => {
-  const types = detectPatterns('Born 1990-04-12, room 42, invoice 2024', ['phone']);
-  assert.deepEqual(types, []);
-  assert.deepEqual(found('Due 12/03/2024'), [['date', '12/03/2024']]);
-});
 
 test('custom terms match case-insensitively on word boundaries', () => {
   const spans = findTerms('Ana met ANA and Banana', [{ text: 'ana', type: 'custom' }]);
@@ -43,16 +11,16 @@ test('custom terms match case-insensitively on word boundaries', () => {
 
 test('dedupe drops contained spans', () => {
   const spans = dedupe([
-    { start: 0, end: 10, type: 'email', source: 'pattern' },
+    { start: 0, end: 10, type: 'email', source: 'ai' },
     { start: 2, end: 5, type: 'custom', source: 'term' },
-    { start: 12, end: 14, type: 'phone', source: 'pattern' },
+    { start: 12, end: 14, type: 'phone', source: 'ai' },
   ]);
   assert.equal(spans.length, 2);
 });
 
 test('mask and label output', () => {
   const text = 'mail a@b.co now';
-  const spans = detectPatterns(text);
+  const spans = findTerms(text, [{ text: 'a@b.co', type: 'email' }]);
   assert.equal(maskText(text, spans), 'mail ██████ now');
   assert.equal(labelText(text, spans), 'mail [EMAIL] now');
 });
@@ -65,24 +33,27 @@ test('rewriteSegments redacts across run boundaries', () => {
   assert.deepEqual(rewriteSegments(pieces, [span], 'label'), ['Call [PHONE]', '', ' today']);
 });
 
-test('service and helpline numbers are flagged as probably public', () => {
-  const hints = (text: string) => detectPatterns(text, ['phone']).map((s) => [text.slice(s.start, s.end), s.publicHint]);
-  assert.deepEqual(hints('Freephone 0800 123 4567'), [['0800 123 4567', 'Toll-free or service number']]);
-  assert.deepEqual(hints('Call 1-800-555-0199 today'), [['1-800-555-0199', 'Toll-free or service number']]);
-  assert.deepEqual(hints('Helpline: 020 7946 0958'), [['020 7946 0958', 'Looks like a helpline']]);
-  assert.deepEqual(hints('International callers: 1-267-941-1000'), [['1-267-941-1000', 'Looks like a helpline']]);
-  assert.deepEqual(hints('My mobile is 07700 900123'), [['07700 900123', undefined]]);
+test('service and helpline numbers start unticked', () => {
+  const hints = (text: string, phone: string) => analyzeUnits([{ id: 'u', text }], { ai: [{ text: phone, type: 'phone' }] }).map((s) => s.publicHint);
+  assert.deepEqual(hints('Freephone 0800 123 4567', '0800 123 4567'), ['Toll-free or service number']);
+  assert.deepEqual(hints('Call 1-800-555-0199 today', '1-800-555-0199'), ['Toll-free or service number']);
+  assert.deepEqual(hints('Helpline: 020 7946 0958', '020 7946 0958'), ['Looks like a helpline']);
+  assert.deepEqual(hints('International callers: 1-267-941-1000', '1-267-941-1000'), ['Looks like a helpline']);
+  assert.deepEqual(hints('My mobile is 07700 900123', '07700 900123'), [undefined]);
 });
 
-test('company letterhead contacts start as public, personal ones do not', async () => {
-  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+test('company letterhead contacts start as public, personal ones do not', () => {
   const text = [
     'CZ.NIC, z.s.p.o     IČ 67985726     T +420 222 745 111     kontakt@nic.cz',
     'Milešovská 1136/5, 130 00 Prague 3     DIČ CZ67985726     M +420 731 657 660     www.nic.cz',
     '',
     'Dear Jan, call me on +420 602 123 456 or write to jan.novak@seznam.cz.',
   ].join('\n');
-  const spans = analyzeUnits([{ id: 'u', text }], { types: ['name', 'email', 'phone'], ai: [] });
+  const ai: Term[] = [
+    ...['+420 222 745 111', '+420 731 657 660', '+420 602 123 456'].map((t) => ({ text: t, type: 'phone' as const })),
+    ...['kontakt@nic.cz', 'jan.novak@seznam.cz'].map((t) => ({ text: t, type: 'email' as const })),
+  ];
+  const spans = analyzeUnits([{ id: 'u', text }], { ai });
   const hint = (v: string) => spans.find((s) => text.slice(s.start, s.end) === v)?.publicHint;
   assert.ok(hint('+420 222 745 111'), 'switchboard');
   assert.ok(hint('+420 731 657 660'), 'letterhead mobile');
@@ -91,35 +62,30 @@ test('company letterhead contacts start as public, personal ones do not', async 
   assert.equal(hint('jan.novak@seznam.cz'), undefined);
 });
 
-test('AI organisation owner marks a contact public everywhere it appears', async () => {
-  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+test('AI organisation owner marks a contact public everywhere it appears', () => {
   const text = 'Write to j.smith@acme.example today.\nAgain: j.smith@acme.example';
   const spans = analyzeUnits([{ id: 'u', text }], {
-    types: ['email'],
     ai: [{ text: 'j.smith@acme.example', type: 'email', owner: 'organization' }],
   });
   assert.equal(spans.length, 2);
   assert.ok(spans.every((s) => s.publicHint));
 });
 
-test('a company named far away in the same paragraph does not make an address public', async () => {
-  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+test('a company named far away in the same paragraph does not make an address public', () => {
   const text = `Die XY GmbH ist diesen Risiken ausgesetzt, ${'durch eine breite Kundenstruktur, '.repeat(3)}etwa durch Kieran Wilson, wohnhaft in der 30 Stretto Dandolo, Apt. 34.`;
-  const spans = analyzeUnits([{ id: 'u', text }], { types: ['address'], ai: [{ text: '30 Stretto Dandolo, Apt. 34', type: 'address' }] });
+  const spans = analyzeUnits([{ id: 'u', text }], { ai: [{ text: '30 Stretto Dandolo, Apt. 34', type: 'address' }] });
   assert.equal(spans.length, 1);
   assert.equal(spans[0].publicHint, undefined);
 });
 
-test('the AI type wins over a rule match of the same text', async () => {
-  const { analyzeUnits } = await import('../src/shared/analyze.ts');
+test('the AI type wins over a custom term of the same text', () => {
   const text = 'Credit Card Number: 3022 3330 5753';
-  const spans = analyzeUnits([{ id: 'u', text }], { types: ['phone', 'card'], ai: [{ text: '3022 3330 5753', type: 'card' }] });
+  const spans = analyzeUnits([{ id: 'u', text }], { terms: [{ text: '3022 3330 5753', type: 'custom' }], ai: [{ text: '3022 3330 5753', type: 'card' }] });
   assert.deepEqual(spans.map((s) => [s.type, s.publicHint]), [['card', undefined]]);
 });
 
-test('dates the AI reports start ticked, dates only the rule matched do not', async () => {
-  const { analyzeUnits, startsTicked } = await import('../src/shared/analyze.ts');
+test('dates the AI reports start ticked', () => {
   const text = 'Invoice date 12.10.2026. Patient born 01.03.1956.';
-  const spans = analyzeUnits([{ id: 'u', text }], { types: ['date'], ai: [{ text: '01.03.1956', type: 'date' }] });
-  assert.deepEqual(spans.map((s) => [text.slice(s.start, s.end), startsTicked(s)]), [['12.10.2026', false], ['01.03.1956', true]]);
+  const spans = analyzeUnits([{ id: 'u', text }], { ai: [{ text: '01.03.1956', type: 'date' }] });
+  assert.deepEqual(spans.map((s) => [text.slice(s.start, s.end), startsTicked(s)]), [['01.03.1956', true]]);
 });

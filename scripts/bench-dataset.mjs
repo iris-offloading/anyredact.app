@@ -7,7 +7,7 @@
 // multilingual sentences) and 600 of gretelai/synthetic_pii_finance_multilingual
 // (full finance documents) from the Hugging Face dataset viewer.
 // `run` reports, per label, how many labelled values the AI alone and the app
-// as a whole (AI plus rules, default "Look for" types) would redact.
+// as a whole (AI plus name matching, default "Look for" types) would redact.
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -116,7 +116,7 @@ async function run(base, spec, file, limit) {
       tokensOut += r.usage?.completion_tokens ?? 0;
       ms += r.ms ?? 0;
       const aiRanges = r.entities.flatMap((e) => occurrences(doc.text, e.text));
-      const appSpans = analyzeUnits([{ id: 'u', text: doc.text }], { types: APP_TYPES, ai: r.entities })
+      const appSpans = analyzeUnits([{ id: 'u', text: doc.text }], { ai: r.entities })
         .filter((s) => APP_TYPES.includes(s.type) && startsTicked(s));
       const appRanges = appSpans.map((s) => [s.start, s.end]);
       for (const g of doc.spans) {
