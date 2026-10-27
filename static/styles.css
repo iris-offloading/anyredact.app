@@ -508,6 +508,10 @@ mark.saying { outline: 2px solid var(--accent); }
 .total-num { font-size: 3rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
 .total-label { color: var(--muted); }
 .meters { display: flex; flex-direction: column; gap: 10px; }
+/* The total takes the free height, so the rows sit at the bottom level with the right column. */
+.balance-card { display: flex; flex-direction: column; }
+.balance-card .total { flex: 1; align-items: center; min-height: 72px; margin-bottom: 20px; }
+.balance-card .total > * { align-self: center; }
 .meter { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); }
 .meter-head { display: flex; justify-content: space-between; gap: 12px; }
 .meter-head strong { font-variant-numeric: tabular-nums; }

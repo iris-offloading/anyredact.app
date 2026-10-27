@@ -200,7 +200,7 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
   ];
   const balanceCard = h(
     'section',
-    { className: 'panel-card' },
+    { className: 'panel-card balance-card' },
     h('h2', {}, 'Balance'),
     h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString('en-US')), h('span', { className: 'total-label' }, 'credits left')),
     h('div', { className: 'meters' }, ...meters),
