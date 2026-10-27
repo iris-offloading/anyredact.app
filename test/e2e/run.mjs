@@ -396,7 +396,7 @@ if (existsSync(fx('sample.ods'))) {
   ({ path: p, filename } = await download('photo-out.webp'));
   check(found.some((f) => f.includes('jane.doe@example.com')) && filename === 'photo-redacted.webp' && (await sharp(readFileSync(p)).metadata()).format === 'webp', `avif saved as ${filename}`);
 
-  const drawing = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 150"><title>Org chart for Jane Doe</title><metadata>Made by bob@corp.io</metadata><script>parent.svgRan = true</script><image href="https://example.com/track.png" width="1" height="1"/><a href="https://example.com/jane"><text x="10" y="80" font-family="Arial" font-size="20">Manager: jane.doe@example.com</text></a></svg>`;
+  const drawing = `<svg xmlns="http://www.w3.org/2000/svg" width="105.8333mm" height="39.6875mm"><title>Org chart for Jane Doe</title><metadata>Made by bob@corp.io</metadata><script>parent.svgRan = true</script><image href="https://example.com/track.png" width="1" height="1"/><a href="https://example.com/jane"><text x="10" y="80" font-family="Arial" font-size="20">Manager: jane.doe@example.com</text></a></svg>`;
   writeFileSync(fx('chart.svg'), drawing);
   const external = [];
   const onRequest = (r) => r.url().includes('example.com') && external.push(r.url());

@@ -109,12 +109,20 @@ function xmlShape(text: string, shape: Shape): Shape {
   return shape;
 }
 
+// A timing line: start --> end, then VTT cue settings such as align:start.
+const TIMING = /^\s*[\d:.,]+\s*-->\s*[\d:.,]+(\s+[\w-]+:\S+)*\s*$/;
+
 function subtitleShape(text: string, shape: Shape): Shape {
+  const lines = text.split('\n');
   let pos = 0;
-  for (const [i, line] of text.split('\n').entries()) {
-    if (/^\s*\d+\s*$/.test(line) || line.includes('-->') || (i === 0 && /^\uFEFF?WEBVTT/.test(line))) shape.keep.fill(1, pos, pos + line.length);
+  for (const [i, line] of lines.entries()) {
+    // A number on its own is a cue number only right above a timing line; elsewhere it is dialogue.
+    if (TIMING.test(line) || (/^\s*\d+\s*$/.test(line) && TIMING.test(lines[i + 1] ?? ''))) shape.keep.fill(1, pos, pos + line.length);
     pos += line.length + 1;
   }
+  // The header keeps its WEBVTT word; any title after it stays redactable.
+  const header = text.match(/^\uFEFF?WEBVTT/);
+  if (header) shape.keep.fill(1, 0, header[0].length);
   // Tags with a speaker name, such as <v Jane Doe>, stay redactable.
   for (const m of text.matchAll(/<\/?[\w.:]+>|\{\\[^}]*\}/g)) shape.keep.fill(1, m.index, m.index + m[0].length);
   return shape;
