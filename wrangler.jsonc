@@ -47,7 +47,7 @@
     // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
     "vars": { "MODEL_TRIALS": "1", "FREE_CHARS_PER_DAY": "30000", "EMAIL_FROM": "sign-in@anyredact.app" },
     "send_email": [{ "name": "EMAIL" }],
-    "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "76fdd406-5e72-4528-8702-d04104d017e5" }],
+    "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "626376f3-fefb-4d4c-9b95-c5259f897889" }],
     "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
     "ratelimits": [
       { "name": "DETECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
