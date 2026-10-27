@@ -89,6 +89,8 @@ class App {
   private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
+  // Business and public-service contacts start ticked too.
+  private redactPublic = store.get('redact-public') === '1';
   private terms = '';
   private visualKinds = new Set<VisualKind>();
   // Per page, and the kinds they were computed for.
@@ -344,7 +346,7 @@ class App {
         type: s.type,
         source: s.source,
         text: unit.text.slice(s.start, s.end),
-        enabled: this.overrides.get(key) ?? startsTicked(s),
+        enabled: this.overrides.get(key) ?? startsTicked(s, this.redactPublic),
         publicHint: s.publicHint,
         page: unit.page,
         rects: unit.rectsFor?.(s.start, s.end) ?? [],
@@ -465,6 +467,16 @@ class App {
       return;
     }
     const out: HTMLElement[] = [];
+    const publicKeys = this.findings.filter((f) => f.publicHint).map((f) => f.key);
+    if (publicKeys.length) {
+      const cb = h('input', { type: 'checkbox', checked: this.redactPublic });
+      cb.addEventListener('change', () => {
+        this.redactPublic = cb.checked;
+        store.set('redact-public', cb.checked ? '1' : '0');
+        this.toggle(publicKeys, cb.checked);
+      });
+      out.push(h('label', { className: 'public-pref' }, cb, 'Redact company and public contacts'));
+    }
     for (const [type, items] of groups) {
       const on = items.filter((f) => f.enabled).length;
       const all = h('input', { type: 'checkbox', checked: on === items.length, indeterminate: on > 0 && on < items.length });

@@ -12,9 +12,9 @@ const CONTACT_TYPES = new Set<EntityType>(['phone', 'email', 'url', 'address']);
 // Types the AI may mark as an organisation's: contact details plus company registration and VAT numbers.
 const ORG_TYPES = new Set<EntityType>([...CONTACT_TYPES, 'id']);
 
-/** Whether a finding starts ticked: business and public-service contacts start unticked. */
-export function startsTicked(s: Span): boolean {
-  return !s.publicHint;
+/** Whether a finding starts ticked: business and public-service contacts start unticked unless the user asked to redact them. */
+export function startsTicked(s: Span, redactPublic = false): boolean {
+  return redactPublic || !s.publicHint;
 }
 
 export interface UnitSpan extends Span {
@@ -38,7 +38,9 @@ export function analyzeUnits(units: { id: string; text: string }[], opts: { term
 
   const spans: Span[] = findTerms(text, opts.terms ?? []);
   const ai = opts.ai?.filter((e) => plausibleEntity(e.text, e.type)) ?? [];
-  const orgOwned = new Set(ai.filter((e) => e.owner === 'organization' && ORG_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
+  const owned = (owner: Term['owner']) => new Set(ai.filter((e) => e.owner === owner && ORG_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
+  const orgOwned = owned('organization');
+  const personOwned = owned('person');
   for (let s of findTerms(text, ai, 'ai')) {
     // Models sometimes call an SSN/ITIN-shaped number a phone number.
     if (s.type === 'phone' && SSN_SHAPE.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
@@ -53,7 +55,10 @@ export function analyzeUnits(units: { id: string; text: string }[], opts: { term
   // number or address is treated the same everywhere: if any mention looks
   // public (e.g. next to "Helpline" or in a letterhead), flag every mention.
   const merged = dedupe(spans);
-  for (const s of merged) if (!s.publicHint && CONTACT_TYPES.has(s.type)) s.publicHint = contactPublicHint(text, s.start, s.end, s.type);
+  for (const s of merged) {
+    if (s.publicHint || !CONTACT_TYPES.has(s.type)) continue;
+    s.publicHint = contactPublicHint(text, s.start, s.end, s.type, personOwned.has(text.slice(s.start, s.end).toLowerCase()));
+  }
   const contactKey = (s: Span) => {
     const v = text.slice(s.start, s.end);
     return s.type === 'phone' ? `phone:${v.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '')}` : `${s.type}:${v.toLowerCase()}`;
