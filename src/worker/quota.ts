@@ -11,8 +11,8 @@ export interface QuotaEnv {
   FREE_CHARS_PER_DAY?: string;
 }
 
-// About 30 pages of dense text.
-export const DEFAULT_FREE_CHARS = 100_000;
+// 10 credits: 10 pages of dense text, or 3 minutes of audio.
+export const DEFAULT_FREE_CHARS = 30_000;
 export const IP_MULTIPLIER = 5;
 
 export interface QuotaState {
