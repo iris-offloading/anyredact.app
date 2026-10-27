@@ -172,3 +172,31 @@ test('vision regions are validated and scaled to thousandths', async () => {
   ]);
   assert.deepEqual(parseRegions('not json', ['face']), []);
 });
+
+test('limits IPv6 visitors by their /64 network', async () => {
+  const { clientNetwork } = await import('../src/worker/http.ts');
+  const net = (ip: string) => clientNetwork(new Request('https://anyredact.app/', { headers: { 'cf-connecting-ip': ip } }));
+  assert.equal(net('203.0.113.7'), '203.0.113.7');
+  assert.equal(net('2001:db8:aa:1::1'), '2001:db8:aa:1::/64');
+  assert.equal(net('2001:0db8:00aa:0001:ffff:1:2:3'), '2001:db8:aa:1::/64');
+  assert.equal(net('2001:db8::5'), '2001:db8:0:0::/64');
+});
+
+test('preview benchmark features need the trial key', async () => {
+  const calls: unknown[] = [];
+  const e = {
+    ASSETS: { fetch: async () => new Response('asset') },
+    AI: { run: async (model: string) => (calls.push(model), { response: { entities: [] } }) },
+    MODEL_TRIALS: '1',
+    TRIAL_KEY: 'k1',
+  } as unknown as Env;
+  const detect = (key?: string) =>
+    entry.fetch(
+      new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane Doe', model: '@cf/meta/other' }), headers: key ? { 'x-trial-key': key } : {} }) as never,
+      e as never,
+    );
+  await detect();
+  await detect('wrong');
+  await detect('k1');
+  assert.deepEqual(calls, ['@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/meta/other']);
+});

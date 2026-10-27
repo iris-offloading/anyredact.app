@@ -218,7 +218,8 @@ async function render(file: File, parts: Map<string, Document>, paras: Para[], p
   for (const b of marks) b.remove();
 
   // Tracked deletions stay in the file until redacted, so show them as Word does.
-  const options = { renderChanges: true };
+  // Alt chunks are HTML pages inside the file; docx-preview would load them, scripts included, in a same-origin frame.
+  const options = { renderChanges: true, renderAltChunks: false };
   const doc = await parseAsync(await copy.generateAsync({ type: 'blob', compression: 'STORE' }), options);
   // Note which part each picture came from, so the editor can take its place.
   const sources = new Map<string, string>();
@@ -347,6 +348,13 @@ export async function scrubProperties(zip: JSZip) {
     const xml = new DOMParser().parseFromString(await f.async('string'), 'application/xml');
     for (const el of Array.from(xml.getElementsByTagName('*'))) if (tags.includes(el.localName)) el.textContent = '';
     zip.file(name, new XMLSerializer().serializeToString(xml));
+  }
+  // Custom properties hold whatever the author or their systems added, such as a client name or case number.
+  const custom = zip.file('docProps/custom.xml');
+  if (custom) {
+    const xml = new DOMParser().parseFromString(await custom.async('string'), 'application/xml');
+    for (const p of Array.from(xml.getElementsByTagName('*')).filter((e) => e.localName === 'property')) p.remove();
+    zip.file('docProps/custom.xml', new XMLSerializer().serializeToString(xml));
   }
   // word/people.xml lists everyone who tracked changes or commented.
   const people = zip.file('word/people.xml');

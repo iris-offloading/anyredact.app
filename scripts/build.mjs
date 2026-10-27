@@ -51,6 +51,13 @@ const accountSrc = entrySrc('account');
 await cp(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'), path.join(dist, pdfWorker));
 await cp(path.join(root, 'node_modules/@univerjs/preset-sheets-core/lib/index.css'), path.join(dist, univerCss));
 await cp(path.join(root, 'static'), dist, { recursive: true });
+// Only the CDN packages the app loads may run: the whole of jsDelivr serves any npm package or GitHub file.
+const tesseractVersion = require('tesseract.js/package.json').version;
+const tesseractCore = require('tesseract.js/package.json').dependencies['tesseract.js-core'].replace(/^\D*/, '');
+const cdn = 'https://cdn.jsdelivr.net/npm';
+const cdnScripts = [`${cdn}/tesseract.js@v${tesseractVersion}/`, `${cdn}/tesseract.js-core@v${tesseractCore}/`, `${cdn}/@mediapipe/tasks-vision@${mediapipeVersion}/`];
+const headers = await readFile(path.join(dist, '_headers'), 'utf8');
+await writeFile(path.join(dist, '_headers'), headers.replaceAll('CDN_SCRIPTS', cdnScripts.join(' ')).replaceAll('CDN_DATA', `${cdn}/@tesseract.js-data/`));
 const css = await readFile(path.join(root, 'static/styles.css'));
 const cssHash = (await import('node:crypto')).createHash('sha256').update(css).digest('hex').slice(0, 8);
 const themeHash = (await import('node:crypto')).createHash('sha256').update(await readFile(path.join(root, 'static/theme.js'))).digest('hex').slice(0, 8);

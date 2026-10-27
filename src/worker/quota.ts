@@ -4,6 +4,8 @@
 // behind a shared office or mobile network don't block each other, but it
 // still stops someone who clears their browser ID to start over.
 
+import { clientNetwork } from './http.ts';
+
 export interface QuotaEnv {
   QUOTA?: DurableObjectNamespace;
   FREE_CHARS_PER_DAY?: string;
@@ -48,7 +50,7 @@ export function freeLimit(env: QuotaEnv): number {
 
 function identities(request: Request, env: QuotaEnv): { key: string; limit: number }[] {
   const limit = freeLimit(env);
-  const out = [{ key: `ip:${request.headers.get('cf-connecting-ip') || 'anon'}`, limit: limit * IP_MULTIPLIER }];
+  const out = [{ key: `ip:${clientNetwork(request)}`, limit: limit * IP_MULTIPLIER }];
   const device = request.headers.get('x-device-id');
   if (device && /^[\w-]{8,64}$/.test(device)) out.unshift({ key: `device:${device}`, limit });
   return out;

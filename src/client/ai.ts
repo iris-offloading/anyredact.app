@@ -7,6 +7,8 @@ export interface AiEntity {
   owner?: 'person' | 'organization';
 }
 
+let pageId: string | undefined;
+
 /** Random per-browser ID for the free daily allowance. It identifies nothing about the person. */
 export function deviceId(): string {
   try {
@@ -14,7 +16,8 @@ export function deviceId(): string {
     if (!id) localStorage.setItem('device-id', (id = crypto.randomUUID()));
     return id;
   } catch {
-    return 'no-storage';
+    // Without storage, one ID for this page, so such browsers don't all share one allowance.
+    return (pageId ??= crypto.randomUUID());
   }
 }
 

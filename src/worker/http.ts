@@ -26,11 +26,34 @@ export interface Limiter {
   limit(opts: { key: string }): Promise<{ success: boolean }>;
 }
 
+/**
+ * The visitor's network for limits and allowances: the IPv4 address, or the
+ * /64 prefix of an IPv6 address, since one connection is usually handed a whole
+ * /64 and could otherwise start over with every address in it.
+ */
+export function clientNetwork(request: Request): string {
+  const ip = request.headers.get('cf-connecting-ip') || 'anon';
+  if (!ip.includes(':')) return ip;
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right] : left;
+  return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+
 /** Counts the request against the per-IP limiter; true when over the limit. */
 export async function rateLimited(request: Request, limiter: Limiter | undefined, prefix = ''): Promise<boolean> {
   if (!limiter) return false;
-  const { success } = await limiter.limit({ key: prefix + (request.headers.get('cf-connecting-ip') || 'anon') });
+  const { success } = await limiter.limit({ key: prefix + clientNetwork(request) });
   return !success;
+}
+
+/**
+ * Preview-only benchmark features (choosing the model, batches, raw calls). Preview
+ * URLs are public, so they also need the TRIAL_KEY secret in an x-trial-key header.
+ */
+export function trialsAllowed(request: Request, env: { MODEL_TRIALS?: string; TRIAL_KEY?: string }): boolean {
+  return env.MODEL_TRIALS === '1' && !!env.TRIAL_KEY && request.headers.get('x-trial-key') === env.TRIAL_KEY;
 }
 
 export function base64(bytes: Uint8Array): string {
@@ -48,10 +71,14 @@ export async function aiGuard(request: Request, ai: unknown, limiter: Limiter | 
   return null;
 }
 
+// A 4 MB picture as a base64 data URL, with room for the JSON around it.
+export const MAX_POST_BYTES = 6 * 1024 * 1024;
+
 /** aiGuard, then the parsed JSON body. Returns the body, or the error response to send. */
-export async function readAiPost(request: Request, env: { AI?: unknown; DETECT_LIMITER?: Limiter }, unavailable: string): Promise<Response | Record<string, unknown>> {
+export async function readAiPost(request: Request, env: { AI?: unknown; DETECT_LIMITER?: Limiter }, unavailable: string, maxBytes = MAX_POST_BYTES): Promise<Response | Record<string, unknown>> {
   const refused = await aiGuard(request, env.AI, env.DETECT_LIMITER, unavailable);
   if (refused) return refused;
+  if (Number(request.headers.get('content-length')) > maxBytes) return json({ error: 'Request is too large.' }, 413);
   try {
     const body = await request.json();
     // Valid JSON that isn't an object carries no fields; each route answers it as empty input.
