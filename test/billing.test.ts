@@ -7,6 +7,7 @@ import { spendPaidPages, stripeForm, verifyStripeSignature } from '../src/worker
 import type { Env } from '../src/worker/detect.ts';
 import entry from '../src/worker/index.ts';
 import { audioCredits } from '../src/shared/pricing.ts';
+import { isWav } from '../src/worker/transcribe.ts';
 
 // Minimal D1 over node:sqlite, with the real schema.
 function d1(): D1Database {
@@ -24,7 +25,20 @@ function d1(): D1Database {
     };
     return stmt;
   };
-  return { prepare } as unknown as D1Database;
+  // D1 runs a batch as one transaction.
+  const batch = async (stmts: { run: () => Promise<unknown> }[]) => {
+    db.exec('BEGIN');
+    try {
+      const out = [];
+      for (const s of stmts) out.push(await s.run());
+      db.exec('COMMIT');
+      return out;
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  };
+  return { prepare, batch } as unknown as D1Database;
 }
 
 const SECRET = 'whsec_test';
@@ -74,7 +88,7 @@ test('webhook credits packs once and starts the monthly plan', async () => {
   const debit = { mode: 'payment', payment_status: 'unpaid', metadata: { user_id: userId, product: 'pack-500' } };
   await send({ id: 'evt_debit', type: 'checkout.session.completed', data: { object: debit } });
   await send({ id: 'evt_debit_paid', type: 'checkout.session.async_payment_succeeded', data: { object: { ...debit, payment_status: 'paid' } } });
-  const sub = { id: 'evt_sub', type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'plus' } } } };
+  const sub = { id: 'evt_sub', type: 'checkout.session.completed', data: { object: { mode: 'subscription', payment_status: 'paid', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'plus' } } } };
   await send(sub);
   const u = (await db.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
   assert.equal(u.pack_pages, 1000);
@@ -171,6 +185,7 @@ test('a webhook that fails to apply is retried rather than lost', async () => {
       if (broken && sql.startsWith('UPDATE users SET pack_pages')) throw new Error('D1 unavailable');
       return db.prepare(sql);
     },
+    batch: db.batch,
   } as unknown as D1Database;
   const e = env(flaky);
   const userId = await upsertUser(e, 'jane@example.com');
@@ -232,4 +247,75 @@ test('refunds and disputes take pack credits back, and a negative balance blocks
   );
   assert.equal(res.status, 402);
   assert.equal(((await res.json()) as { code: string }).code, 'negative');
+});
+
+const webhook = (e: Env) => async (event: object) => {
+  const body = JSON.stringify(event);
+  return fetchWorker(new Request('https://anyredact.app/api/stripe/webhook', { method: 'POST', body, headers: { 'stripe-signature': await sign(body) } }), e);
+};
+
+test('a plan paid by a bank debit starts only once the payment confirms', async () => {
+  const db = d1();
+  const e = env(db);
+  const send = webhook(e);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1' WHERE id = ?").bind(userId).run();
+  const session = { mode: 'subscription', payment_status: 'unpaid', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'plus' } };
+  await send({ id: 'evt_c', type: 'checkout.session.completed', data: { object: session } });
+  const plan = async () => ((await db.prepare('SELECT sub_id, sub_pages FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>);
+  assert.deepEqual({ ...(await plan()) }, { sub_id: null, sub_pages: 0 });
+  // The invoice can confirm before the session does, and carries the plan in its metadata.
+  const invoice = { customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_1', metadata: { user_id: userId, product: 'plus' } } }, lines: { data: [{ period: { end: 4102444800 } }] } };
+  await send({ id: 'evt_i', type: 'invoice.paid', data: { object: invoice } });
+  assert.deepEqual({ ...(await plan()) }, { sub_id: 'sub_1', sub_pages: 600 });
+});
+
+test('live keys ignore sandbox events', async () => {
+  const db = d1();
+  const e = { ...env(db), STRIPE_SECRET_KEY: 'rk_live_x' } as Env;
+  const send = webhook(e);
+  const userId = await upsertUser(e, 'jane@example.com');
+  const object = { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_t', metadata: { user_id: userId, product: 'pack-100' } };
+  assert.equal((await send({ id: 'evt_test', livemode: false, type: 'checkout.session.completed', data: { object } })).status, 200);
+  await send({ id: 'evt_live', livemode: true, type: 'checkout.session.completed', data: { object: { ...object, payment_intent: 'pi_l' } } });
+  assert.equal(((await db.prepare('SELECT pack_pages FROM users WHERE id = ?').bind(userId).first()) as { pack_pages: number }).pack_pages, 100);
+});
+
+test('a dispute on a plan payment ends the period\'s credits', async () => {
+  const db = d1();
+  const e = env(db);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_9', sub_id = 'sub_9', sub_pages = 600, sub_used = 10, sub_period_end = 4102444800 WHERE id = ?").bind(userId).run();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    assert.match(String(input), /\/v1\/charges\/ch_9$/);
+    return Response.json({ id: 'ch_9', customer: 'cus_9' });
+  }) as typeof fetch;
+  try {
+    assert.equal((await webhook(e)({ id: 'evt_d', type: 'charge.dispute.created', data: { object: { charge: 'ch_9', payment_intent: 'pi_plan', amount: 900 } } })).status, 200);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(((await db.prepare('SELECT sub_used FROM users WHERE id = ?').bind(userId).first()) as { sub_used: number }).sub_used, 600);
+});
+
+test('transcription takes only 16 kHz mono 16-bit WAV, so audio is billed by its real length', () => {
+  const wav = (rate: number, channels = 1, bits = 16) => {
+    const b = new Uint8Array(44 + 3200);
+    const v = new DataView(b.buffer);
+    b.set(new TextEncoder().encode('RIFF'), 0);
+    b.set(new TextEncoder().encode('WAVEfmt '), 8);
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, channels, true);
+    v.setUint32(24, rate, true);
+    v.setUint16(34, bits, true);
+    b.set(new TextEncoder().encode('data'), 36);
+    v.setUint32(40, 3200, true);
+    return b;
+  };
+  assert.ok(isWav(wav(16000)));
+  assert.ok(!isWav(wav(8000)));
+  assert.ok(!isWav(wav(16000, 2)));
+  assert.ok(!isWav(wav(16000, 1, 8)));
 });

@@ -69,6 +69,7 @@ export async function currentUser(request: Request, env: AccountsEnv): Promise<U
 
 async function startSession(env: AccountsEnv, userId: string): Promise<string> {
   const token = randomToken();
+  await env.DB!.prepare('DELETE FROM sessions WHERE user_id = ? AND expires_at < ?').bind(userId, now()).run();
   await env.DB!.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), userId, now() + SESSION_DAYS * 86400)
     .run();
