@@ -1,12 +1,10 @@
 import * as pdfjs from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { burnBoxes, canvasToBlob, outputName, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
 import { ocrUnit, pad } from './ocr.ts';
 
 declare const __PDF_WORKER_SRC__: string;
 pdfjs.GlobalWorkerOptions.workerSrc = __PDF_WORKER_SRC__;
-
-export const MAX_PAGES = 60;
 
 interface Glyphs {
   start: number;

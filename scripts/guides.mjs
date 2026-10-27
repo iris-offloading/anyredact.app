@@ -163,7 +163,7 @@ ${pdfLayersDiagram()}
   {
     slug: 'how-to-redact-a-screenshot',
     title: 'How to Redact a Screenshot or Photo | AnyRedact',
-    description: 'Black out text, faces and number plates in a screenshot or photo, and strip its location data. Works with PNG, JPG, WebP and iPhone HEIC.',
+    description: 'Black out text, faces and number plates in a screenshot or photo, and strip its location data. Works with PNG, JPG, iPhone HEIC, TIFF and more.',
     h1: 'How to redact a screenshot or photo',
     tools: ['redact-image'],
     summary: 'Solid boxes over text, faces and plates, with location data stripped.',
@@ -172,7 +172,7 @@ ${pdfLayersDiagram()}
 
 <h2>Steps</h2>
 <ol>
-<li><strong>Paste or upload.</strong> Copy the screenshot and press Ctrl+V (Cmd+V on a Mac) on the page, or choose a PNG, JPG, WebP or HEIC file.</li>
+<li><strong>Paste or upload.</strong> Copy the screenshot and press Ctrl+V (Cmd+V on a Mac) on the page, or choose the image file.</li>
 <li><strong>Let OCR read it.</strong> Text in the picture is read in your browser and then checked by AI once you agree.</li>
 <li><strong>Turn on picture redaction if needed.</strong> Under "In pictures", pick faces, screens, road signs or number plates.</li>
 <li><strong>Fix the boxes.</strong> Untick anything to keep, and drag on the image to cover avatars, QR codes or anything else.</li>

@@ -159,6 +159,8 @@ export const enabledTexts = (findings: Finding[]) => new Set(findings.filter((f)
 
 // Largest side a picture is decoded at, opened alone or inside a document.
 export const MAX_PICTURE_SIDE = 6000;
+// Pages loaded from one PDF or TIFF.
+export const MAX_PAGES = 60;
 
 /** Draws a picture onto a new canvas, scaled down so its longer side is at most `maxSide`. */
 export function scaledCanvas(src: ImageBitmap | HTMLCanvasElement, maxSide = MAX_PICTURE_SIDE): HTMLCanvasElement {

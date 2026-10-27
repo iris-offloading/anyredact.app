@@ -51,11 +51,11 @@ export const TOOLS = [
     nav: 'Image',
     title: 'Auto Redact Images Online with AI | AnyRedact',
     description:
-      'Redact JPG, PNG, WebP and HEIC images with AI. Text in the picture is read, personal details get black boxes, and EXIF and GPS data are stripped.',
+      'Redact JPG, PNG, HEIC, TIFF and SVG images with AI. Text in the picture is read, personal details get black boxes, and EXIF and GPS data are stripped.',
     h1: 'Auto redact images online with AI',
     lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
-    also: 'Works with JPG, PNG, WebP and HEIC.',
-    hint: 'PNG, JPG, WebP or HEIC',
+    also: 'Works with JPG, PNG, WebP, HEIC, AVIF, GIF, BMP, multi-page TIFF and SVG.',
+    hint: 'PNG, JPG, WebP, HEIC, AVIF, GIF, BMP, TIFF or SVG',
     art: 'image',
     how: [
       ['Open or paste a picture', 'Words in the picture are read with OCR.'],
@@ -79,6 +79,14 @@ export const TOOLS = [
       {
         q: 'Can I upload iPhone photos?',
         a: 'Yes. HEIC and HEIF photos open here and download as JPG.',
+      },
+      {
+        q: 'Can I redact a multi-page TIFF?',
+        a: 'Yes. Every page opens in the editor, and the download is one TIFF holding all of them.',
+      },
+      {
+        q: 'What happens to an SVG?',
+        a: 'It is flattened to a PNG. Text, links and scripts hidden in the drawing are left out of the download.',
       },
     ],
   },
@@ -200,8 +208,8 @@ export const TOOLS = [
       'Paste text or upload CSV, JSON, XML, YAML, .env or log files to mask emails, phone numbers, IP addresses and card numbers with AI.',
     h1: 'Auto redact text online with AI',
     lead: 'Paste text or upload a file to mask personal info, passwords, API keys, and other secrets in seconds.',
-    also: 'Works with CSV, JSON, XML, YAML, .env, Markdown and log files.',
-    hint: 'TXT, CSV, JSON, XML, YAML, .env or logs',
+    also: 'Works with CSV, JSON, XML, HTML, Markdown, YAML, .env, logs, SRT and VTT subtitles, and source code.',
+    hint: 'TXT, CSV, JSON, XML, HTML, Markdown, subtitles, logs or code',
     art: 'text',
     how: [
       ['Paste or upload', 'Drop in a log, a config file or a chat export.'],
@@ -221,6 +229,10 @@ export const TOOLS = [
       {
         q: 'Will a redacted JSON or XML file still parse?',
         a: 'Yes. Quotes, brackets and tags are left alone, and a redacted number becomes a string.',
+      },
+      {
+        q: 'Do redacted subtitles still play?',
+        a: 'Yes. Cue numbers and timings in SRT and VTT files are never touched.',
       },
     ],
   },
@@ -269,7 +281,7 @@ export const HOME = {
     'Auto redact PDFs, images, Word, PowerPoint, Excel, text and audio for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
   lead: 'Upload PDFs, images, Word, PowerPoint, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
-  hint: 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
+  hint: 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, images, text or audio',
   points: [
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],

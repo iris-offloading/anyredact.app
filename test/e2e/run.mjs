@@ -367,6 +367,63 @@ if (existsSync(fx('sample.ods'))) {
   check(filename === 'photo-redacted.jpg' && info.format === 'jpeg' && info.width === 760 && !left, `heic saved as ${filename} (${info.format} ${info.width}px)`);
 }
 
+// More image formats: multi-page TIFF stays TIFF, animated GIF keeps one frame, SVG is flattened to PNG
+{
+  const card = (t) => sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300"><rect width="100%" height="100%" fill="#fff"/><text x="30" y="160" font-family="Arial" font-size="40">${t}</text></svg>`)).png().toBuffer();
+  const pages = [await card('Email: jane.doe@example.com'), await card('Contact bob@corp.io today')];
+  writeFileSync(fx('scan.tiff'), await sharp(pages, { join: { animated: true } }).tiff({ compression: 'lzw' }).toBuffer());
+  let found = await run('redact-image', fx('scan.tiff'));
+  check(found.some((f) => f.includes('jane.doe@example.com')) && found.some((f) => f.includes('bob@corp.io')) && (await page.locator('.page-img').count()) === 2, `tiff findings on 2 pages: ${found.join(', ')}`);
+  await page.screenshot({ path: fx('tiff.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('tiff-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  let { path: p, filename } = await download('scan-out.tiff');
+  const tiff = await sharp(readFileSync(p), { pages: -1 }).metadata();
+  const box = await sharp(readFileSync(p), { page: 1 }).extract({ left: 190, top: 130, width: 200, height: 40 }).greyscale().raw().toBuffer();
+  const mean = box.reduce((a, v) => a + v, 0) / box.length;
+  check(filename === 'scan-redacted.tiff' && tiff.format === 'tiff' && tiff.pages === 2 && tiff.width === 800 && mean < 20, `tiff saved as ${filename} (${tiff.format}, ${tiff.pages} pages, ${tiff.width}px, page 2 box mean ${mean.toFixed(0)})`);
+
+  writeFileSync(fx('animated.gif'), await sharp(pages, { join: { animated: true } }).gif().toBuffer());
+  found = await run('redact-image', fx('animated.gif'));
+  const notes = await page.locator('.notes, .note').allTextContents();
+  check(found.some((f) => f.includes('jane.doe@example.com')) && notes.join(' ').includes('first frame'), `gif first frame: ${found.join(', ')} | ${notes.join(' ')}`);
+  ({ filename } = await download('animated-out.png'));
+  check(filename === 'animated-redacted.png', `gif saved as ${filename}`);
+
+  writeFileSync(fx('photo.avif'), await sharp(pages[0]).avif().toBuffer());
+  found = await run('redact-image', fx('photo.avif'));
+  ({ path: p, filename } = await download('photo-out.webp'));
+  check(found.some((f) => f.includes('jane.doe@example.com')) && filename === 'photo-redacted.webp' && (await sharp(readFileSync(p)).metadata()).format === 'webp', `avif saved as ${filename}`);
+
+  const drawing = `<svg xmlns="http://www.w3.org/2000/svg" width="105.8333mm" height="39.6875mm"><title>Org chart for Jane Doe</title><metadata>Made by bob@corp.io</metadata><script>parent.svgRan = true</script><image href="https://example.com/track.png" width="1" height="1"/><a href="https://example.com/jane"><text x="10" y="80" font-family="Arial" font-size="20">Manager: jane.doe@example.com</text></a></svg>`;
+  writeFileSync(fx('chart.svg'), drawing);
+  const external = [];
+  const onRequest = (r) => r.url().includes('example.com') && external.push(r.url());
+  page.on('request', onRequest);
+  found = await run('redact-image', fx('chart.svg'));
+  const meta = await page.$$eval('.meta > dl dt, .meta > dl dd', (els) => els.map((e) => e.textContent));
+  check(found.some((f) => f.includes('jane.doe@example.com')) && meta.includes('Org chart for Jane Doe') && meta.includes('https://example.com/jane'), `svg findings and metadata: ${found.join(', ')} | ${meta.join(' | ')}`);
+  await page.screenshot({ path: fx('svg.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('svg-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  ({ path: p, filename } = await download('chart-out.png'));
+  const svgInfo = await sharp(readFileSync(p)).metadata();
+  check(filename === 'chart-redacted.png' && svgInfo.format === 'png' && svgInfo.width === 1600 && !(await page.evaluate(() => window.svgRan)) && !external.length, `svg flattened to ${filename} (${svgInfo.format} ${svgInfo.width}px), no script or external load`);
+  page.off('request', onRequest);
+}
+
+// Subtitles keep their numbering and timings
+{
+  writeFileSync(fx('call.srt'), '1\n00:00:01,000 --> 00:00:04,000\nHi, this is Jane Doe.\n\n2\n00:00:05,000 --> 00:00:08,000\nMy email is jane@example.com\n');
+  const found = await run('redact-text', fx('call.srt'));
+  check(found.includes('jane@example.com'), `srt findings: ${found.join(', ')}`);
+  const { path: p, filename } = await download('call-out.srt');
+  const srt = readFileSync(p, 'utf8');
+  check(filename === 'call-redacted.srt' && srt.startsWith('1\n00:00:01,000 --> 00:00:04,000\n') && srt.includes('\n2\n00:00:05,000 --> 00:00:08,000\n') && !srt.includes('jane@'), `srt output: ${JSON.stringify(srt)}`);
+}
+
 // JSON and XML stay valid after redaction
 {
   writeFileSync(fx('users.json'), JSON.stringify({ users: [{ name: 'Jane Doe', email: 'jane@example.com', phone: 4155550132, ip: '10.0.0.12' }] }, null, 2));
