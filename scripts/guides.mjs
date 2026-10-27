@@ -442,4 +442,116 @@ ${sarTimelineDiagram()}
 </ul>
 `,
   },
+  {
+    slug: 'how-to-redact-a-bank-statement',
+    title: 'How to Redact a Bank Statement | AnyRedact',
+    description: 'Hide account numbers, payees and spending you do not need to share before sending a bank statement to a landlord, employer or agency.',
+    h1: 'How to redact a bank statement',
+    tools: ['redact-pdf', 'redact-image'],
+    summary: 'Share proof of income or address without your account numbers and spending.',
+    body: `
+<p>Landlords, letting agents, visa offices and new employers often ask for a bank statement when all they need is your name, your address or proof that a salary arrives. A full statement also shows where you shop, who you pay and your account details. Redacting the rest keeps the part they asked for and nothing more.</p>
+
+<h2>Ask what they need first</h2>
+<p>Some recipients only accept an untouched statement, and mortgage lenders in particular may want it straight from your bank. Others are happy with a redacted copy as long as certain lines stay visible. Asking up front saves sending it twice.</p>
+
+<h2>Usually keep</h2>
+<ul>
+<li>Your name and address, if the statement is proof of address.</li>
+<li>The bank's name and logo, and the statement period.</li>
+<li>Salary or benefit payments and the opening and closing balances, if the statement is proof of income.</li>
+</ul>
+
+<h2>Usually remove</h2>
+<ul>
+<li>The full account number, sort code, IBAN and card number. Leaving the last four digits is common when the recipient needs to match the account.</li>
+<li>Payee and merchant names, which can reveal health, religion, politics or relationships.</li>
+<li>Names of other people you send money to or receive money from.</li>
+<li>Payment references, which often hold invoice numbers, phone numbers or notes.</li>
+</ul>
+
+<h2>Steps</h2>
+<ol>
+<li><strong>Open the statement</strong> in the <a href="/redact-pdf">PDF tool</a>, or a photo or screenshot of it in the <a href="/redact-image">image tool</a>.</li>
+<li><strong>Allow the scan.</strong> Account numbers, card numbers, IBANs and names are marked on each page.</li>
+<li><strong>Untick what must stay</strong>, such as your own name and address.</li>
+<li><strong>Box out transaction rows</strong> by dragging over them. One box can cover a whole block of lines.</li>
+<li><strong>Download</strong> and open the copy to check every page.</li>
+</ol>
+
+<h2>Why the copy is an image</h2>
+<p>The PDF comes back with each page flattened, so the hidden account number cannot be copied from under a bar. The flip side is that the recipient cannot search it or check it against the bank's digital signature. If they need that, ask your bank whether it can issue a statement for a shorter period or a letter confirming your address or income instead.</p>
+`,
+  },
+  {
+    slug: 'how-to-redact-a-chat-export',
+    title: 'How to Redact a WhatsApp or Slack Chat Export | AnyRedact',
+    description: 'Mask names, phone numbers and addresses in exported WhatsApp, Telegram or Slack chats before using them as evidence, research data or a bug report.',
+    h1: 'How to redact a chat export',
+    tools: ['redact-text'],
+    summary: 'Mask names and numbers in WhatsApp, Telegram and Slack exports, line by line.',
+    body: `
+<p>Exported chats end up in court bundles, HR complaints, research datasets and support tickets. They name everyone in the conversation, and the messages themselves are full of phone numbers, addresses and links. The <a href="/redact-text">text redaction tool</a> works through the export and keeps one message per line.</p>
+
+<h2>Getting the export</h2>
+<ul>
+<li><strong>WhatsApp:</strong> open the chat, choose Export chat from the menu and pick Without media. You get a .txt file, sometimes inside a .zip that needs unzipping first.</li>
+<li><strong>Telegram Desktop:</strong> Export chat history, with the format set to machine-readable JSON.</li>
+<li><strong>Slack:</strong> a workspace export is a folder of JSON files, one per channel per day. Open the days you need.</li>
+</ul>
+
+<h2>Steps</h2>
+<ol>
+<li><strong>Open the .txt or .json file</strong>, or paste the part of the chat you need.</li>
+<li><strong>Allow the scan.</strong> Names, phone numbers, emails, addresses and links are found in the messages and in the sender names at the start of each line.</li>
+<li><strong>Add nicknames</strong> under "Always redact". People rarely use full names in a chat, so first names and nicknames may need listing by hand.</li>
+<li><strong>Pick a style.</strong> "Replace with label" turns every person into [NAME]. If the reader has to tell people apart, swap each name for a stand-in such as "Person A" with find and replace in a text editor before opening the file, and let the scan catch the rest.</li>
+<li><strong>Download</strong> the redacted file.</li>
+</ol>
+
+<h2>Easy to miss</h2>
+<ul>
+<li>Phone numbers shown in place of names for people who are not in your contacts.</li>
+<li>Group names and "added" or "left" system lines.</li>
+<li>Shared locations, which appear as map links with coordinates.</li>
+<li>Usernames, @mentions and email signatures pasted into messages.</li>
+</ul>
+<p>Photos and voice notes are not part of a text export. If you need them, redact each one in the <a href="/redact-image">image</a> or <a href="/redact-audio">audio</a> tool.</p>
+`,
+  },
+  {
+    slug: 'redact-before-sharing-with-ai',
+    title: 'Remove Personal Data Before Pasting into ChatGPT | AnyRedact',
+    description: 'Strip names, emails and account numbers from documents before giving them to ChatGPT, Claude or Gemini, while keeping enough context for a good answer.',
+    h1: 'Remove personal data before pasting into an AI chatbot',
+    tools: ['redact-text', 'redact-pdf'],
+    summary: 'Give chatbots the content they need without customer names, emails or account numbers.',
+    body: `
+<p>Summarising a contract, rewriting a complaint or analysing a spreadsheet with an AI chatbot means handing it the whole document. Depending on the service and your settings, what you paste may be kept in your history, reviewed or used for training. Your employer's policy may also forbid sharing customer data with outside tools. Redacting first lets you get the help without passing the personal details on.</p>
+
+<h2>Labels keep the meaning</h2>
+<p>A chatbot answers better when it can tell people and things apart. "Replace with label" turns "Anna Novak emailed anna@example.com" into "[NAME] emailed [EMAIL]", so the sentence still makes sense and the model can still reason about it. Black bars make the text harder for the model to follow.</p>
+
+<h2>Steps</h2>
+<ol>
+<li><strong>Paste the text</strong> into the <a href="/redact-text">text tool</a>, or open the file in the tool for its format (PDF, Word, Excel and the rest).</li>
+<li><strong>Allow the scan</strong> and check the Found list.</li>
+<li><strong>Add company terms</strong> under "Always redact": client names, project code names, internal host names.</li>
+<li><strong>Choose "Replace with label"</strong> and download the result.</li>
+<li><strong>Paste the redacted copy</strong> into the chatbot.</li>
+</ol>
+<p>If the answer comes back with labels in it, put the real names back yourself in your own copy. Keep the original file: the redacted one cannot be turned back.</p>
+
+<h2>Detection uses AI too</h2>
+<p>To find what to remove, AnyRedact sends the text it reads from your file to its own server, where an AI model running on Cloudflare marks the personal details. Nothing is sent until you agree, the text is not stored or used for training, and you can decline and mark everything by hand. The <a href="/privacy">privacy policy</a> has the details.</p>
+
+<h2>Worth removing even when it seems harmless</h2>
+<ul>
+<li>Signatures at the bottom of emails, with phone numbers and job titles.</li>
+<li>Customer and order IDs, which can be looked up in your systems.</li>
+<li>File paths and URLs that contain user names.</li>
+<li>Health, salary and disciplinary details about named staff.</li>
+</ul>
+`,
+  },
 ];
