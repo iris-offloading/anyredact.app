@@ -78,7 +78,7 @@ class App {
   private editors: PageEditor[] = [];
   private aiError: string | null = null;
   // Nothing leaves the browser until the user agrees, per file (or always, if they ticked that box).
-  private consent: 'ask' | 'yes' | 'no' = 'ask';
+  private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   private terms = '';
@@ -281,7 +281,7 @@ class App {
     this.visualLocal = pictureCache();
     this.visualAi = pictureCache();
     this.visualError = null;
-    this.consent = store.get('ai-consent') === 'always' ? 'yes' : 'ask';
+    this.consent = 'ask';
     this.consentBox.hidden = true;
     this.overrides.clear();
     this.editors = [];
@@ -352,7 +352,6 @@ class App {
     this.warn.hidden = true;
     if (this.aiError) this.say(`${this.aiError} Showing results from the built-in rules only, which can miss names and addresses. Review carefully.`, true);
     else if (this.visualError) this.say(this.visualError, true);
-    else if (this.consent === 'no') this.say('Using the built-in rules only. Nothing was sent to our server, but names and addresses are easy to miss this way. Review carefully.');
     else if (this.consent === 'ask') this.say('The list shows what the built-in rules found so far.');
     else this.say('');
     this.renderList();
@@ -623,28 +622,25 @@ class App {
       this.consentBox.hidden = true;
       return;
     }
-    const always = h('input', { type: 'checkbox' });
-    const choose = (answer: 'yes' | 'no') => {
-      if (answer === 'yes' && always.checked) store.set('ai-consent', 'always');
-      this.consent = answer;
+    const upload = () => {
+      this.consent = 'yes';
       this.consentBox.hidden = true;
       this.analyze();
     };
     const images = `page image${doc.pages.length > 1 ? 's' : ''}`;
     const what = words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
+    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
+    const cost = `Estimated cost: ${pages} credit${pages === 1 ? '' : 's'}`;
+    const costLine = h('p', { className: 'hint' }, `${cost}.`);
     this.consentBox.replaceChildren(
       h('p', {}, `Upload ${what} to find personal info?`),
-      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: () => choose('yes') }),
-      h('button', { type: 'button', className: 'btn ghost', textContent: "Don't upload", onclick: () => choose('no') }),
-      h('label', { className: 'row' }, always, 'Always upload on this device'),
+      costLine,
+      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
     );
     this.consentBox.hidden = false;
-    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
     freePagesLeft().then((left) => {
       if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      this.consentBox.append(
-        h('p', { className: 'hint' }, left >= pages ? `Uses about ${pages} credit${pages === 1 ? '' : 's'} of ${left} left today.` : `Needs about ${pages} credit${pages === 1 ? '' : 's'}; ${left} left today.`),
-      );
+      costLine.textContent = `${cost}, ${left >= pages ? '' : 'only '}${left} left today.`;
     });
   }
 
