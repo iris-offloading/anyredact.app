@@ -17,10 +17,12 @@ interface Me {
 
 const root = document.getElementById('account')!;
 const status = h('p', { className: 'status', role: 'status', hidden: true });
-const say = (msg: string, error = false) => {
+const say = (msg: string, kind: boolean | 'busy' | 'success' = false) => {
   status.hidden = !msg;
   status.textContent = msg;
-  status.classList.toggle('error', error);
+  status.classList.toggle('error', kind === true);
+  status.classList.toggle('busy', kind === 'busy');
+  status.classList.toggle('success', kind === 'success');
 };
 
 async function post(path: string, body: unknown = {}): Promise<{ url?: string; error?: string; ok?: boolean }> {
@@ -52,8 +54,31 @@ function clearBuy() {
   if (location.search.includes('buy=')) history.replaceState(null, '', '/account');
 }
 
+/** Paid credits left: the plan's and the bought ones. Rises once a payment lands. */
+const paidLeft = (user: NonNullable<Me['user']>) => (user.subscription ? Math.max(0, user.subscription.pages - user.subscription.used) : 0) + user.packPages;
+
+// The paid balance before checkout, so the page can tell when the payment has landed.
+const PAID_BASE_KEY = 'anyredact-paid-base';
+let currentPaid: number | null = null;
+
+function rememberPaidBase(paid: number | null) {
+  try {
+    if (paid !== null) sessionStorage.setItem(PAID_BASE_KEY, String(paid));
+  } catch {}
+}
+
+function paidBase(): number | null {
+  try {
+    const v = sessionStorage.getItem(PAID_BASE_KEY);
+    return v === null ? null : Number(v);
+  } catch {
+    return null;
+  }
+}
+
 async function checkout(product: Product) {
-  say('Opening secure checkout…');
+  rememberPaidBase(currentPaid);
+  say('Opening secure checkout…', 'busy');
   const r = await post('/api/checkout', { product: product.id });
   if (r.url) location.href = r.url;
   else say(r.error || 'Checkout failed.', true);
@@ -96,7 +121,7 @@ function meter(label: string, left: number | string, total: number | null, note?
   return h(
     'div',
     { className: 'meter' },
-    h('div', { className: 'meter-head' }, h('span', {}, label), h('strong', {}, total ? `${left.toLocaleString()} of ${total.toLocaleString()}` : left.toLocaleString())),
+    h('div', { className: 'meter-head' }, h('span', {}, label), h('strong', {}, total ? `${left.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}` : left.toLocaleString('en-US'))),
     ...(bar ? [bar] : []),
     ...(note ? [h('p', { className: 'meter-note' }, note)] : []),
   );
@@ -109,7 +134,7 @@ function offer(p: Product, button: string) {
   return h(
     'div',
     { className: 'offer' },
-    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.pages.toLocaleString()} credits`), h('span', {}, p.monthly ? `${p.pages.toLocaleString()} credits a month` : 'Paid once')),
+    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.pages.toLocaleString('en-US')} credits`), h('span', {}, p.monthly ? `${p.pages.toLocaleString('en-US')} credits a month` : 'Paid once')),
     h('span', { className: 'offer-price' }, usd(p.cents), ...(p.monthly ? [h('small', {}, ' / month')] : [])),
     h('button', { type: 'button', className: 'btn', textContent: button, onclick: () => checkout(p) }),
   );
@@ -157,7 +182,7 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
   const meters = [
     ...(free === null ? [] : [meter('Free today', free, FREE_CREDITS)]),
     sub
-      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, `Renews ${new Date(sub.renews * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`)
+      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, `Renews ${new Date(sub.renews * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`)
       : meter('Monthly plan', 'None', null),
     meter('Credits', user.packPages, null, 'Never expire'),
   ];
@@ -165,11 +190,11 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
     'section',
     { className: 'panel-card' },
     h('h2', {}, 'Balance'),
-    h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString()), h('span', { className: 'total-label' }, 'credits left')),
+    h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString('en-US')), h('span', { className: 'total-label' }, 'credits left')),
     h('div', { className: 'meters' }, ...meters),
   );
   const planCard = sub
-    ? h('section', { className: 'panel-card' }, h('h2', {}, 'Plan'), h('p', { className: 'muted' }, plan ? `${plan.name}, ${sub.pages.toLocaleString()} credits a month for ${usd(plan.cents)}.` : `${sub.pages.toLocaleString()} credits a month.`), ...(user.canManage ? [manageButton()] : []))
+    ? h('section', { className: 'panel-card' }, h('h2', {}, 'Plan'), h('p', { className: 'muted' }, plan ? `${plan.name}, ${sub.pages.toLocaleString('en-US')} credits a month for ${usd(plan.cents)}.` : `${sub.pages.toLocaleString('en-US')} credits a month.`), ...(user.canManage ? [manageButton()] : []))
     : h(
         'section',
         { className: 'panel-card' },
@@ -196,22 +221,45 @@ async function signInWithLink(token: string) {
   else document.querySelector('.signin-link')!.textContent = 'Account';
 }
 
-// After checkout, refresh the balance a few times while the payment is confirmed.
-let paidChecks = 5;
+// After checkout, check the balance every few seconds until the payment lands.
+let paidChecks = 0;
+const PAID_CHECK_MS = 3000;
+const PAID_CHECKS = 20;
+
+function confirmPayment(user: Me['user']) {
+  const base = paidBase();
+  const added = user && base !== null ? paidLeft(user) - base : 0;
+  // Without a stored balance (checkout opened in another tab) one refresh has to do.
+  if (added > 0 || (base === null && paidChecks > 0)) {
+    say(added > 0 ? `Payment confirmed. ${added.toLocaleString('en-US')} credits added.` : 'Payment confirmed.', 'success');
+  } else if (paidChecks < PAID_CHECKS) {
+    say('Confirming your payment…', 'busy');
+    paidChecks++;
+    setTimeout(render, PAID_CHECK_MS);
+    return;
+  } else {
+    say('Payment received. Your credits will appear shortly.');
+  }
+  try {
+    sessionStorage.removeItem(PAID_BASE_KEY);
+  } catch {}
+  history.replaceState(null, '', '/account');
+}
 
 async function render() {
   const token = new URLSearchParams(location.hash.slice(1)).get('signin');
   if (token) await signInWithLink(token);
   const params = new URLSearchParams(location.search);
-  if (params.get('paid')) say('Thanks! Your credits appear once the payment is confirmed, usually within seconds.');
+  const paid = !!params.get('paid');
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
   const [me, free] = await Promise.all([fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null })) as Promise<Me>, freePagesLeft()]);
-  const buying = params.get('paid') ? undefined : pendingBuy();
+  currentPaid = me.user ? paidLeft(me.user) : null;
+  const buying = paid ? undefined : pendingBuy();
   root.parentElement!.classList.toggle('solo', !me.user);
   root.replaceChildren(me.user ? balance(me.user, free) : signInForm(me.signIn ?? { email: false, google: false }));
-  if (params.get('paid')) {
+  if (paid) {
     clearBuy();
-    if (paidChecks-- > 0) setTimeout(render, 4000);
+    confirmPayment(me.user);
   } else if (me.user && buying) {
     clearBuy();
     checkout(buying);
