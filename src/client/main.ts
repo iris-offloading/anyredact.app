@@ -248,7 +248,7 @@ class App {
     this.pictureBox = h(
       'div',
       { hidden: true },
-      h('h3', {}, 'In pictures'),
+      h('p', { className: 'panel-label' }, 'In pictures'),
       pictureChips,
     );
 
@@ -289,12 +289,12 @@ class App {
       'div',
       { className: 'panel-body' },
       this.consentBox,
-        h('h3', {}, 'Found'),
+        h('p', { className: 'panel-label found-label' }, 'Found'),
         this.list,
-        h('h3', {}, 'Look for'),
+        h('p', { className: 'panel-label' }, 'Look for'),
         typeBoxes,
         this.pictureBox,
-        h('h3', {}, 'Always redact'),
+        h('p', { className: 'panel-label' }, 'Always redact'),
         termsArea,
       this.metaBox,
       this.notes,
@@ -628,7 +628,7 @@ class App {
       body.push(dl(key.length ? key : rest));
       if (key.length && rest.length) body.push(h('details', {}, h('summary', {}, 'More fields'), dl(rest)));
     }
-    this.metaBox.replaceChildren(h('h3', {}, 'Metadata'), ...body);
+    this.metaBox.replaceChildren(h('p', { className: 'panel-label' }, 'Metadata'), ...body);
   }
 
   private focus(f: Finding) {

@@ -11,6 +11,7 @@ export const SITE = {
 export const TOOLS = [
   {
     slug: 'redact-pdf',
+    card: 'Contracts, bank statements and scanned forms.',
     format: 'pdf',
     name: 'Redact PDF',
     nav: 'PDF',
@@ -38,6 +39,7 @@ export const TOOLS = [
   },
   {
     slug: 'redact-image',
+    card: 'Screenshots, ID photos and pictures of receipts.',
     format: 'image',
     name: 'Redact images',
     nav: 'Image',
@@ -70,6 +72,7 @@ export const TOOLS = [
   },
   {
     slug: 'redact-word',
+    card: 'Letters, CVs and reports, review comments included.',
     format: 'docx',
     name: 'Redact Word',
     nav: 'Word',
@@ -97,6 +100,7 @@ export const TOOLS = [
   },
   {
     slug: 'redact-powerpoint',
+    card: 'Client decks and training slides, notes and all.',
     format: 'pptx',
     name: 'Redact PowerPoint',
     nav: 'PowerPoint',
@@ -124,6 +128,7 @@ export const TOOLS = [
   },
   {
     slug: 'redact-excel',
+    card: 'Customer lists, payroll sheets and data exports.',
     format: 'sheet',
     name: 'Redact Excel',
     nav: 'Excel',
@@ -156,6 +161,7 @@ export const TOOLS = [
   },
   {
     slug: 'redact-text',
+    card: 'Logs, chat exports, config files and support tickets.',
     format: 'text',
     name: 'Redact text',
     nav: 'Text',
@@ -184,6 +190,7 @@ export const TOOLS = [
   },
   {
     slug: 'redact-audio',
+    card: 'Calls, interviews and voice notes.',
     format: 'audio',
     name: 'Redact audio',
     nav: 'Audio',
@@ -226,6 +233,21 @@ export const HOME = {
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],
     ['Hidden data removed too', 'Author names, document properties, photo locations and audio tags are left out of the download.'],
   ],
+  steps: [
+    ['Open your file', 'Choose it, drop it on the box or paste a screenshot. It opens in an editor beside a list of findings.'],
+    ['Check the findings', 'Untick anything to keep. Select text or drag a box to add more, or list words to always remove.'],
+    ['Download the copy', 'Pick black bars or labels. A second AI pass reads the result for anything left before you save it.'],
+  ],
+  finds: [
+    ['Names', 'People named in the text, signatures and email threads'],
+    ['Addresses', 'Home, postal and email addresses'],
+    ['Phone numbers', 'Mobile, landline and international formats'],
+    ['ID numbers', 'Social Security, passport, licence and tax numbers'],
+    ['Bank details', 'Card numbers, IBANs and account numbers'],
+    ['Online identifiers', 'IP addresses, links with tokens, API keys'],
+    ['Dates', 'Birth dates and other dates tied to a person'],
+    ['In pictures', 'Faces, screens, road signs and number plates, when turned on'],
+  ],
   faq: [
     {
       q: 'Is AnyRedact free?',
@@ -240,12 +262,12 @@ export const HOME = {
       a: 'No. Nothing leaves your browser until you agree. After that, the text (and page images, if picture redaction is on, or the speech of a recording) is processed in memory to find personal information, then discarded. It is never logged or used for training.',
     },
     {
-      q: 'Which details are found?',
-      a: 'Names, addresses, emails, phone numbers, ID and account numbers, card numbers, IBANs, IP addresses and dates. If you turn them on, also faces, screens, road signs and number plates in pictures. Before the download, a second model checks the result for anything left.',
+      q: 'Can redacted text be recovered?',
+      a: 'Not from the download. PDF pages are rebuilt as images, Office and text files get new characters in place of the old ones, pictures are repainted and audio is overwritten. Keep your original if you need it later.',
     },
     {
-      q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, HEIC, text files such as TXT, CSV, JSON, XML, YAML, .env and logs, and audio such as MP3, M4A and WAV. Video is planned.',
+      q: 'Does it work on a phone?',
+      a: 'Yes, in any modern mobile browser. The editor switches between Preview and Found tabs to fit the screen.',
     },
   ],
 };
