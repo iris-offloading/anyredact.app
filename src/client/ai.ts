@@ -28,15 +28,19 @@ export async function postApi<T>(path: string, body: unknown, failure: string, c
     headers: { 'content-type': contentType, 'x-device-id': deviceId() },
     body: contentType === 'application/json' ? JSON.stringify(body) : (body as BodyInit),
   });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.");
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };
+  if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.", data.code === 'negative');
   if (!res.ok) throw new Error(data.error || `${failure} (${res.status}).`);
   return data;
 }
 
 export class QuotaError extends Error {
-  constructor(message: string) {
+  /** The paid balance is below zero, so waiting for tomorrow's free credits won't help. */
+  negative: boolean;
+
+  constructor(message: string, negative = false) {
     super(message);
+    this.negative = negative;
     this.name = 'QuotaError';
   }
 }
