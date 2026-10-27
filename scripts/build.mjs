@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { CONTACT, LEGAL, UPDATED } from './legal.mjs';
 import { HOME, SITE, TOOLS } from './pages.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -96,10 +97,11 @@ function nav(current) {
 
 function footer() {
   const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
+  const about = LEGAL.map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
   <div><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
-  <div><h2>About</h2><ul><li><a href="/privacy">Privacy</a></li><li><button type="button" class="footer-link" data-consent>Cookies</button></li></ul></div>
+  <div><h2>About</h2><ul>${about}<li><button type="button" class="footer-link" data-consent>Cookies</button></li></ul></div>
 </div></footer>`;
 }
 
@@ -194,32 +196,12 @@ const pages = [
 ];
 for (const [page, file] of pages) await writeFile(path.join(dist, file), toolPage(page));
 
-const privacy = {
-  slug: 'privacy',
-  title: 'Privacy | AnyRedact',
-  description: 'How AnyRedact handles your files: processed only to find personal information, never stored or used for training, no accounts and no tracking.',
-  jsonLd: false,
-};
-await writeFile(
-  path.join(dist, 'privacy.html'),
-  layout(
-    privacy,
-    `<article class="wrap prose">
-<h1>Privacy</h1>
-<p>AnyRedact is built so that your documents stay with you.</p>
-<h2>How your content is processed</h2>
-<p>To find personal information, the content of your file is sent over HTTPS to our Cloudflare Worker and analysed by AI models on Cloudflare Workers AI. Normally that is the text read from your document. If you turn on picture redaction (faces, screens, road signs or number plates), the page images are sent too. For a recording, the speech is sent as low-quality mono sound in parts of a few minutes. Content is processed in memory for that request only. We do not store it or the results, do not log it, and do not use it for training. Cloudflare processes the request as our infrastructure provider.</p>
-<p>Wherever possible the work happens in your browser instead: documents are opened, text is read (using the open-source Tesseract OCR engine, loaded from the jsDelivr CDN, for images and scanned pages) and the redacted copy is created on your device.</p>
-<p>Nothing is sent until you choose AI detection for a file. Without it, you can still redact by hand. Picture redaction also looks for faces, screens and stop signs in your browser first, with models downloaded to your device.</p>
-<h2>What we collect</h2>
-<p>No third-party analytics. To give everyone a free daily AI allowance, your browser keeps a random ID (in local storage) and we count, per day, how many characters that ID and your IP address sent for AI detection. Our hosting provider keeps standard, short-lived request logs (such as IP address and URL) for security and abuse prevention.</p>
-<h2>Accounts and payments</h2>
-<p>An account is only needed to buy credits. We store your email address (or your Google account ID), your credit balances and a sign-in cookie. Payments are handled by Stripe; we never see your card details. Sign-in emails are sent through Cloudflare.</p>
-<h2>Check before you share</h2>
-<p>Automatic detection can miss things. Always review the redacted file before sharing it.</p>
-</article>`,
-  ),
-);
+for (const page of LEGAL) {
+  await writeFile(
+    path.join(dist, `${page.slug}.html`),
+    layout({ ...page, jsonLd: false }, `<article class="wrap prose">\n<h1>${esc(page.h1)}</h1>${page.body}\n${page.dated === false ? '' : `<p class="updated">Last updated ${UPDATED}</p>\n`}</article>`),
+  );
+}
 
 await writeFile(
   path.join(dist, '404.html'),
@@ -244,7 +226,7 @@ await writeFile(
 );
 
 const today = new Date().toISOString().slice(0, 10);
-const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'account', 'privacy'];
+const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'account', ...LEGAL.map((p) => p.slug)];
 await writeFile(
   path.join(dist, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>
@@ -253,6 +235,9 @@ ${sitemapUrls.map((s) => `  <url><loc>${url(s)}</loc><lastmod>${today}</lastmod>
 </urlset>
 `,
 );
+const expires = new Date(Date.now() + 365 * 86400_000).toISOString().slice(0, 10);
+await mkdir(path.join(dist, '.well-known'), { recursive: true });
+await writeFile(path.join(dist, '.well-known/security.txt'), `Contact: mailto:${CONTACT}\nExpires: ${expires}T00:00:00.000Z\nPolicy: ${url('contact')}\n`);
 await writeFile(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${SITE.origin}/sitemap.xml\n`);
 
 const keep = new Set([...Object.keys(result.metafile.outputs).map((f) => path.basename(f)), path.basename(pdfWorker), path.basename(univerCss)]);
@@ -260,4 +245,4 @@ for (const f of await readdir(path.join(dist, 'assets'))) {
   if (!keep.has(f)) await rm(path.join(dist, 'assets', f), { force: true });
 }
 
-console.log(`Built ${pages.length + 2} pages into dist/ (app: ${appSrc})`);
+console.log(`Built ${pages.length + LEGAL.length + 2} pages into dist/ (app: ${appSrc})`);
