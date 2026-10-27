@@ -62,7 +62,16 @@ export interface LoadedDoc {
   notes: string[];
   /** Embedded metadata, listed for review; the export leaves it out. */
   metadata?: MetaField[];
+  /** Word: lays out the pages in the preview, as Word shows them. */
+  render?(container: HTMLElement): Promise<Layout>;
   exportFile(findings: Finding[], boxes: ManualBox[], style: RedactStyle): Promise<{ blob: Blob; filename: string }>;
+}
+
+export interface Layout {
+  /** Rendered paragraphs per unit id. Units left out are not on the pages, such as comments and alt text. */
+  blocks: Map<string, HTMLElement[]>;
+  /** Rendered pictures, with their editor page index. */
+  pictures: { page: number; img: HTMLImageElement }[];
 }
 
 export type Progress = (message: string) => void;

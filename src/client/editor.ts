@@ -44,9 +44,9 @@ export class PageEditor {
   }
 
   private point(e: PointerEvent) {
+    // A picture in a Word file can be stretched, so each axis has its own scale.
     const r = this.overlay.getBoundingClientRect();
-    const s = this.overlay.width / r.width;
-    return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s };
+    return { x: ((e.clientX - r.left) * this.overlay.width) / r.width, y: ((e.clientY - r.top) * this.overlay.height) / r.height };
   }
 
   private down(e: PointerEvent) {
