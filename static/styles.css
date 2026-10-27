@@ -165,7 +165,12 @@ mark { cursor: pointer; border-radius: 3px; padding: 0 1px; }
 mark.on { background: var(--mark-on); color: transparent; text-shadow: none; }
 mark.on::selection { color: transparent; }
 mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e8590c; }
-.sel-add { margin-bottom: 10px; }
+.sel-add {
+  position: fixed; bottom: 16px; left: 0; right: 0; margin: 0 auto; z-index: 10;
+  display: flex; gap: 8px; padding: 8px; width: max-content; max-width: calc(100% - 32px);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.sel-add .btn { width: auto; white-space: nowrap; }
 
 .points { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 32px; }
 .point { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
