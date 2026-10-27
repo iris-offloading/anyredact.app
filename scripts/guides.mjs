@@ -554,4 +554,51 @@ ${sarTimelineDiagram()}
 </ul>
 `,
   },
+  {
+    slug: 'remove-metadata-from-docx',
+    title: 'How to Remove Metadata from a DOCX File | AnyRedact',
+    description: 'Clear the author, company, comment names and custom properties from a Word file, with Word\'s Inspect Document or online with nothing to install.',
+    h1: 'How to remove metadata from a DOCX file',
+    tools: ['redact-word'],
+    summary: 'Clear author names, company and hidden properties, in Word or online.',
+    body: `
+<p>A .docx is a zip of XML files, and a few of them describe the document rather than hold its text. Send the file to someone and they can read who wrote it, who edited it last, which company their copy of Office is registered to, and everyone who commented. None of it shows on the page.</p>
+
+<h2>What a DOCX records about you</h2>
+<ul>
+<li><strong>Author and last modified by</strong>, taken from the name set up in Office.</li>
+<li><strong>Company and manager</strong>, often filled in by an organisation's Office setup.</li>
+<li><strong>Title, subject, keywords and comments</strong> in the file properties, which may still describe an older version.</li>
+<li><strong>Custom properties</strong> added by document management systems, such as a client name, matter number or file path.</li>
+<li><strong>Names on comments and tracked changes</strong>, plus a list of everyone who edited.</li>
+<li><strong>A thumbnail of the first page</strong>, if the file was saved with one.</li>
+<li><strong>Camera and location data</strong> inside photos placed in the document.</li>
+</ul>
+<p>To see what your file holds, open File, Info in Word and look at the Properties panel. "Show All Properties" and Advanced Properties list the rest.</p>
+
+<h2>In Word on Windows: Inspect Document</h2>
+<ol>
+<li>Save a copy first. The inspector's removals cannot be undone once the file is saved.</li>
+<li>Go to File, Info, Check for Issues, Inspect Document.</li>
+<li>Leave "Document Properties and Personal Information" ticked, along with "Comments, Revisions and Versions" if those should go too, and click Inspect.</li>
+<li>Click Remove All next to each result you want cleared, then save.</li>
+</ol>
+<p>Inspect Document deletes comments and tracked changes outright instead of keeping them under a neutral name, so reviewers lose the discussion. It also leaves the text itself alone: a name typed in the body or a header is still there.</p>
+
+<h2>In Word for Mac</h2>
+<p>Word for Mac has no Inspect Document. On the Review tab, choose Protect Document and tick "Remove personal information from this file on save", then save. That clears the author names from the properties, comments and tracked changes. Check File, Properties afterwards for a company, title or custom fields left behind.</p>
+
+<h2>Online, without Word</h2>
+<p>The <a href="/redact-word">Word redaction tool</a> clears the metadata on every download, and you can redact names in the text at the same time.</p>
+<ol>
+<li><strong>Open the .docx</strong> in your browser.</li>
+<li><strong>Allow the scan</strong> if the text also needs redacting, or decline it to clear only the metadata.</li>
+<li><strong>Download.</strong> The copy has the author, last modified by, title, subject, keywords, category, company and manager emptied, custom properties deleted and the first-page thumbnail removed.</li>
+</ol>
+<p>Comments and tracked changes stay in the file, with every author shown as "Redacted", so the review history still reads. Photos in the document are saved again without their camera and location data (EMF, WMF and TIFF pictures are left as they are), and embedded files are dropped.</p>
+
+<h2>Check the result</h2>
+<p>Open the cleaned copy and look at File, Info, Properties again, then hover over a comment to see its author. For photos taken on a phone, the <a href="/guides/remove-photo-metadata">photo metadata guide</a> covers the same data in picture files.</p>
+`,
+  },
 ];
