@@ -438,10 +438,10 @@ mark.saying { outline: 2px solid var(--accent); }
 .credit-table th, .credit-table td { text-align: left; vertical-align: top; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--line); }
 .credit-table th { font-weight: 600; width: 45%; }
 .credit-table td { color: var(--muted); }
-.signin { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-.signin input { flex: 1; min-width: 200px; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); }
-.signin .btn.primary { width: auto; }
-.btn.google { display: inline-block; }
+.signin-box { display: flex; flex-direction: column; gap: 10px; max-width: 400px; margin-top: 24px; }
+.signin { display: flex; flex-direction: column; gap: 10px; }
+.signin input { font: inherit; min-height: 48px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); }
+.signin-box .btn { width: 100%; min-height: 48px; border-radius: 12px; }
 .btn.google[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 .cell-bar { display: flex; align-items: baseline; gap: 12px; min-height: 38px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .cell-ref { flex: none; min-width: 3em; color: var(--muted); font-variant-numeric: tabular-nums; }

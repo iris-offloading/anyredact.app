@@ -1,4 +1,4 @@
-import { PRODUCTS, price, type Product } from '../shared/pricing.ts';
+import { PRODUCTS, type Product } from '../shared/pricing.ts';
 import { h } from './dom.ts';
 
 // The /account page: sign in, see balances, manage a plan. Plans and packs are bought from /pricing.
@@ -58,7 +58,7 @@ async function checkout(product: Product) {
   else say(r.error || 'Checkout failed.', true);
 }
 
-function signInForm(opts: { email: boolean; google: boolean }, buying?: Product) {
+function signInForm(opts: { email: boolean; google: boolean }) {
   const email = h('input', { type: 'email', required: true, placeholder: 'you@example.com', autocomplete: 'email', 'aria-label': 'Email address' });
   const form = h(
     'form',
@@ -75,9 +75,7 @@ function signInForm(opts: { email: boolean; google: boolean }, buying?: Product)
   });
   return h(
     'section',
-    {},
-    h('h2', {}, 'Sign in'),
-    h('p', {}, buying ? `Sign in to buy ${buying.monthly ? `the ${buying.name} plan` : buying.name}, ${price(buying.cents)}${buying.monthly ? ' a month' : ''}.` : 'Sign in to buy credits.'),
+    { className: 'signin-box' },
     form,
     h('a', { className: 'btn google', href: '/auth/google', 'aria-disabled': String(!opts.google), onclick: (e: Event) => !opts.google && e.preventDefault() }, 'Sign in with Google'),
     ...(!opts.email && !opts.google ? [h('p', { className: 'hint' }, 'Sign-in is being set up and will be available soon.')] : []),
@@ -148,7 +146,7 @@ async function render() {
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
   const me = (await fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null }))) as Me;
   const buying = params.get('paid') ? undefined : pendingBuy();
-  root.replaceChildren(status, me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }, buying));
+  root.replaceChildren(status, me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }));
   if (params.get('paid')) {
     clearBuy();
     setTimeout(render, 4000);
