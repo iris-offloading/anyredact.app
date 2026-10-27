@@ -23,7 +23,7 @@ const univerCss = `/assets/univer-${univerVersion}.css`;
 const mediapipeVersion = JSON.parse(await readFile(path.join(root, 'node_modules/@mediapipe/tasks-vision/package.json'), 'utf8')).version;
 
 const result = await build({
-  entryPoints: { app: path.join(root, 'src/client/main.ts'), account: path.join(root, 'src/client/account.ts') },
+  entryPoints: { app: path.join(root, 'src/client/main.ts'), account: path.join(root, 'src/client/account.ts'), pricing: path.join(root, 'src/client/pricing.ts') },
   outdir: path.join(dist, 'assets'),
   bundle: true,
   splitting: true,
@@ -49,6 +49,7 @@ const entrySrc = (name) => {
 };
 const appSrc = entrySrc('main');
 const accountSrc = entrySrc('account');
+const pricingSrc = entrySrc('pricing');
 
 await cp(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'), path.join(dist, pdfWorker));
 await cp(path.join(root, 'node_modules/@univerjs/preset-sheets-core/lib/index.css'), path.join(dist, univerCss));
@@ -229,7 +230,7 @@ await writeFile(
 // The pricing page reads plans and credits from src/shared/pricing.ts, so it can't drift from checkout.
 const pricingTs = await transform(await readFile(path.join(root, 'src/shared/pricing.ts'), 'utf8'), { loader: 'ts', format: 'esm' });
 const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.code).toString('base64')}`);
-await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, jsonLd: PRICING.jsonLd(plans, url) }, PRICING.body(plans, esc)));
+await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, script: pricingSrc, jsonLd: PRICING.jsonLd(plans, url) }, PRICING.body(plans, esc)));
 
 const today = new Date().toISOString().slice(0, 10);
 const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'pricing', 'account', ...LEGAL.map((p) => p.slug)];
