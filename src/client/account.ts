@@ -370,7 +370,12 @@ async function render(initial: Me | null = null) {
   if (token) await signInWithLink(token);
   const params = new URLSearchParams(location.search);
   const paid = !!params.get('paid');
-  if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
+  if (params.get('error') === 'google') {
+    say('Google sign-in did not work. Please try again or use email.', true);
+    // Shown once: a reload, or the one after signing out, starts clean.
+    params.delete('error');
+    history.replaceState(null, '', '/account' + (params.size ? `?${params}` : '') + location.hash);
+  }
   const me = (!token && initial) || (await fetchMe());
   currentUser = me.user;
   const buying = paid ? undefined : pendingBuy();
