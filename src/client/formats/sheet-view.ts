@@ -211,7 +211,7 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
     data.sheetOrder.push(id);
   });
 
-  // Always light, like Excel: Univer's dark mode recolours cells, black redaction boxes included.
+  // Always light, like Excel: Univer's dark mode recolours cells, redaction bars included.
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.EN_US,
     locales: { [LocaleType.EN_US]: mergeLocales(sheetsCoreEnUS) },
