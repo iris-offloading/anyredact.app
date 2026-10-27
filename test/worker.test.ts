@@ -79,7 +79,7 @@ test('check returns per-category risks', async () => {
   assert.deepEqual(await (await worker.fetch(empty, e)).json(), { risks: {} });
 });
 
-test('keeps the organisation owner on contact details', async () => {
+test('keeps the owner on contact details', async () => {
   const res = await worker.fetch(
     post({ text: 'Call 0800 123 4567 or Jane on 07700 900461' }),
     env({ entities: [{ text: '0800 123 4567', type: 'phone', owner: 'organization' }, { text: '07700 900461', type: 'phone', owner: 'person' }] }),
@@ -87,7 +87,7 @@ test('keeps the organisation owner on contact details', async () => {
   assert.deepEqual(await res.json(), {
     entities: [
       { text: '0800 123 4567', type: 'phone', owner: 'organization' },
-      { text: '07700 900461', type: 'phone' },
+      { text: '07700 900461', type: 'phone', owner: 'person' },
     ],
   });
 });

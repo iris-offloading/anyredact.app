@@ -80,14 +80,15 @@ const GENERIC_MAILBOX = /^(?:info|kontakt|contact|contacto|contatto|office|kance
  * Flags contact details (phones, emails, addresses, links) that look like an
  * organisation's or a public service's rather than a private person's.
  */
-export function contactPublicHint(text: string, start: number, end: number, type: EntityType): string | undefined {
+export function contactPublicHint(text: string, start: number, end: number, type: EntityType, personal = false): string | undefined {
   const match = text.slice(start, end);
   if (type === 'phone') {
     const hint = phonePublicHint(text, start, match);
     if (hint) return hint;
   }
   if (type === 'email' && GENERIC_MAILBOX.test(match)) return 'Generic company mailbox';
-  if (type === 'phone' || type === 'email' || type === 'url' || type === 'address') {
+  // A company word nearby is only a guess, so it gives way when the AI says the contact is a person's.
+  if (!personal && (type === 'phone' || type === 'email' || type === 'url' || type === 'address')) {
     // The same line, but no further than a short window: in a paragraph of
     // prose, a company named two sentences away says nothing about an address.
     const lineStart = Math.max(text.lastIndexOf('\n', start - 1) + 1, start - ORG_WINDOW);

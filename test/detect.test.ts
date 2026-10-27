@@ -71,6 +71,19 @@ test('AI organisation owner marks a contact public everywhere it appears', () =>
   assert.ok(spans.every((s) => s.publicHint));
 });
 
+test('a company word nearby gives way when the AI says the contact is a person\'s', () => {
+  const text = 'This agreement is made between Jonathan Smith, of 44 Elm Road, Springfield, IL 62704, and Acme Corp.';
+  const address = (owner?: Term['owner']) => analyzeUnits([{ id: 'u', text }], { ai: [{ text: '44 Elm Road, Springfield, IL 62704', type: 'address', owner }] })[0];
+  assert.equal(address('person').publicHint, undefined);
+  assert.ok(address().publicHint, 'keyword fallback without an owner');
+});
+
+test('public contacts start ticked when the user asks', () => {
+  const [s] = analyzeUnits([{ id: 'u', text: 'Freephone 0800 123 4567' }], { ai: [{ text: '0800 123 4567', type: 'phone' }] });
+  assert.equal(startsTicked(s), false);
+  assert.equal(startsTicked(s, true), true);
+});
+
 test('a company named far away in the same paragraph does not make an address public', () => {
   const text = `Die XY GmbH ist diesen Risiken ausgesetzt, ${'durch eine breite Kundenstruktur, '.repeat(3)}etwa durch Kieran Wilson, wohnhaft in der 30 Stretto Dandolo, Apt. 34.`;
   const spans = analyzeUnits([{ id: 'u', text }], { ai: [{ text: '30 Stretto Dandolo, Apt. 34', type: 'address' }] });

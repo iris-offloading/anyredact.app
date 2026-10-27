@@ -89,6 +89,8 @@ class App {
   private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
   private types = new Set<EntityType>(DEFAULT_TYPES);
+  // Business and public-service contacts start ticked too.
+  private redactPublic = store.get('redact-public') === '1';
   private terms = '';
   private visualKinds = new Set<VisualKind>();
   // Per page, and the kinds they were computed for.
@@ -169,6 +171,13 @@ class App {
       });
       typeBoxes.append(h('label', { className: 'chip' }, cb, ENTITY_LABELS[t]));
     }
+    const publicCb = h('input', { type: 'checkbox', checked: this.redactPublic });
+    publicCb.addEventListener('change', () => {
+      this.redactPublic = publicCb.checked;
+      store.set('redact-public', publicCb.checked ? '1' : '0');
+      this.analyze();
+    });
+    typeBoxes.append(h('label', { className: 'chip' }, publicCb, 'Public contacts'));
 
     const saved = (store.get('picture-kinds') || '').split(',');
     for (const k of VISUAL_KINDS) if (saved.includes(k)) this.visualKinds.add(k);
@@ -344,7 +353,7 @@ class App {
         type: s.type,
         source: s.source,
         text: unit.text.slice(s.start, s.end),
-        enabled: this.overrides.get(key) ?? startsTicked(s),
+        enabled: this.overrides.get(key) ?? startsTicked(s, this.redactPublic),
         publicHint: s.publicHint,
         page: unit.page,
         rects: unit.rectsFor?.(s.start, s.end) ?? [],

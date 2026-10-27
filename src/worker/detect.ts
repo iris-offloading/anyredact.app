@@ -71,7 +71,7 @@ const SCHEMA = {
 export interface Entity {
   text: string;
   type: (typeof AI_TYPES)[number];
-  owner?: 'organization';
+  owner?: 'person' | 'organization';
 }
 
 export function chunkText(text: string, size = CHUNK_CHARS): string[] {
@@ -112,7 +112,7 @@ function parseEntities(raw: unknown, source: string): Entity[] {
     if (!source.includes(text)) continue;
     const type = (AI_TYPES as readonly string[]).includes(e.type) ? e.type : 'other';
     if (!plausibleEntity(text, type)) continue;
-    out.push(e.owner === 'organization' ? { text, type, owner: 'organization' } : { text, type });
+    out.push(e.owner === 'organization' || e.owner === 'person' ? { text, type, owner: e.owner } : { text, type });
   }
   return out;
 }
