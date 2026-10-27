@@ -73,6 +73,8 @@ class App {
   private doc: LoadedDoc | null = null;
   private findings: Finding[] = [];
   private boxes: ManualBox[] = [];
+  // Text the user selected and redacted in that one spot only.
+  private picks: { unitId: string; start: number; end: number }[] = [];
   private aiEntities: AiEntity[] | null = null;
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
@@ -276,6 +278,7 @@ class App {
     this.doc = null;
     this.findings = [];
     this.boxes = [];
+    this.picks = [];
     this.aiEntities = null;
     this.aiError = null;
     this.visualLocal = pictureCache();
@@ -346,6 +349,22 @@ class App {
         rects: unit.rectsFor?.(s.start, s.end) ?? [],
       };
     });
+    for (const p of this.picks) {
+      const unit = byId.get(p.unitId)!;
+      const key = `pick:${p.unitId}:${p.start}:${p.end}`;
+      findings.push({
+        key,
+        unitId: p.unitId,
+        start: p.start,
+        end: p.end,
+        type: 'custom',
+        source: 'term',
+        text: unit.text.slice(p.start, p.end),
+        enabled: this.overrides.get(key) ?? true,
+        page: unit.page,
+        rects: unit.rectsFor?.(p.start, p.end) ?? [],
+      });
+    }
     const pictures = await this.pictureFindings(doc);
     if (this.doc !== doc) return;
     this.findings = [...findings, ...pictures];
@@ -520,20 +539,61 @@ class App {
     } else {
       this.preview.replaceChildren();
       this.preview.addEventListener('mouseup', this.onSelect);
+      this.preview.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
     }
   }
 
-  private onSelect = () => {
-    const sel = getSelection()?.toString().trim();
-    if (!sel || sel.length < 2 || sel.length > 200 || !this.doc || this.doc.pages.length) return;
+  private onSelect = (e?: Event) => {
+    if ((e?.target as Element | null)?.closest?.('.sel-add')) return;
+    const range = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0) : null;
+    const sel = range?.toString().trim();
     this.preview.querySelector('.sel-add')?.remove();
-    const btn = h('button', { type: 'button', className: 'btn sel-add', textContent: `Redact “${sel.length > 30 ? sel.slice(0, 28) + '…' : sel}” everywhere` });
-    btn.addEventListener('click', () => {
+    if (!range || !sel || sel.length < 2 || sel.length > 200 || !this.doc || this.doc.pages.length) return;
+    const picks = this.selectedSpans(range);
+    if (!picks.length) return;
+    const done = (fn: () => void) => () => {
       getSelection()?.removeAllRanges();
-      this.addTerm(sel);
-    });
-    this.preview.prepend(btn);
+      fn();
+    };
+    this.preview.append(
+      h(
+        'div',
+        { className: 'sel-add' },
+        h('button', { type: 'button', className: 'btn primary', textContent: 'Redact here', onclick: done(() => this.addPicks(picks)) }),
+        h('button', { type: 'button', className: 'btn', textContent: 'Redact everywhere', onclick: done(() => this.addTerm(sel)) }),
+      ),
+    );
   };
+
+  /** Character ranges of the selection in each text unit it touches, without surrounding spaces. */
+  private selectedSpans(range: Range) {
+    const units = this.doc!.units;
+    const out: { unitId: string; start: number; end: number }[] = [];
+    for (const el of this.preview.querySelectorAll<HTMLElement>('.unit')) {
+      if (!range.intersectsNode(el)) continue;
+      const unit = units[Number(el.dataset.unit)];
+      const offset = (node: Node, at: number) => {
+        const r = document.createRange();
+        r.setStart(el, 0);
+        r.setEnd(node, at);
+        return r.toString().length;
+      };
+      let start = el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0;
+      let end = el.contains(range.endContainer) ? offset(range.endContainer, range.endOffset) : unit.text.length;
+      while (start < end && /\s/.test(unit.text[start])) start++;
+      while (end > start && /\s/.test(unit.text[end - 1])) end--;
+      if (end > start) out.push({ unitId: unit.id, start, end });
+    }
+    return out;
+  }
+
+  private addPicks(picks: { unitId: string; start: number; end: number }[]) {
+    for (const p of picks) {
+      this.overrides.delete(`pick:${p.unitId}:${p.start}:${p.end}`);
+      if (!this.picks.some((x) => x.unitId === p.unitId && x.start === p.start && x.end === p.end)) this.picks.push(p);
+    }
+    this.analyze();
+  }
 
   private overlaysFor(page: number): Overlay[] {
     const out: Overlay[] = [];
@@ -552,23 +612,38 @@ class App {
     // Text preview: one block per unit with highlighted findings.
     const byUnit = new Map<string, Finding[]>();
     for (const f of this.findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-    const blocks = doc.units.map((u) => {
-      const el = h('div', { className: 'unit' });
+    const blocks = doc.units.map((u, i) => {
+      const el = h('div', { className: 'unit', 'data-unit': String(i) });
+      const spans = byUnit.get(u.id) ?? [];
+      // Spans can overlap (a spot picked inside a kept finding), so cut the text at every
+      // edge and show each piece as the span on top: a redacted one beats a kept one.
+      const cuts = [...new Set([0, u.text.length, ...spans.flatMap((f) => [f.start, f.end])])].sort((x, y) => x - y);
       let pos = 0;
-      for (const f of (byUnit.get(u.id) ?? []).sort((a, b) => a.start - b.start)) {
-        if (f.start < pos) continue;
-        el.append(u.text.slice(pos, f.start));
-        const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, u.text.slice(f.start, f.end));
-        mark.addEventListener('click', () => this.toggle([f.key], !f.enabled));
-        el.append(mark);
-        pos = f.end;
+      let top: Finding | undefined;
+      const flush = (to: number) => {
+        if (to <= pos) return;
+        const text = u.text.slice(pos, to);
+        const f = top;
+        if (!f) el.append(text);
+        else {
+          const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, text);
+          mark.addEventListener('click', () => this.toggle([f.key], !f.enabled));
+          el.append(mark);
+        }
+        pos = to;
+      };
+      for (let i = 0; i < cuts.length - 1; i++) {
+        const cover = spans.filter((f) => f.start <= cuts[i] && f.end >= cuts[i + 1]);
+        const next = [...cover].reverse().find((f) => f.enabled) ?? cover[0];
+        if (next !== top) flush(cuts[i]);
+        top = next;
       }
-      el.append(u.text.slice(pos));
+      flush(u.text.length);
       return el;
     });
     const MAX = 2000;
     this.preview.replaceChildren(
-      h('p', { className: 'hint' }, 'Click a highlight to keep it. Select any text to redact it everywhere.'),
+      h('p', { className: 'hint' }, 'Click a highlight to keep it. Select text to redact it.'),
       h('div', { className: 'text-preview' + (doc.kind === 'docx' ? ' docx' : '') }, ...blocks.slice(0, MAX)),
       ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
     );

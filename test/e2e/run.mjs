@@ -57,6 +57,36 @@ async function download(name) {
   check(!/jane|415|0199|10\.0\.0/i.test(txt), `text output: ${JSON.stringify(txt)}`);
 }
 
+// Selected text, redacted in one spot only
+{
+  await page.goto(`${BASE}/redact-text`);
+  await page.setInputFiles('#file-input', fx('sample.txt'));
+  await page.waitForSelector('.unit');
+  await page.evaluate(() => {
+    const unit = document.querySelector('.unit');
+    const w = document.createTreeWalker(unit, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      const at = n.data.indexOf('Server');
+      if (at >= 0) {
+        const r = document.createRange();
+        r.setStart(n, at);
+        r.setEnd(n, at + 6);
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+        unit.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        return;
+      }
+    }
+  });
+  await page.click('.sel-add >> text=Redact here');
+  await page.waitForFunction(() => [...document.querySelectorAll('.ftext')].some((e) => e.textContent === 'Server'));
+  const { path: p } = await download('pick.txt');
+  const txt = readFileSync(p, 'utf8');
+  const terms = await page.inputValue('textarea[aria-label="Words to always redact"]');
+  check(txt.includes('\n██████: ') && !terms, `one spot redacted, no term added: ${JSON.stringify(txt)}`);
+}
+
 // DOCX
 {
   const found = await run('redact-word', fx('sample.docx'));
