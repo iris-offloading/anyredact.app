@@ -238,6 +238,9 @@ mark.saying { outline: 2px solid var(--accent); }
 .signin .btn.primary { width: auto; }
 .btn.google { display: inline-block; }
 .btn.google[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
+.cell-bar { display: flex; align-items: baseline; gap: 12px; min-height: 38px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.cell-ref { flex: none; min-width: 3em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cell-text { flex: 1; min-width: 0; max-height: 7.5em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sheet-view { height: min(70vh, 640px); min-height: 360px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); margin-bottom: 16px; }
 .para { display: flex; gap: 0.5em; align-items: baseline; }
 .para .unit { flex: 1; }

@@ -202,6 +202,7 @@ async function download(name) {
   await page.mouse.click(grid.x + 260, grid.y + 71); // cell B3
   await page.waitForFunction(() => ![...document.querySelectorAll('label.finding')].find((l) => l.textContent.includes('bob@corp.io'))?.querySelector('input').checked);
   check(!(await bob.isChecked()), 'xlsx clicking a highlight keeps it');
+  check((await page.textContent('.cell-bar .cell-ref')) === 'B3' && (await page.locator('.cell-bar mark', { hasText: 'bob@corp.io' }).count()) === 1, 'xlsx cell bar shows the clicked cell with its highlights');
   await bob.check();
   await page.evaluate(() => document.querySelector('.preview').scrollIntoView());
   await page.screenshot({ path: fx('xlsx.png') });

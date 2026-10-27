@@ -240,6 +240,13 @@ function runBoxes(sk: SpreadsheetSkeleton, row: number, col: number, runs: Run[]
   return out;
 }
 
+/** A cell's name, such as B1. */
+function a1(row: number, col: number) {
+  let name = '';
+  for (let c = col + 1; c > 0; c = Math.floor((c - 1) / 26)) name = String.fromCharCode(65 + ((c - 1) % 26)) + name;
+  return `${name}${row + 1}`;
+}
+
 function loadCss() {
   if (document.querySelector('link[data-univer]')) return;
   document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: __UNIVER_CSS__ }));
@@ -315,9 +322,9 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
   el.addEventListener('pointerdown', (e) => (press = { x: e.clientX, y: e.clientY }), true);
 
   /** The runs under the press: a click toggles the highlight it lands on, also where the text overflows into the next cell. */
-  function runsAt(sheetName: string, row: number, column: number, sk: SpreadsheetSkeleton): Run[] {
+  function runsAt(sheetName: string, row: number, column: number, sk: SpreadsheetSkeleton): { cell?: { row: number; col: number }; runs: Run[] } {
     const render = univer.__getInjector().get(IRenderManagerService).getRenderUnitById(book.getId());
-    if (!render) return [];
+    if (!render) return { runs: [] };
     const { scene } = render;
     const rect = render.engine.getCanvasElement().getBoundingClientRect();
     const rel = scene.getCoordRelativeToViewport(Vector2.FromArray([press.x - rect.left, press.y - rect.top]));
@@ -328,6 +335,7 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
     const slack = 3 / scaleX;
     let nearest: { run: Run; d: number } | undefined;
     const hits: Run[] = [];
+    let owner: { row: number; col: number } | undefined;
     for (const cell of marked.values()) {
       if (cell.sheet !== sheetName) continue;
       const own = cell.row === row && cell.col === column;
@@ -335,30 +343,29 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
       cell.runs.forEach((run, n) => {
         for (const b of boxes[n]) {
           const d = Math.hypot(x < b.x0 ? b.x0 - x : x > b.x1 ? x - b.x1 : 0, y < b.y0 ? b.y0 - y : y > b.y1 ? y - b.y1 : 0);
-          if (d <= slack) hits.push(run);
+          if (d <= slack) {
+            hits.push(run);
+            owner = cell;
+          }
           // Elsewhere in a cell with highlights, the closest one.
           else if (own && (!nearest || d < nearest.d)) nearest = { run, d };
         }
       });
     }
-    if (hits.length) return hits;
-    if (nearest) return [nearest.run];
+    if (hits.length) return { cell: owner, runs: hits };
+    if (nearest) return { runs: [nearest.run] };
     // No layout to go by: the whole cell, as one.
-    return marked.get(`${sheetName}:${row}:${column}`)?.runs ?? [];
+    return { runs: marked.get(`${sheetName}:${row}:${column}`)?.runs ?? [] };
   }
 
   univerAPI.addEvent(univerAPI.Event.CellClicked, ({ worksheet, row, column }) => {
     const sk = worksheet.getSkeleton();
     const sheetName = nameOf(worksheet.getSheetId());
     if (!sk || !sheetName) return;
-    const runs = runsAt(sheetName, row, column, sk);
+    const { cell = { row, col: column }, runs } = runsAt(sheetName, row, column, sk);
+    // The cell bar shows the cell whose text was clicked, which can be left of the clicked one.
+    on.cell({ label: a1(cell.row, cell.col), spot: spots.get(`${sheetName}:${cell.row}:${cell.col}`) });
     if (runs.length) on.toggle([...new Set(runs.map((r) => r.key))], !runs.some((r) => r.on));
-  });
-  // Selecting a cell without highlights offers to redact its text.
-  univerAPI.addEvent(univerAPI.Event.SelectionChanged, ({ worksheet, selections }) => {
-    const r = selections[0];
-    const key = r && r.startRow === r.endRow && r.startColumn === r.endColumn ? `${nameOf(worksheet.getSheetId())}:${r.startRow}:${r.startColumn}` : '';
-    on.select(marked.has(key) ? null : spots.get(key) ?? null);
   });
 
   return {
