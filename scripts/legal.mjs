@@ -54,10 +54,10 @@ export const LEGAL = [
 <p>We use this data to provide the service you ask for, to count free and paid use, to take payments and to prevent abuse. We use analytics to see which pages people use. The legal bases are the contract with you, our legitimate interest in keeping the service secure and fair, your consent for analytics cookies where the law asks for it, and our legal duties such as keeping tax records.</p>
 
 <h2>How long we keep it</h2>
-<p>File content is gone once the request ends. Daily counters are replaced the next day. Sign-in links expire after 15 minutes and sessions after 30 days. Account data stays until you ask us to delete it. Payment records are kept as long as tax law requires. Google Analytics keeps visit data for 2 months.</p>
+<p>File content is gone once the request ends. Daily counters are replaced the next day. Sign-in links expire after 15 minutes and sessions after 30 days. Account data stays until you delete your account. Payment records are kept as long as tax law requires. Google Analytics keeps visit data for 2 months.</p>
 
 <h2>Your rights</h2>
-<p>You can ask for a copy of your data, a correction, or deletion of your account, and you can object to processing. Write to ${mail} from the email address on your account. You can also complain to your local data protection authority.</p>
+<p>You can delete your account on your account page. For a copy of your data or a correction, or to object to processing, write to ${mail} from the email address on your account. You can also complain to your local data protection authority.</p>
 
 <h2>Children</h2>
 <p>AnyRedact is not meant for children under 16. If you think a child has given us personal data, write to us and we will delete it.</p>

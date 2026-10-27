@@ -17,7 +17,28 @@ const HEADER_BYTES = 44;
 // A full chunk plus its overlap, with room for a longer header.
 const MAX_BYTES = (CHUNK_SECONDS + CHUNK_OVERLAP + 1) * SPEECH_RATE * 2 + 1024;
 
-const isWav = (b: Uint8Array) => b.length > HEADER_BYTES && String.fromCharCode(...b.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...b.subarray(8, 12)) === 'WAVE';
+const tag = (b: Uint8Array, at: number) => String.fromCharCode(...b.subarray(at, at + 4));
+
+/**
+ * A WAV whose format is 16 kHz mono 16-bit PCM, the only one the browser sends.
+ * Billing counts seconds from the byte length, so a header claiming a lower
+ * rate would carry more audio than it pays for.
+ */
+export function isWav(b: Uint8Array): boolean {
+  if (b.length <= HEADER_BYTES || tag(b, 0) !== 'RIFF' || tag(b, 8) !== 'WAVE') return false;
+  const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let formats = 0;
+  let ok = false;
+  for (let at = 12; at + 8 <= b.length; at += 8 + view.getUint32(at + 4, true) + (view.getUint32(at + 4, true) % 2)) {
+    const id = tag(b, at);
+    if (id === 'data') break;
+    if (id !== 'fmt ' || at + 24 > b.length) continue;
+    formats++;
+    const format = view.getUint16(at + 8, true);
+    ok = (format === 1 || format === 0xfffe) && view.getUint16(at + 10, true) === 1 && view.getUint32(at + 12, true) === SPEECH_RATE && view.getUint16(at + 22, true) === 16;
+  }
+  return formats === 1 && ok;
+}
 
 async function english(env: Env, wav: Uint8Array): Promise<Word[]> {
   const result = await runWithRetry(() =>

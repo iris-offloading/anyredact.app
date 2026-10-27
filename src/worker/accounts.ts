@@ -1,6 +1,7 @@
 // Sign-in for paying users: an emailed link (via Cloudflare Email Service) or Google. Free use
 // needs no account. Sessions are random tokens in an HttpOnly cookie; only
 // their SHA-256 hashes are stored.
+import { stripe } from './billing.ts';
 import { crossOrigin, hex, json, now, rateLimited, type Limiter } from './http.ts';
 
 export interface AccountsEnv {
@@ -70,6 +71,7 @@ export async function currentUser(request: Request, env: AccountsEnv): Promise<U
 
 async function startSession(env: AccountsEnv, userId: string): Promise<string> {
   const token = randomToken();
+  await env.DB!.prepare('DELETE FROM sessions WHERE user_id = ? AND expires_at < ?').bind(userId, now()).run();
   await env.DB!.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), userId, now() + SESSION_DAYS * 86400)
     .run();
@@ -121,6 +123,37 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
   return json({ ok: true });
 }
 
+/**
+ * Deletes the signed-in account: its Stripe customer first, which cancels a plan
+ * at once so it can't renew, then its sessions, purchases and row. Stripe keeps
+ * its own payment records, which tax law needs.
+ */
+async function deleteAccount(request: Request, env: AccountsEnv): Promise<Response> {
+  if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
+  const user = await currentUser(request, env);
+  if (!user) return json({ error: 'Please sign in first.' }, 401);
+  if (user.stripe_customer) {
+    if (!env.STRIPE_SECRET_KEY) return json({ error: 'Could not delete the account. Please try again.' }, 503);
+    try {
+      await stripe(env, `customers/${encodeURIComponent(user.stripe_customer)}`, {}, { method: 'DELETE' });
+    } catch (err) {
+      // Already deleted in Stripe: nothing left to cancel.
+      if (!/No such customer/i.test((err as Error).message)) {
+        console.error('stripe customer delete failed', err);
+        return json({ error: 'Could not delete the account. Please try again.' }, 502);
+      }
+    }
+  }
+  const db = env.DB!;
+  await db.batch([
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM purchases WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM login_tokens WHERE email = ?').bind(user.email ?? ''),
+    db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
+  ]);
+  return json({ ok: true }, 200, [setCookie('session', '', 0), signedInHint(false)]);
+}
+
 /** Whether a plan was cancelled and stops at the end of its period. False when Stripe can't say. */
 async function planEnding(env: AccountsEnv, subId: string): Promise<boolean> {
   if (!env.STRIPE_SECRET_KEY) return false;
@@ -140,6 +173,8 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
   if (!path.startsWith('/api/auth/') && path !== '/api/me') return null;
   if (!env.DB) return json({ error: 'Accounts are not set up on this server.' }, 503);
   const origin = url.origin;
+
+  if (path === '/api/me' && request.method === 'DELETE') return deleteAccount(request, env);
 
   if (path === '/api/me') {
     const user = await currentUser(request, env);

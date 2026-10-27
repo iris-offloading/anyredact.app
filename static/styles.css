@@ -501,6 +501,11 @@ mark.saying { outline: 2px solid var(--accent); }
 .avatar { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: var(--ink-text); font-weight: 700; }
 .link-button { flex: none; font: inherit; font-size: 0.875rem; color: var(--muted); background: none; border: 0; padding: 8px 0 8px 8px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .link-button:hover { color: var(--text); }
+.delete-account { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 24px; }
+.delete-account p { flex: 1 1 100%; margin: 0; color: var(--muted); font-size: 0.875rem; }
+.delete-account .link-button { padding-left: 0; }
+.btn.danger { background: var(--error); color: #fff; border-color: transparent; }
+.btn.danger:hover { opacity: 0.9; }
 @media (max-width: 860px) { .account-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) { .account-view { padding: 24px 0 48px; } .panel-card { padding: 20px 16px; border-radius: 16px; } .offer { gap: 10px; padding: 12px; } .offer .btn { min-width: 0; padding: 8px 14px; } .offer small { display: block; } }
 .total { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; }

@@ -165,6 +165,38 @@ function manageButton() {
   });
 }
 
+/** Delete account, with a second button to confirm in place. */
+function deleteAccount() {
+  const row = h('div', { className: 'delete-account' });
+  const ask = () =>
+    row.replaceChildren(
+      h('button', {
+        type: 'button',
+        className: 'link-button',
+        textContent: 'Delete account',
+        onclick: () =>
+          row.replaceChildren(
+            h('p', {}, 'Your plan stops now and your credits are lost. This cannot be undone.'),
+            h('button', {
+              type: 'button',
+              className: 'btn danger',
+              textContent: 'Delete account',
+              onclick: async () => {
+                say('Deleting…', 'busy');
+                const res = await fetch('/api/me', { method: 'DELETE' });
+                const r = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+                if (r.ok) location.reload();
+                else say(r.error || 'Could not delete the account.', true);
+              },
+            }),
+            h('button', { type: 'button', className: 'btn', textContent: 'Keep account', onclick: ask }),
+          ),
+      }),
+    );
+  ask();
+  return row;
+}
+
 function balance(user: NonNullable<Me['user']>, free: number | null) {
   const sub = user.subscription;
   const plan = sub && PRODUCTS.find((p) => p.monthly && p.pages === sub.pages);
@@ -243,6 +275,7 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
     head,
     status,
     h('div', { className: 'account-grid' }, balanceCard, h('div', { className: 'account-side' }, planCard, creditCard)),
+    deleteAccount(),
   );
 }
 
