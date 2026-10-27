@@ -156,7 +156,6 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.015em; }
 .drop-icon svg { display: block; }
 .drop-title { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
 .drop-or { color: var(--muted); font-size: 0.95rem; }
-.drop-or u { color: var(--text); font-weight: 600; }
 .drop-sub { color: var(--muted); font-size: 0.85rem; max-width: 380px; margin-top: 4px; }
 .drop-or kbd {
   font: 600 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 6px; color: var(--text);
@@ -166,7 +165,8 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.015em; }
 .paste label { font-weight: 600; font-size: 0.92rem; }
 /* With a keyboard the shortcut covers pasting, so the box is only for touch screens (and the text page). */
 @media (hover: hover) and (pointer: fine) { .paste:not(.always) { display: none; } }
-@media (hover: none), (pointer: coarse) { .paste-keys { display: none; } .paste textarea { font-size: 16px; } }
+/* Touch screens can neither drop files nor use the shortcut. */
+@media (hover: none), (pointer: coarse) { .drop-here, .drop-or { display: none; } .paste textarea { font-size: 16px; } }
 @media (max-width: 640px) { .drop { min-height: 220px; padding: 24px 16px; } }
 textarea, select {
   width: 100%; font: inherit; color: var(--text); background: var(--surface);

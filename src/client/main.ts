@@ -164,8 +164,8 @@ class App {
         'aria-hidden': 'true',
         innerHTML: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
       }),
-      h('span', { className: 'drop-title' }, 'Drop a file to start'),
-      h('span', { className: 'drop-or' }, 'or ', h('u', {}, 'choose one'), h('span', { className: 'paste-keys' }, ', or paste with ', h('kbd', {}, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V'))),
+      h('span', { className: 'drop-title' }, h('u', {}, 'Choose a file'), h('span', { className: 'drop-here' }, ' or drop it here')),
+      h('span', { className: 'drop-or' }, 'or paste with ', h('kbd', {}, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V')),
       h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
