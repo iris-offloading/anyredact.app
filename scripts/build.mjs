@@ -5,6 +5,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { CONTACT, LEGAL, UPDATED } from './legal.mjs';
+import { logoMark } from './logo.mjs';
 import { HOME, SITE, TOOLS } from './pages.mjs';
 import { PRICING } from './pricing.mjs';
 
@@ -82,10 +83,6 @@ const themeButton = `<button type="button" class="theme-button" aria-label="Them
   .map(([value, path]) => `<svg data-theme-icon="${value}" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`)
   .join('')}</button>`;
 
-// The mark takes its colours from CSS, so it can flip in dark mode and in the footer.
-const logoMark = (size) =>
-  `<svg class="logo-mark" width="${size}" height="${size}" viewBox="0 0 28 28" aria-hidden="true"><rect class="lm-bg" width="28" height="28" rx="7"/><rect class="lm-bar" x="6" y="9" width="16" height="4" rx="1"/><rect class="lm-accent" x="6" y="15" width="10" height="4" rx="1"/></svg>`;
-
 function nav(current) {
   const links = [{ slug: '', nav: 'All formats' }, ...TOOLS]
     .map((t) => `<a href="/${t.slug}"${t.slug === current ? ' aria-current="page"' : ''}>${esc(t.nav)}</a>`)
@@ -154,8 +151,13 @@ function layout(page, main) {
 <meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${url(page.slug)}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="${url('social.png')}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="AnyRedact">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css?v=${cssHash}">
 <script src="/theme.js?v=${themeHash}"></script>

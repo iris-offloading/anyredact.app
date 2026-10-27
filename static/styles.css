@@ -113,10 +113,10 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.015em; }
 .logo { font-weight: 700; font-size: 1.15rem; letter-spacing: -0.01em; text-decoration: none; display: flex; align-items: center; gap: 10px; }
 .logo-mark { display: block; flex: none; }
 .lm-bg { fill: var(--ink); }
-.lm-bar { fill: var(--ink-text); }
-.lm-accent { fill: #c2255c; }
+.lm-fg { fill: var(--ink-text); }
+.lm-accent { fill: var(--accent); }
 .site-footer .lm-bg { fill: #fff; }
-.site-footer .lm-bar { fill: #15161a; }
+.site-footer .lm-fg { fill: #15161a; }
 .site-header nav { display: flex; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .logo, .header-actions { flex: none; }
 .site-header nav a { white-space: nowrap; text-decoration: none; padding: 8px 12px; border-radius: 8px; color: var(--muted); font-size: 0.95rem; }

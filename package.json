@@ -6,6 +6,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "icons": "node scripts/icons.mjs",
     "dev": "wrangler dev",
     "dev:local": "wrangler dev --env local",
     "deploy": "wrangler deploy",
