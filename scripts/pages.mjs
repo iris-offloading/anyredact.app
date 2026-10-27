@@ -41,10 +41,10 @@ export const TOOLS = [
     nav: 'Image',
     title: 'Redact Image Online Free: Black Out Text in Screenshots & Photos | AnyRedact',
     description:
-      'Redact images and screenshots online. AnyRedact reads the text in PNG, JPG and WebP files, finds personal data and blacks it out. Removes EXIF and GPS metadata too.',
+      'Redact images and screenshots online. AnyRedact reads the text in PNG, JPG, WebP and iPhone HEIC files, finds personal data and blacks it out. Removes EXIF and GPS metadata too.',
     h1: 'Redact images and screenshots',
     lead: 'Hide emails, phone numbers, card numbers and names in screenshots, scans and photos. Text is read automatically and checked by AI.',
-    hint: 'PNG, JPG or WebP, or paste a screenshot',
+    hint: 'PNG, JPG, WebP or HEIC, or paste a screenshot',
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
@@ -58,6 +58,10 @@ export const TOOLS = [
       {
         q: 'Why not blur instead of a black box?',
         a: 'Blurred or pixelated text can sometimes be reconstructed. A solid box replaces the pixels.',
+      },
+      {
+        q: 'Can I upload iPhone photos?',
+        a: 'Yes. HEIC and HEIF photos open here and download as JPG.',
       },
     ],
   },
@@ -123,10 +127,10 @@ export const TOOLS = [
     nav: 'Text',
     title: 'Redact Text Online: Remove PII from Text, Logs & CSV | AnyRedact',
     description:
-      'Paste text or upload a TXT, CSV, JSON or log file and remove personal data in seconds. Mask emails, phone numbers, IPs, card numbers and more. Free and private.',
+      'Paste text or upload a TXT, CSV, JSON, XML, YAML, .env or log file and remove personal data and secrets in seconds. Mask emails, phone numbers, IPs, API keys and more. Free and private.',
     h1: 'Redact text, logs and CSV files',
     lead: 'Paste text or drop a file to mask emails, phone numbers, IP addresses, card numbers and other personal data before you share it.',
-    hint: 'TXT, CSV, JSON, Markdown or logs',
+    hint: 'TXT, CSV, JSON, XML, YAML, .env or logs',
     points: [
       ['Great for logs and support tickets', 'Strip customer details before sharing logs, transcripts or datasets.'],
       ['Mask or label', 'Keep the shape of the text with █ blocks, or replace values with labels like [EMAIL].'],
@@ -136,6 +140,10 @@ export const TOOLS = [
       {
         q: 'Can I keep the layout of a CSV or log?',
         a: 'Yes. Black out keeps every line and column in place, using █ for each removed character.',
+      },
+      {
+        q: 'Will a redacted JSON or XML file still parse?',
+        a: 'Yes. Quotes, brackets and tags are left alone, and a redacted number becomes a string.',
       },
     ],
   },
@@ -175,7 +183,7 @@ export const HOME = {
     'Redact PDFs, images, Word documents, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
   lead: 'Drop a PDF, image, Word document, spreadsheet, text file or recording. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
-  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
+  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
@@ -200,7 +208,7 @@ export const HOME = {
     },
     {
       q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, text files such as TXT, CSV, JSON and logs, and audio such as MP3, M4A and WAV. Video is planned.',
+      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, HEIC, text files such as TXT, CSV, JSON, XML, YAML, .env and logs, and audio such as MP3, M4A and WAV. Video is planned.',
     },
   ],
 };
