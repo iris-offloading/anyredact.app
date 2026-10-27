@@ -122,6 +122,7 @@ async function download(name) {
   await mark.click();
   check((await mark.getAttribute('class')) === 'off', 'docx clicking a highlight on the page keeps it');
   await mark.click();
+  check((await mark.getAttribute('class')) === 'on', 'docx clicking a kept highlight on the page redacts it');
   // Selecting a word on the page redacts that spot.
   await page.evaluate(() => {
     const sheet = document.querySelector('.sheet');

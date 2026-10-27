@@ -690,7 +690,7 @@ class App {
     const blocks = doc.units.flatMap((u, i) => (u.page === undefined ? [this.unitBlock(u, i, byUnit.get(u.id) ?? [])] : []));
     const MAX = 2000;
     this.preview.replaceChildren(
-      h('p', { className: 'hint' }, 'Click a highlight to keep it. Select text to redact it.'),
+      h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select text to add more.'),
       h('div', { className: 'text-preview' + (doc.kind === 'docx' ? ' docx' : '') }, ...blocks.slice(0, MAX)),
       ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
       ...pictures,
@@ -724,7 +724,7 @@ class App {
     });
     const placed = this.editors.some((e) => e.el.classList.contains('placed'));
     this.preview.replaceChildren(
-      h('p', { className: 'hint' }, placed ? 'Click a highlight or box to keep it. Select text to redact it, or drag on a picture to add a box.' : 'Click a highlight to keep it. Select text to redact it.'),
+      h('p', { className: 'hint' }, placed ? 'Click a highlight or box to redact or keep it. Select text, or drag on a picture, to add more.' : 'Click a highlight to redact or keep it. Select text to add more.'),
       sheet,
       ...(rest.length ? [h('h3', {}, 'Also in this file'), h('div', { className: 'text-preview docx' }, ...rest)] : []),
       ...pictures,

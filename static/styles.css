@@ -169,7 +169,7 @@ textarea, select {
 .sheet .page.placed { margin: 0; box-shadow: none; background: none; }
 .sheet .page.placed canvas { height: 100%; }
 /* The pages stay white in dark mode, so highlights keep their light colors. */
-.sheet mark.on { background: #16181d; }
+.sheet mark.on { background: rgba(0, 0, 0, 0.45); color: inherit; }
 .sheet mark.off { background: #ffe8cc; }
 mark { cursor: pointer; border-radius: 3px; padding: 0 1px; }
 mark.on { background: var(--mark-on); color: inherit; }
