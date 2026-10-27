@@ -604,3 +604,41 @@ mark.saying { outline: 2px solid var(--accent); }
   .consent-bar { flex-direction: column; align-items: stretch; gap: 12px; }
   .consent-actions .btn { flex: 1; }
 }
+
+/* Diagrams (scripts/diagrams.mjs): a wide drawing for desktop, a narrow one for phones. */
+.diagram { margin: 1.6em 0; }
+.diagram svg { display: block; width: 100%; height: auto; font-family: var(--sans); }
+.diagram .dg-wide { max-width: 640px; }
+.diagram .dg-narrow { display: none; max-width: 420px; margin: 0 auto; }
+@media (max-width: 600px) { .diagram .dg-wide { display: none; } .diagram .dg-narrow { display: block; } }
+.how { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 32px; }
+.how-num { display: block; margin-bottom: 14px; font: 500 0.95rem var(--mono); color: var(--muted); }
+.how-art { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px 16px; }
+.how-art svg { display: block; width: 100%; height: auto; }
+.how h3 { margin: 20px 0 10px; font-size: 1.2rem; }
+.how p { margin: 0; color: var(--muted); }
+@media (max-width: 900px) { .how { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .how { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
+.dg-frame { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.dg-grid { stroke: var(--line); }
+.dg-found { fill: var(--mark-off); stroke: var(--mark-off-line); stroke-dasharray: 3 2; }
+.how-art .dg-line { fill: var(--line); }
+.dg-lane { fill: var(--sunken); stroke: var(--line); }
+.dg-node { fill: var(--surface); stroke: var(--line-strong); }
+.dg-badge { fill: var(--ink); }
+.dg-dot { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2; }
+.dg-title { fill: var(--text); font-size: 15px; font-weight: 600; }
+.dg-sub { fill: var(--muted); font-size: 13px; }
+.dg-strong { fill: var(--text); font-weight: 600; }
+.dg-arrow { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+.dg-dash { stroke-dasharray: 5 5; }
+.dg-head { fill: var(--line-strong); }
+.dg-page { fill: var(--surface); stroke: var(--line-strong); }
+.dg-ghost { fill: none; stroke: var(--line-strong); stroke-dasharray: 4 4; }
+.dg-bar { fill: var(--ink); }
+.dg-line { fill: var(--line-strong); }
+.dg-leak { fill: var(--accent); font-size: 13px; font-weight: 600; }
+.dg-leak-box { fill: none; stroke: var(--accent); }
+.dg-hill { fill: var(--line-strong); }
+.dg-cell { fill: var(--text); font-size: 12px; font-family: var(--mono); }
+.dg-span { fill: var(--ink); }

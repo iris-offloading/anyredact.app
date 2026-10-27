@@ -5,6 +5,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { GUIDES, GUIDES_INDEX, PUBLISHED } from './guides.mjs';
+import { howItWorks } from './diagrams.mjs';
 import { CONTACT, LEGAL, UPDATED } from './legal.mjs';
 import { logoMark } from './logo.mjs';
 import { HOME, SITE, TOOLS } from './pages.mjs';
@@ -193,11 +194,13 @@ function toolPage(page) {
   </div>
 </section>
 <section class="band"><div class="wrap points">${points}</div></section>
-${page.slug ? '' : homeSections(page)}
+${page.slug ? howSection(page) : homeSections(page)}
 <section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>
 ${page.slug ? relatedGuides(page.slug) : ''}`,
   );
 }
+
+const howSection = (page) => `<section class="wrap section"><h2>How it works</h2>${howItWorks(page.art, page.how)}</section>`;
 
 const guideCards = (list) => `<div class="cards">${list.map((g) => `<a class="card" href="/guides/${g.slug}"><strong>${esc(g.h1)}</strong><span>${esc(g.summary)}</span></a>`).join('')}</div>`;
 

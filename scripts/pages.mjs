@@ -21,6 +21,12 @@ export const TOOLS = [
     h1: 'Auto redact PDF online with AI',
     lead: 'Drop a PDF and our AI will find and permanently remove names, numbers, signatures, and other sensitive details, including on scanned pages.',
     hint: 'PDF up to 60 pages',
+    art: 'pdf',
+    how: [
+      ['Open your PDF', 'Scanned pages are read with OCR first.'],
+      ['Review what was found', 'Untick a finding to keep it, or drag a box over a signature.'],
+      ['Download the flattened copy', 'Every page comes back as an image with the marks burned in.'],
+    ],
     points: [
       ['True redaction', 'Pages are flattened to images on export, so the original text, links, form fields and metadata are gone, not just covered.'],
       ['Scanned PDFs too', 'Pages without a text layer are read with OCR so their contents can be detected.'],
@@ -50,6 +56,12 @@ export const TOOLS = [
     lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
     also: 'Works with JPG, PNG, WebP and HEIC.',
     hint: 'PNG, JPG, WebP or HEIC',
+    art: 'image',
+    how: [
+      ['Open or paste a picture', 'Words in the picture are read with OCR.'],
+      ['Check the boxes', 'Untick a box to keep that spot, or drag a new one over a face.'],
+      ['Save the clean image', 'It is repainted from scratch, so camera and GPS tags are gone.'],
+    ],
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
@@ -82,6 +94,12 @@ export const TOOLS = [
     h1: 'Auto redact Word online with AI',
     lead: 'Upload a .docx to redact sensitive text, comments, tracked changes, and metadata while keeping your formatting intact.',
     hint: 'Word .docx files',
+    art: 'doc',
+    how: [
+      ['Open your .docx', 'Body text, headers, comments and tracked changes are scanned.'],
+      ['Review what was found', 'Select any word in the preview to remove it as well.'],
+      ['Download the edited file', 'Pick black bars or labels like [NAME] before you save.'],
+    ],
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
       ['Hidden places too', 'Tracked changes, comments, headers, footers, hyperlink targets, charts, pictures and their alt text are redacted along with the body.'],
@@ -110,6 +128,12 @@ export const TOOLS = [
     h1: 'Auto redact PowerPoint online with AI',
     lead: 'Upload a .pptx to redact names, numbers and other personal details on slides, in speaker notes, comments and pictures.',
     hint: 'PowerPoint .pptx files',
+    art: 'slide',
+    how: [
+      ['Open your .pptx', 'Slides, speaker notes and comments are scanned together.'],
+      ['Review what was found', 'Step through the slides and untick what should stay.'],
+      ['Download the deck', 'It opens in PowerPoint, Keynote or Google Slides as before.'],
+    ],
     points: [
       ['Design kept', 'Themes, fonts, shapes and animations are untouched.'],
       ['Notes and comments too', 'Speaker notes, comments, hidden slides, tables, charts, SmartArt and alt text are redacted along with the slides.'],
@@ -139,6 +163,12 @@ export const TOOLS = [
     lead: 'Upload a spreadsheet to redact personal data in columns, cells, hidden sheets, and comments without breaking your layout.',
     also: 'Works with ODS and CSV.',
     hint: 'Excel .xlsx, OpenDocument .ods or CSV',
+    art: 'sheet',
+    how: [
+      ['Open your workbook', 'Every sheet is read, cell by cell.'],
+      ['Review the cells', 'Click a highlight to keep that value.'],
+      ['Download the workbook', 'Open it in Excel and carry on working.'],
+    ],
     points: [
       ['Cells keep their styles', 'Only redacted cells change. Number formats, colours, column widths and charts stay put.'],
       ['Hidden sheets too', 'Hidden sheets, comments, notes, headers and footers are scanned, and hidden sheets are listed in the editor.'],
@@ -172,6 +202,12 @@ export const TOOLS = [
     lead: 'Paste text or upload a file to mask personal info, passwords, API keys, and other secrets in seconds.',
     also: 'Works with CSV, JSON, XML, YAML, .env, Markdown and log files.',
     hint: 'TXT, CSV, JSON, XML, YAML, .env or logs',
+    art: 'text',
+    how: [
+      ['Paste or upload', 'Drop in a log, a config file or a chat export.'],
+      ['Review what was found', 'List project code names under Always redact.'],
+      ['Download the masked file', 'Keys, brackets and line breaks stay where they were.'],
+    ],
     points: [
       ['Great for logs and support tickets', 'Strip customer details before sharing logs, transcripts or datasets.'],
       ['Mask or label', 'Keep the shape of the text with █ blocks, or replace values with labels like [EMAIL].'],
@@ -201,6 +237,12 @@ export const TOOLS = [
     lead: 'Upload a recording and we’ll bleep spoken sensitive details, then give you the redacted audio and a redacted transcript.',
     also: 'Works with MP3, M4A, WAV, FLAC, OGG and Opus.',
     hint: 'MP3, M4A, WAV, FLAC, OGG or Opus, up to 2 hours',
+    art: 'audio',
+    how: [
+      ['Upload a recording', 'Speech is written out next to a timeline.'],
+      ['Review what was found', 'Listen back and untick anything that can stay.'],
+      ['Download the bleeped audio', 'Save the redacted transcript too if you need it.'],
+    ],
     points: [
       ['Found in the transcript', 'Speech is written out with a time for every word, so each finding is bleeped where it was said.'],
       ['Pick any stretch', 'Drag on the timeline to bleep a part the transcript missed.'],
