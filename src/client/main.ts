@@ -105,7 +105,7 @@ class App {
   private textHost = h('div');
   /** The spreadsheet's cell bar and the cell it shows. */
   private cellBar: HTMLElement | null = null;
-  private cell: Parameters<ViewHandlers['cell']>[0] = null;
+  private cell: Parameters<ViewHandlers['cell']>[0] | null = null;
   // Transcript words in the order they are said, with the spans that show each one.
   private spoken: { word: SpokenWord; els: HTMLElement[] }[] = [];
   private speaking: HTMLElement[] = [];
@@ -643,7 +643,8 @@ class App {
           this.cell = c;
           this.drawCellBar();
           // Selecting a cell without highlights offers to redact its text.
-          const pick = c?.spot && !this.findings.some((f) => f.unitId === c.spot!.unitId && f.start < c.spot!.end && f.end > c.spot!.start) ? c.spot : null;
+          const s = c.spot;
+          const pick = s && !this.findings.some((f) => f.unitId === s.unitId && f.start < s.end && f.end > s.start) ? s : null;
           this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : '');
         },
       });
@@ -708,9 +709,10 @@ class App {
     const c = this.cell;
     if (!bar || !this.doc) return;
     const ref = h('span', { className: 'cell-ref' }, c?.label ?? '');
-    const index = c?.spot ? this.doc.units.findIndex((u) => u.id === c.spot!.unitId) : -1;
-    if (!c?.spot || index < 0) return bar.replaceChildren(ref, h('div', { className: 'cell-text' }));
-    const { unitId, start, end } = c.spot;
+    const spot = c?.spot;
+    const index = spot ? this.doc.units.findIndex((u) => u.id === spot.unitId) : -1;
+    if (!spot || index < 0) return bar.replaceChildren(ref, h('div', { className: 'cell-text' }));
+    const { unitId, start, end } = spot;
     const text = this.doc.units[index].text.slice(start, end);
     const spans = this.findings
       .filter((f) => f.unitId === unitId && f.start < end && f.end > start)
@@ -783,7 +785,7 @@ class App {
       // The cell bar shows part of a unit, from data-from on.
       const from = Number(el.dataset.from ?? 0);
       let start = from + (el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0);
-      let end = from + (el.contains(range.endContainer) ? offset(range.endContainer, range.endOffset) : el.dataset.from ? el.textContent!.length : unit.text.length);
+      let end = el.contains(range.endContainer) ? from + offset(range.endContainer, range.endOffset) : from + el.textContent!.length;
       while (start < end && /\s/.test(unit.text[start])) start++;
       while (end > start && /\s/.test(unit.text[end - 1])) end--;
       if (end > start) out.push({ unitId: unit.id, start, end });

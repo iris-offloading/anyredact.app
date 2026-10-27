@@ -219,12 +219,13 @@ function runBoxes(sk: SpreadsheetSkeleton, row: number, col: number, runs: Run[]
   y += verticalAlign === VerticalAlign.MIDDLE ? (height - page.height) / 2 : verticalAlign === VerticalAlign.TOP ? page.marginTop : height - page.height - page.marginBottom;
 
   const out: Box[][] = runs.map(() => []);
+  // A single line takes the whole row height, so a tap anywhere beside the text counts.
+  const single = page.sections.length === 1 && page.sections[0].columns.length === 1 && page.sections[0].columns[0].lines.length === 1;
   for (const section of page.sections) {
     for (const column of section.columns) {
       for (const line of column.lines) {
-        // A single line takes the whole row height, so a tap anywhere beside the text counts.
-        const y0 = page.sections.length === 1 && column.lines.length === 1 ? startY : y + section.top + line.top;
-        const y1 = page.sections.length === 1 && column.lines.length === 1 ? endY : y0 + line.lineHeight;
+        const y0 = single ? startY : y + section.top + line.top;
+        const y1 = single ? endY : y0 + line.lineHeight;
         for (const divide of line.divides) {
           let i = divide.st;
           for (const glyph of divide.glyphGroup) {
@@ -321,7 +322,7 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
   univerAPI.setPermissionDialogVisible(false);
 
   const original = (sheet: string, r: number, c: number): ICellData => data.sheets[ids.get(sheet)!]?.cellData?.[r]?.[c] ?? {};
-  let marked = new Map<string, { sheet: string; row: number; col: number; runs: Run[] }>();
+  let marked = new Map<string, { sheet: string; row: number; col: number; text: string; runs: Run[] }>();
 
   const nameOf = (id: string) => [...ids].find(([, x]) => x === id)?.[0];
   // Univer's cell events carry no coordinates, so keep the last press.
@@ -379,7 +380,7 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
     update(findings: Finding[]) {
       const byUnit = new Map<string, Finding[]>();
       for (const f of findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-      const next = new Map<string, { sheet: string; row: number; col: number; text: string; runs: Run[] }>();
+      const next: typeof marked = new Map();
       for (const u of opts.units) {
         const fs = byUnit.get(u.id);
         if (!fs) continue;
@@ -421,7 +422,7 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
           });
       }
       book.setEditable(false);
-      marked = new Map([...next].map(([k, c]) => [k, { sheet: c.sheet, row: c.row, col: c.col, runs: c.runs }]));
+      marked = next;
     },
     reveal(f: Finding) {
       const g = opts.grid.get(f.unitId)?.find((c) => c.start <= f.start && f.start < c.end);
