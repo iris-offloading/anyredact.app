@@ -104,7 +104,7 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
   await env.DB!.prepare('INSERT INTO login_tokens (token_hash, email, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), email, now() + LOGIN_MINUTES * 60)
     .run();
-  // The page only shows a Sign in button: mail scanners that open links can't use up the token.
+  // The token sits in the hash, so only the page's script sends it: a plain fetch of the link spends nothing.
   const link = `${origin}/account#signin=${encodeURIComponent(token)}`;
   try {
     await env.EMAIL.send({
@@ -149,7 +149,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     return sendLoginEmail(env, origin, email.trim().toLowerCase());
   }
 
-  // Links sent before the Sign in button existed.
+  // Links sent before tokens moved to the hash.
   if (path === '/auth/email/verify' && request.method === 'GET') {
     return redirect(`/account#signin=${encodeURIComponent(url.searchParams.get('token') || '')}`);
   }

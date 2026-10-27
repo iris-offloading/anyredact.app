@@ -145,7 +145,7 @@ test('email sign-in sends a one-time link that starts a session', async () => {
   assert.equal(res.status, 200);
   assert.equal(sent[0].to, 'jane@example.com');
   const link = sent[0].text.match(/https:\S+/)![0];
-  // Opening the link spends nothing; the page's Sign in button posts the token.
+  // Opening the link spends nothing; the page's script posts the token.
   assert.match(link, /^https:\/\/anyredact\.app\/account#signin=/);
   const token = decodeURIComponent(link.split('#signin=')[1]);
   const verify = (t: string, origin = 'https://anyredact.app') =>
