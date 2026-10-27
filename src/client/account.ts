@@ -216,9 +216,9 @@ function activityRow(a: Activity) {
 
 const SHOWN = 4;
 
-/** Recent activity, the latest few with a button for the rest. Nothing while there is none. */
+/** Recent activity, the latest few with a button for the rest. */
 function activityList(items: Activity[]) {
-  if (!items.length) return [];
+  if (!items.length) return [h('div', { className: 'activity-head' }, h('h3', {}, 'Recent activity')), h('p', { className: 'activity-empty' }, 'No files or purchases yet.')];
   const list = h('ul', { className: 'activity' }, ...items.slice(0, SHOWN).map(activityRow));
   const more =
     items.length > SHOWN

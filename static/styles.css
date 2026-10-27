@@ -550,6 +550,7 @@ mark.saying { outline: 2px solid var(--accent); }
 .activity li > div span { color: var(--muted); font-size: 0.875rem; }
 .activity-icon { flex: none; display: flex; color: var(--muted); }
 .activity-credits { font-variant-numeric: tabular-nums; font-weight: 500; }
+.activity-empty { margin: 8px 0 20px; color: var(--muted); font-size: 0.9rem; }
 .activity-credits.added { color: var(--success); }
 .plan-card { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 60%); border-color: color-mix(in srgb, var(--accent) 22%, var(--line)); }
 .plan-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
