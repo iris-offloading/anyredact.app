@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 import JSZip from 'jszip';
 import sharp from 'sharp';
 import ExcelJS from 'exceljs';
+import PptxGenJS from 'pptxgenjs';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 const out = process.argv[2] || 'e2e-out';
@@ -48,6 +49,91 @@ ${pic('rId7', 1, 'ID card, call 415-555-0132')}
 ${pic('rId8', 2, 'Logo')}
 </w:body></w:document>`);
   writeFileSync(`${out}/pictures.docx`, await z.generateAsync({ type: 'nodebuffer' }));
+}
+
+// A deck: a dark title slide with a bullet list, notes and a comment, a slide with a scanned ID
+// (alt text, EXIF) and a table, a hidden slide, and author details.
+{
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300"><rect width="100%" height="100%" fill="#fff"/><text x="40" y="120" font-family="Arial" font-size="48">Patient: Jane Doe</text><text x="40" y="210" font-family="Arial" font-size="48">SSN 123-45-6789</text></svg>`;
+  const photo = await withMetadata(await sharp(Buffer.from(svg)).jpeg().toBuffer());
+  const deck = new PptxGenJS();
+  deck.layout = 'LAYOUT_WIDE';
+  deck.author = 'Bob Author';
+  deck.company = 'Acme Ltd';
+  let slide = deck.addSlide();
+  slide.background = { color: '1F3A5F' };
+  slide.addText('Onboarding: Jane Doe', { x: 0.6, y: 0.5, w: 12, h: 1, fontSize: 40, bold: true, color: 'FFFFFF' });
+  slide.addText(
+    [
+      { text: 'Email: jane.doe@example.com', options: { bullet: true, breakLine: true } },
+      { text: 'Phone: +1 (415) 555-0132', options: { bullet: true, breakLine: true } },
+      { text: 'Contact: ', options: { bullet: true } },
+      { text: 'bob@corp.io', options: { hyperlink: { url: 'mailto:bob@corp.io' } } },
+    ],
+    { x: 0.6, y: 2, w: 7, h: 2.4, fontSize: 22, color: 'E0E8F0' },
+  );
+  slide.addShape(deck.ShapeType.roundRect, { x: 8.2, y: 2, w: 4.5, h: 2.4, fill: { color: 'F4B942' }, rectRadius: 0.2 });
+  slide.addText('Manager: Maria Gonzalez', { x: 8.4, y: 2.6, w: 4.1, h: 1, fontSize: 20, color: '1F3A5F' });
+  slide.addNotes('Remind Maria about SSN 123-45-6789');
+  slide = deck.addSlide();
+  slide.addText('Scan of ID', { x: 0.6, y: 0.4, w: 12, h: 0.8, fontSize: 32, bold: true });
+  slide.addImage({ data: `image/jpeg;base64,${photo.toString('base64')}`, x: 0.6, y: 1.4, w: 9, h: 3, altText: 'ID card, call 415-555-0199' });
+  slide.addTable([[{ text: 'Name' }, { text: 'Card' }], [{ text: 'Maria Gonzalez' }, { text: '4111 1111 1111 1111' }]], { x: 0.6, y: 5, w: 9, fontSize: 16, border: { type: 'solid', pt: 1, color: '999999' } });
+  slide = deck.addSlide();
+  slide.addText('Hours', { x: 0.6, y: 0.4, w: 12, h: 0.8, fontSize: 32, bold: true });
+  slide.addChart(deck.ChartType.bar, [{ name: 'Hours', labels: ['Maria Gonzalez', 'Team B'], values: [12, 30] }], { x: 0.6, y: 1.4, w: 8, h: 4, showTitle: true, title: 'Overtime for Jane Doe' });
+  slide = deck.addSlide();
+  slide.hidden = true;
+  slide.addText('Old ssn 123-45-6789', { x: 0.6, y: 0.6, w: 8, h: 1, fontSize: 28 });
+  const z = await JSZip.loadAsync(await deck.write({ outputType: 'nodebuffer' }));
+  // pptxgenjs writes neither comments nor a thumbnail, so they are added here.
+  const P = 'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+  z.file('ppt/commentAuthors.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:cmAuthorLst ${P}><p:cmAuthor id="0" name="Bob Author" initials="BA" lastIdx="1" clrIdx="0"/></p:cmAuthorLst>`);
+  z.file('ppt/comments/comment1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:cmLst ${P}><p:cm authorId="0" dt="2026-10-27T10:00:00.000" idx="1"><p:pos x="10" y="10"/><p:text>Check 415-555-0177 with Jane Doe</p:text></p:cm></p:cmLst>`);
+  const rels = await z.file('ppt/slides/_rels/slide1.xml.rels').async('string');
+  z.file('ppt/slides/_rels/slide1.xml.rels', rels.replace('</Relationships>', '<Relationship Id="rIdC1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments/comment1.xml"/></Relationships>'));
+  const presRels = await z.file('ppt/_rels/presentation.xml.rels').async('string');
+  z.file('ppt/_rels/presentation.xml.rels', presRels.replace('</Relationships>', '<Relationship Id="rIdCA" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/commentAuthors" Target="commentAuthors.xml"/></Relationships>'));
+  z.file('docProps/thumbnail.jpeg', photo);
+  const root = await z.file('_rels/.rels').async('string');
+  z.file('_rels/.rels', root.replace('</Relationships>', '<Relationship Id="rIdT" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" Target="docProps/thumbnail.jpeg"/></Relationships>'));
+  const types = await z.file('[Content_Types].xml').async('string');
+  z.file('[Content_Types].xml', types.replace('</Types>', '<Override PartName="/ppt/comments/comment1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.comments+xml"/><Override PartName="/ppt/commentAuthors.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml"/></Types>'));
+  writeFileSync(`${out}/sample.pptx`, await z.generateAsync({ type: 'nodebuffer' }));
+
+  // The same chart, with the workbook behind it, in a Word file.
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const chart = Object.keys(z.files).find((n) => /^ppt\/charts\/chart\d+\.xml$/.test(n));
+  const chartRels = await z.file(chart.replace(/charts\/(chart\d+\.xml)$/, 'charts/_rels/$1.rels')).async('string');
+  const book = Object.keys(z.files).find((n) => /^ppt\/embeddings\/.+\.xlsx$/.test(n));
+  const d = new JSZip();
+  d.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/></Types>`);
+  d.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/></Relationships>`);
+  d.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="${R}/chart" Target="charts/chart1.xml"/></Relationships>`);
+  d.file('word/charts/chart1.xml', await z.file(chart).async('string'));
+  d.file('word/charts/_rels/chart1.xml.rels', chartRels.replace(/Target="[^"]*embeddings\//, 'Target="../embeddings/'));
+  d.file(`word/embeddings/${book.split('/').pop()}`, await z.file(book).async('nodebuffer'));
+  d.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W} xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><w:body>
+<w:p><w:r><w:t>Overtime report.</w:t></w:r></w:p>
+<w:p><w:r><w:drawing><wp:inline><wp:extent cx="5486400" cy="3200400"/><wp:docPr id="1" name="Chart 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rId9"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+</w:body></w:document>`);
+  writeFileSync(`${out}/chart.docx`, await d.generateAsync({ type: 'nodebuffer' }));
+}
+
+// A deck whose chart color closes the drawing early and adds a frame that loads a script.
+{
+  const deck = new PptxGenJS();
+  const slide = deck.addSlide();
+  slide.addText('Hello Jane Doe', { x: 0.5, y: 0.3, w: 8, h: 0.8 });
+  slide.addChart(deck.ChartType.pie, [{ name: 'Sales', labels: ['North', 'South'], values: [3, 5] }], { x: 1, y: 1.5, w: 5, h: 3.5, chartColors: ['AA0000', '00AA00'] });
+  const z = await JSZip.loadAsync(await deck.write({ outputType: 'nodebuffer' }));
+  const attack = '</svg></div><iframe id="injected" srcdoc="<script src=https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js></script>"></iframe><a id="injected-link" href="https://example.com">Sign in</a><svg><path d="';
+  const esc = (v) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  for (const n of Object.keys(z.files).filter((n) => /^ppt\/charts\/chart\d+\.xml$/.test(n))) {
+    z.file(n, (await z.file(n).async('string')).replace('val="AA0000"', `val="AA0000${esc(attack)}"`));
+  }
+  writeFileSync(`${out}/injected.pptx`, await z.generateAsync({ type: 'nodebuffer' }));
 }
 
 writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\nNext steps\nHelpline: 0800 123 4567\n');

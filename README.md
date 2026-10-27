@@ -1,10 +1,10 @@
 # AnyRedact
 
-Free online redaction for PDF, images, Word (DOCX), spreadsheets (XLSX, ODS) and text, served from Cloudflare Workers at [anyredact.app](https://anyredact.app).
+Free online redaction for PDF, images, Word (DOCX), PowerPoint (PPTX), spreadsheets (XLSX, ODS) and text, served from Cloudflare Workers at [anyredact.app](https://anyredact.app).
 
 ## How it works
 
-- **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX, XLSX and ODS) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
+- **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX, PPTX, XLSX and ODS) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
 - **Matching:** `src/shared/analyze.ts` finds every mention of what the model returned and of the user's own terms, including first or last name alone (`src/shared/names.ts`), and leaves business and helpline contacts unticked. There are no local detection rules: if the AI endpoint fails, the user is told and redacts by hand.
 - **Redaction** happens in the browser. Documents send only extracted text to the server; audio sends 16 kHz mono speech chunks (`/api/transcribe`, Nova-3 for English and Whisper turbo otherwise), so user-facing copy promises "processed, never stored" rather than "never uploaded".
 
@@ -12,7 +12,8 @@ Free online redaction for PDF, images, Word (DOCX), spreadsheets (XLSX, ODS) and
 | --- | --- |
 | PDF | Every page flattened to an image with solid boxes. Original text, links, forms and metadata are gone. Up to 60 pages. |
 | Image (PNG/JPG/WebP) | Re-encoded image with solid boxes; EXIF, GPS, XMP and IPTC metadata is listed in the editor and dropped from the download. |
-| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded pictures are read with OCR, can take picture redaction and drawn boxes, and are re-encoded so their metadata is dropped (GIF and BMP become PNG); alt text and the first-page thumbnail are handled too. EMF, WMF and TIFF pictures are left as they are. The editor lays the pages out with docx-preview, with highlights and picture boxes in place. |
+| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded pictures are read with OCR, can take picture redaction and drawn boxes, and are re-encoded so their metadata is dropped (GIF and BMP become PNG); alt text and the first-page thumbnail are handled too. Chart titles, labels and series names are redacted, and embedded files (OLE objects, the workbook behind each chart) are removed. EMF, WMF and TIFF pictures are left as they are. The editor lays the pages out with docx-preview, with highlights and picture boxes in place. |
+| PPTX | Same deck with redacted characters replaced (█ or a `[LABEL]`). Covers slides, tables, charts, speaker notes, comments, SmartArt, text on layouts and masters, alt text, hyperlink targets and the slide titles in the file properties; comment authors and document properties are cleared, and hidden slides are flagged. Pictures are handled as in DOCX, and the first-slide thumbnail is removed. Embedded files (OLE objects, the workbook behind each chart) are removed. The editor draws the slides with pptx-to-html, with highlights and picture boxes in place. |
 | XLSX / ODS | Same workbook with only the redacted cells changed, so styles, widths and charts stay. Covers every sheet (hidden ones are listed in the editor), comments, notes, headers and footers. A redacted number or formula cell becomes text; chart and pivot caches are updated. Authors, comment authors, custom properties, the save path and the thumbnail are removed. Pictures, text boxes and chart titles are not scanned. |
 | Text (TXT, CSV, JSON, logs…) | Masked or labelled text. CSV and TSV also open from the spreadsheet page. |
 
@@ -29,7 +30,7 @@ static/          CSS, favicon, _headers (CSP and caching)
 test/            unit tests; e2e/ drives every format in Chromium
 ```
 
-Each tool has its own landing page (`/redact-pdf`, `/redact-image`, `/redact-word`, `/redact-excel`, `/redact-text`, `/redact-audio`) with unique title, description, FAQ and JSON-LD; `/` accepts every format. Edit copy in `scripts/pages.mjs`; the sitemap and robots.txt are generated from it.
+Each tool has its own landing page (`/redact-pdf`, `/redact-image`, `/redact-word`, `/redact-powerpoint`, `/redact-excel`, `/redact-text`, `/redact-audio`) with unique title, description, FAQ and JSON-LD; `/` accepts every format. Edit copy in `scripts/pages.mjs`; the sitemap and robots.txt are generated from it.
 
 ## Develop
 

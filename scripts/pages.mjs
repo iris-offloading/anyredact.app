@@ -4,7 +4,7 @@
 export const SITE = {
   name: 'AnyRedact',
   origin: 'https://anyredact.app',
-  tagline: 'Free online redaction for PDF, images, Word, Excel, text and audio',
+  tagline: 'Free online redaction for PDF, images, Word, PowerPoint, Excel, text and audio',
 };
 
 
@@ -81,7 +81,7 @@ export const TOOLS = [
     hint: 'Word .docx files',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
-      ['Hidden places too', 'Tracked changes, comments, headers, footers, hyperlink targets, pictures and their alt text are redacted along with the body.'],
+      ['Hidden places too', 'Tracked changes, comments, headers, footers, hyperlink targets, charts, pictures and their alt text are redacted along with the body.'],
       ['Author names removed', 'Document properties and the names on comments and revisions are cleared.'],
     ],
     faq: [
@@ -92,6 +92,33 @@ export const TOOLS = [
       {
         q: 'Can I replace text with a label instead of black boxes?',
         a: 'Yes. Pick "Replace with label" to turn an email address into [EMAIL], for example.',
+      },
+    ],
+  },
+  {
+    slug: 'redact-powerpoint',
+    format: 'pptx',
+    name: 'Redact PowerPoint',
+    nav: 'PowerPoint',
+    title: 'Auto Redact PowerPoint Online with AI: PPTX | AnyRedact',
+    description:
+      'Auto redact PowerPoint (PPTX) decks online with AI. Personal details are removed from slides, speaker notes, comments and pictures, and author names are cleared.',
+    h1: 'Auto redact PowerPoint online with AI',
+    lead: 'Upload a .pptx to redact names, numbers and other personal details on slides, in speaker notes, comments and pictures.',
+    hint: 'PowerPoint .pptx files',
+    points: [
+      ['Design kept', 'Themes, fonts, shapes and animations are untouched.'],
+      ['Notes and comments too', 'Speaker notes, comments, hidden slides, tables, charts, SmartArt and alt text are redacted along with the slides.'],
+      ['Pictures checked', 'Text in photos and scans is read and boxed out, and the first-slide thumbnail is removed.'],
+    ],
+    faq: [
+      {
+        q: 'Does it work with old .ppt files?',
+        a: 'Not yet. Save it as .pptx in PowerPoint, Keynote, LibreOffice or Google Slides first.',
+      },
+      {
+        q: 'What happens to charts and embedded files?',
+        a: 'Chart titles and labels are redacted like any other text. The spreadsheet behind each chart and any embedded files are removed, so charts still show but their data can no longer be edited.',
       },
     ],
   },
@@ -188,12 +215,12 @@ export const TOOLS = [
 export const HOME = {
   slug: '',
   format: 'all',
-  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word, Excel, Text & Audio',
+  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word, PowerPoint, Excel, Text & Audio',
   description:
-    'Redact PDFs, images, Word documents, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
+    'Redact PDFs, images, Word documents, slide decks, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
-  lead: 'Upload PDFs, images, Word, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
-  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
+  lead: 'Upload PDFs, images, Word, PowerPoint, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
+  hint: 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
@@ -218,7 +245,7 @@ export const HOME = {
     },
     {
       q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, HEIC, text files such as TXT, CSV, JSON, XML, YAML, .env and logs, and audio such as MP3, M4A and WAV. Video is planned.',
+      a: 'PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, HEIC, text files such as TXT, CSV, JSON, XML, YAML, .env and logs, and audio such as MP3, M4A and WAV. Video is planned.',
     },
   ],
 };
