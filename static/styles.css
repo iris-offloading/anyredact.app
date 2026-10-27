@@ -58,7 +58,7 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
 .logo { font-weight: 700; font-size: 1.15rem; text-decoration: none; display: flex; align-items: center; gap: 8px; }
 .logo-mark { display: block; border-radius: 6px; }
 .site-header nav { display: flex; gap: 4px; flex-wrap: wrap; }
-.site-header nav a { text-decoration: none; padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 0.95rem; }
+.site-header nav a { white-space: nowrap; text-decoration: none; padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 0.95rem; }
 .site-header nav a:hover { color: var(--text); background: var(--bg); }
 .site-header nav a[aria-current='page'] { color: var(--text); background: var(--bg); font-weight: 600; }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
@@ -70,7 +70,8 @@ h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
 .theme-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (max-width: 640px) {
   .header-actions { order: 1; }
-  .site-header nav { order: 2; }
+  .site-header nav { order: 2; gap: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+  .site-header nav a { padding: 6px 8px; }
 }
 
 .hero { padding-top: 40px; padding-bottom: 12px; text-align: center; }
@@ -179,6 +180,8 @@ textarea, select {
 /* The pages stay white in dark mode, so highlights keep their light colors. */
 .sheet mark.on { background: rgba(0, 0, 0, 0.45); color: inherit; }
 .sheet mark.off { background: #ffe8cc; }
+.unit-section { font-family: inherit; font-size: 0.95rem; margin: 20px 0 8px; }
+.unit-section:first-child { margin-top: 0; }
 mark { cursor: pointer; border-radius: 3px; padding: 0 1px; }
 mark.on { background: var(--mark-on); color: inherit; }
 mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e8590c; }
@@ -219,3 +222,4 @@ mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e85
 .signin .btn.primary { width: auto; }
 .btn.google { display: inline-block; }
 .btn.google[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
+.sheet-view { height: min(70vh, 640px); min-height: 360px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); margin-bottom: 16px; }

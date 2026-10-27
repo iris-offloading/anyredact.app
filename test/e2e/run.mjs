@@ -2,10 +2,11 @@
 // Usage: npm run dev:local (in another shell), then node test/e2e/run.mjs <outdir>
 import { createRequire } from 'node:module';
 import exifr from 'exifr';
+import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 // Playwright is not a dependency; use a globally installed copy.
@@ -34,6 +35,7 @@ const check = (cond, msg) => {
 const AI_VALUES = [
   ['Jane Doe', 'name'], ['Maria Gonzalez', 'name'], ['jane@example.com', 'email'], ['jane.doe@example.com', 'email'], ['bob@corp.io', 'email'],
   ['+1 (415) 555-0132', 'phone'], ['415-555- 0132', 'phone'], ['415-555- 0199', 'phone'], ['0800 123 4567', 'phone', 'organization'],
+  ['415-555-0177', 'phone'], ['4155550132', 'phone'],
   ['10.0.0.12', 'other'], ['123-45-6789', 'ssn'], ['4111 1111 1111 1111', 'card'],
 ];
 async function fakeDetect(route) {
@@ -183,6 +185,57 @@ async function download(name) {
   const root = await zip.file('_rels/.rels').async('string');
   check(!zip.file('docProps/thumbnail.jpeg') && !root.includes('thumbnail'), 'docx thumbnail removed');
 }
+
+// Spreadsheets
+{
+  const found = await run('redact-excel', fx('sample.xlsx'));
+  check(['jane.doe@example.com', 'bob@corp.io', '415-555-0199', '415-555-0177', '4155550132', '123-45-6789'].every((f) => found.includes(f)), `xlsx findings: ${found.join(', ')}`);
+  const notes = await page.textContent('.notes');
+  check(notes.includes('Includes hidden sheets: Old'), `xlsx hidden sheet flagged: ${notes}`);
+  // The grid: one tab per sheet, hidden ones included, and a click on a highlighted cell keeps it.
+  await page.waitForSelector('.sheet-view >> text=Old (hidden)');
+  check((await page.locator('.sheet-view >> text=Orders').count()) === 1, 'xlsx grid shows every sheet tab');
+  await page.evaluate(() => document.querySelector('.preview').scrollIntoView());
+  const grid = await page.locator('.sheet-view').boundingBox();
+  const bob = page.locator('label.finding', { hasText: 'bob@corp.io' }).locator('input');
+  await page.waitForTimeout(1000); // the grid takes a moment to start listening after it draws
+  await page.mouse.click(grid.x + 260, grid.y + 71); // cell B3
+  await page.waitForFunction(() => ![...document.querySelectorAll('label.finding')].find((l) => l.textContent.includes('bob@corp.io'))?.querySelector('input').checked);
+  check(!(await bob.isChecked()), 'xlsx clicking a highlighted cell keeps it');
+  await bob.check();
+  await page.evaluate(() => document.querySelector('.preview').scrollIntoView());
+  await page.screenshot({ path: fx('xlsx.png') });
+  await page.click('.sheet-view >> text=Orders');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: fx('xlsx-orders.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('xlsx-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { path: p, filename } = await download('out.xlsx');
+  check(filename === 'sample-redacted.xlsx', `xlsx filename ${filename}`);
+  const zip = await JSZip.loadAsync(readFileSync(p));
+  const xml = (await Promise.all(Object.values(zip.files).filter((f) => !f.dir).map((f) => f.async('string')))).join('\n');
+  check(!/jane|Jane Doe|bob@|corp\.io|0199|0177|123-45|Bob Author|Acme/.test(xml), 'xlsx has no redacted values, authors or company left');
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(readFileSync(p));
+  const s = book.getWorksheet('Customers');
+  check(s.getCell('A1').font?.bold && s.getCell('A1').fill?.fgColor?.argb === 'FFFFE699' && s.getColumn(2).width === 28, 'xlsx styles and widths kept');
+  check(s.getCell('A2').value === 'Customer' && s.getCell('D3').value === 'Helpline: 0800 123 4567', 'xlsx untouched cells kept');
+  check(/^█+$/.test(s.getCell('B2').value) && /^█+$/.test(s.getCell('C2').value) && !s.getCell('D2').formula, `xlsx cells redacted: ${s.getCell('B2').value} ${s.getCell('C2').value}`);
+  check(book.getWorksheet('Old').state === 'hidden', 'xlsx hidden sheet stays hidden');
+}
+if (existsSync(fx('sample.ods'))) {
+  const found = await run('redact-excel', fx('sample.ods'));
+  check(found.includes('jane.doe@example.com') && found.includes('123-45-6789') && found.includes('4155550132'), `ods findings: ${found.join(', ')}`);
+  await page.waitForSelector('.sheet-view >> text=Old (hidden)');
+  check((await page.textContent('.notes')).includes('Includes hidden sheets: Old'), 'ods hidden sheet flagged');
+  const { path: p, filename } = await download('out.ods');
+  const zip = await JSZip.loadAsync(readFileSync(p));
+  const content = await zip.file('content.xml').async('string');
+  check(filename === 'sample-redacted.ods' && Object.keys(zip.files)[0] === 'mimetype', 'ods filename and mimetype first');
+  check(!/jane|bob@|0199|0177|123-45|4155550132/.test(content) && content.includes('Helpline: 0800 123 4567'), 'ods cells redacted');
+  check(!/Bob Author/.test(await zip.file('meta.xml').async('string')) && !zip.file('Thumbnails/thumbnail.png'), 'ods author and thumbnail removed');
+} else console.log('skip ods (LibreOffice not installed)');
 
 // PDF
 {
