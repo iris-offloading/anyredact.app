@@ -39,7 +39,7 @@ export const LEGAL = [
 
 <h2>Cookies and local storage</h2>
 <p>Signing in sets a session cookie for 30 days and a cookie that tells the page you are signed in. Google sign-in sets a short-lived cookie that protects the login. Local storage keeps the free allowance ID and your settings, such as the theme and your analytics choice. These are needed for the site to work.</p>
-<p>Google Analytics sets <code>_ga</code> cookies that last up to 2 years. In the EU, EEA, UK and Switzerland they are only set after you accept them in the bar at the bottom of the page; until then Google Analytics counts the visit without cookies. Elsewhere they are set unless you decline. You can change your choice at any time with the Cookies button at the bottom of every page, and declining deletes these cookies.</p>
+<p>Google Analytics sets <code>_ga</code> cookies that last up to 2 years. In the EU, EEA, UK and Switzerland they are only set after you accept them in the bar at the bottom of the page; until then Google Analytics counts the visit without cookies. Elsewhere they are set unless you decline. You can change your choice at any time with the Cookie settings button at the bottom of every page, and declining deletes these cookies.</p>
 
 <h2>Who processes data</h2>
 <ul>

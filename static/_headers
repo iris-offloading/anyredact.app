@@ -10,3 +10,7 @@
 
 /models/*
   Cache-Control: public, max-age=2592000
+
+# workers.dev copies (production and preview versions) stay out of search; canonicals point at anyredact.app.
+https://:host.slop-9bb.workers.dev/*
+  X-Robots-Tag: noindex

@@ -109,12 +109,16 @@ function art(kind, stage) {
   return b;
 }
 
-const STAGE_LABELS = ['the file as opened', 'with findings marked', 'redacted'];
+const SUBJECTS = { pdf: 'PDF page', image: 'photo', doc: 'Word page', slide: 'slide', sheet: 'spreadsheet', text: 'text file', audio: 'recording' };
+const stageLabel = (kind, i) => {
+  const subject = SUBJECTS[kind];
+  return [`A ${subject} as opened`, `The ${subject} with findings marked`, `The redacted ${subject}`][i];
+};
 export const howItWorks = (kind, steps) =>
   `<ol class="how">${steps
     .map(
       ([title, detail], i) =>
-        `<li><span class="how-num">${String(i + 1).padStart(2, '0')}</span><div class="how-art"><svg viewBox="0 0 320 140" role="img" aria-label="${esc(`Illustration: ${STAGE_LABELS[i]}`)}">${art(kind, i)}</svg></div><h3>${esc(title)}</h3><p>${esc(detail)}</p></li>`,
+        `<li><span class="how-num">${String(i + 1).padStart(2, '0')}</span><div class="how-art"><svg viewBox="0 0 320 140" role="img" aria-label="${esc(stageLabel(kind, i))}">${art(kind, i)}</svg></div><h3>${esc(title)}</h3><p>${esc(detail)}</p></li>`,
     )
     .join('')}</ol>`;
 
