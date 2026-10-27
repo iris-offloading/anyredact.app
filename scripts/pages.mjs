@@ -4,7 +4,7 @@
 export const SITE = {
   name: 'AnyRedact',
   origin: 'https://anyredact.app',
-  tagline: 'Free online redaction for PDF, images, Word and text',
+  tagline: 'Free online redaction for PDF, images, Word, Excel and text',
 };
 
 
@@ -88,6 +88,36 @@ export const TOOLS = [
     ],
   },
   {
+    slug: 'redact-excel',
+    format: 'sheet',
+    nav: 'Excel',
+    title: 'Redact Excel Spreadsheet Online Free: XLSX, ODS & CSV | AnyRedact',
+    description:
+      'Redact Excel (XLSX), OpenDocument (ODS) and CSV spreadsheets online for free. Find names, emails, phone and account numbers in every sheet and remove them while the formatting stays.',
+    h1: 'Redact Excel and other spreadsheets',
+    lead: 'Remove personal data from XLSX, ODS and CSV files, across every sheet, comment and header.',
+    hint: 'Excel .xlsx, OpenDocument .ods or CSV',
+    points: [
+      ['Cells keep their styles', 'Only redacted cells change. Number formats, colours, column widths and charts stay put.'],
+      ['Hidden sheets too', 'Hidden sheets, comments, notes, headers and footers are scanned, and hidden sheets are listed in the editor.'],
+      ['No copies left behind', 'Values cached by charts and pivot tables are updated, and a redacted formula becomes plain text so it cannot rebuild the value.'],
+    ],
+    faq: [
+      {
+        q: 'Does it work with old .xls files?',
+        a: 'Not yet. Save it as .xlsx in Excel, LibreOffice or Google Sheets first.',
+      },
+      {
+        q: 'Are formulas kept?',
+        a: 'Yes, except in cells whose result is redacted. Those hold the redacted text instead.',
+      },
+      {
+        q: 'Is the workbook author cleared?',
+        a: 'Yes. The author, company, comment authors, custom properties and the folder the file was saved in are left out of the download.',
+      },
+    ],
+  },
+  {
     slug: 'redact-text',
     format: 'text',
     nav: 'Text',
@@ -114,12 +144,12 @@ export const TOOLS = [
 export const HOME = {
   slug: '',
   format: 'all',
-  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word & Text',
+  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word, Excel & Text',
   description:
-    'Redact PDFs, images, Word documents and text online for free. AI finds the personal information, you review it, and nothing is stored.',
+    'Redact PDFs, images, Word documents, spreadsheets and text online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
-  lead: 'Drop a PDF, image, Word document or text file. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
-  hint: 'PDF, Word (DOCX), PNG, JPG, WebP or text',
+  lead: 'Drop a PDF, image, Word document, spreadsheet or text file. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
+  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP or text',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
@@ -144,7 +174,7 @@ export const HOME = {
     },
     {
       q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), PNG, JPG, WebP and text files such as TXT, CSV, JSON and logs. Audio and video are planned.',
+      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP and text files such as TXT, CSV, JSON and logs. Audio and video are planned.',
     },
   ],
 };

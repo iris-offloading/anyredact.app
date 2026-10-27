@@ -319,8 +319,8 @@ async function removeThumbnail(zip: JSZip) {
 }
 
 /** Hyperlink targets live in .rels files; blank any that point at redacted text or a mail address. */
-async function scrubRelationships(zip: JSZip, redacted: Set<string>) {
-  for (const name of Object.keys(zip.files).filter((n) => /^word\/_rels\/.*\.rels$/.test(n))) {
+export async function scrubRelationships(zip: JSZip, redacted: Set<string>, parts = /^word\/_rels\/.*\.rels$/) {
+  for (const name of Object.keys(zip.files).filter((n) => parts.test(n))) {
     const xml = new DOMParser().parseFromString(await zip.file(name)!.async('string'), 'application/xml');
     let changed = false;
     for (const rel of Array.from(xml.getElementsByTagName('Relationship'))) {
@@ -335,7 +335,7 @@ async function scrubRelationships(zip: JSZip, redacted: Set<string>) {
   }
 }
 
-async function scrubProperties(zip: JSZip) {
+export async function scrubProperties(zip: JSZip) {
   const blank: Record<string, string[]> = {
     'docProps/core.xml': ['creator', 'lastModifiedBy', 'title', 'subject', 'description', 'keywords', 'category'],
     'docProps/app.xml': ['Company', 'Manager'],

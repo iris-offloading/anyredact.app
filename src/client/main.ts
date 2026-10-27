@@ -6,7 +6,7 @@ import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import { pagesFor } from '../shared/pricing.ts';
 import { highlight, pieces, unitRange } from './highlight.ts';
-import type { Finding, Layout, LoadedDoc, ManualBox, MetaField, Page, RedactStyle, Unit } from './types.ts';
+import type { DocView, Finding, Layout, LoadedDoc, ManualBox, MetaField, Page, RedactStyle, Unit } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
@@ -15,10 +15,11 @@ const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
   image: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp',
   docx: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  sheet: '.xlsx,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,text/csv',
   text: '.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.yaml,.yml,text/*',
   all: '',
 };
-ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
+ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.sheet, ACCEPT.text].join(',');
 
 // What the "Look for" chips offer. AI findings are filtered by these.
 const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
@@ -30,7 +31,7 @@ const MAX_AI_PICTURE_PAGES = 30;
 
 /** Whether the preview shows text: everything except PDF pages and images. */
 function hasText(doc: LoadedDoc) {
-  return doc.kind === 'text' || doc.kind === 'docx';
+  return doc.kind === 'text' || doc.kind === 'docx' || doc.kind === 'sheet';
 }
 
 function kindOf(file: File): Kind | null {
@@ -38,7 +39,8 @@ function kindOf(file: File): Kind | null {
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
   if (/^image\/(png|jpeg|webp)$/.test(file.type) || /\.(png|jpe?g|webp)$/.test(n)) return 'image';
   if (n.endsWith('.docx')) return 'docx';
-  if (n.endsWith('.doc')) return null;
+  if (/\.(xlsx|ods)$/.test(n)) return 'sheet';
+  if (/\.(doc|xls)$/.test(n)) return null;
   if (file.type.startsWith('text/') || /\.(txt|md|csv|tsv|json|log|xml|html?|ya?ml)$/.test(n) || !file.type) return 'text';
   return null;
 }
@@ -51,10 +53,12 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
       return (await import('./formats/image.ts')).loadImage(file, progress);
     case 'docx':
       return (await import('./formats/docx.ts')).loadDocx(file, progress);
+    case 'sheet':
+      return (await import('./formats/sheet.ts')).loadSheet(file, progress);
     case 'text':
       return (await import('./formats/text.ts')).loadText(file);
     default:
-      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, DOCX or a text file. Old .doc files need to be saved as .docx first.');
+      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, DOCX, XLSX, ODS or a text file. Old .doc and .xls files need to be saved as .docx or .xlsx first.');
   }
 }
 
@@ -88,6 +92,9 @@ class App {
   // Word files laid out as pages, when the layout worked.
   private sheet: HTMLElement | null = null;
   private layout: Layout | null = null;
+  private view: DocView | null = null;
+  // Text units the custom view has no place for, such as spreadsheet comments.
+  private extras = h('div');
   private aiError: string | null = null;
   // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
@@ -136,7 +143,7 @@ class App {
       this.fileInput,
       h('span', { className: 'drop-icon', 'aria-hidden': 'true' }, '⬆'),
       h('span', { className: 'drop-title' }, 'Drop a file here or ', h('u', {}, 'choose one')),
-      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PNG, JPG, WebP or text'),
+      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP or text'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, () => drop.classList.remove('over'));
@@ -283,8 +290,8 @@ class App {
       if (this.doc.render) await this.layOut(this.doc);
       this.intake.hidden = true;
       this.workspace.hidden = false;
-      this.renderPreview();
-      await this.analyze();
+      await this.renderPreview();
+      if (this.doc !== null) await this.analyze();
     } catch (err) {
       console.error(err);
       this.doc = null;
@@ -311,6 +318,8 @@ class App {
     this.editors = [];
     this.sheet = null;
     this.layout = null;
+    this.view?.dispose();
+    this.view = null;
     this.preview.replaceChildren();
     this.list.replaceChildren();
     this.metaBox.hidden = true;
@@ -534,6 +543,7 @@ class App {
   private focus(f: Finding) {
     if (this.focused === f.key) return;
     this.focused = f.key;
+    if (this.view?.reveal(f)) return;
     const el = this.preview.querySelector<HTMLElement>(`[data-key="${CSS.escape(f.key)}"]`) ?? (f.page !== undefined ? this.editors[f.page]?.el : null);
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -567,8 +577,24 @@ class App {
     if (ratio < 1) sheet.style.zoom = String(ratio);
   }
 
-  private renderPreview() {
+  private async renderPreview() {
     const doc = this.doc!;
+    if (doc.mountView) {
+      const host = h('div', { className: 'sheet-view' });
+      this.extras = h('div');
+      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlighted cell to redact or keep it. Select a cell to add more.'), host, this.extras);
+      // The grid reports its own selection; text selection only applies to the list under it.
+      this.extras.addEventListener('mouseup', this.onSelect);
+      this.extras.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      const view = await doc.mountView(host, {
+        toggle: (keys, on) => this.toggle(keys, on),
+        select: (pick) => this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : ''),
+      });
+      if (this.doc !== doc) return view.dispose();
+      this.view = view;
+      this.refreshPreview();
+      return;
+    }
     this.editors = doc.pages.map((page) => this.pageEditor(page));
     // Pictures in a Word file show at their own size rather than full width.
     if (doc.kind === 'docx') this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
@@ -618,8 +644,13 @@ class App {
     const sel = range?.toString().trim();
     this.preview.querySelector('.sel-add')?.remove();
     if (!range || !sel || sel.length < 2 || sel.length > 200 || !this.doc || !hasText(this.doc)) return;
-    const picks = this.selectedSpans(range);
-    if (!picks.length) return;
+    this.offerPicks(this.selectedSpans(range), sel);
+  };
+
+  /** Offers to redact a selection at this spot only, or every match of its text. */
+  private offerPicks(picks: { unitId: string; start: number; end: number }[], sel: string) {
+    this.preview.querySelector('.sel-add')?.remove();
+    if (!picks.length || sel.trim().length < 2) return;
     const done = (fn: () => void) => () => {
       getSelection()?.removeAllRanges();
       fn();
@@ -629,10 +660,10 @@ class App {
         'div',
         { className: 'sel-add' },
         h('button', { type: 'button', className: 'btn primary', textContent: 'Redact here', onclick: done(() => this.addPicks(picks)) }),
-        h('button', { type: 'button', className: 'btn', textContent: 'Redact everywhere', onclick: done(() => this.addTerm(sel)) }),
+        h('button', { type: 'button', className: 'btn', textContent: 'Redact everywhere', onclick: done(() => this.addTerm(sel.trim())) }),
       ),
     );
-  };
+  }
 
   /** Character ranges of the selection in each text unit it touches, without surrounding spaces. */
   private selectedSpans(range: Range) {
@@ -690,19 +721,27 @@ class App {
       if (!this.preview.childElementCount) this.preview.replaceChildren(...pictures);
       return;
     }
+    this.view?.update(this.findings);
     // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
+    // Spreadsheet cells show in the grid above, so only comments, headers and footers are listed here.
     const byUnit = new Map<string, Finding[]>();
     for (const f of this.findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
     const { sheet, layout } = this;
     if (sheet && layout) return this.refreshSheet(sheet, layout, byUnit, pictures);
-    const blocks = doc.units.flatMap((u, i) => (u.page === undefined ? [this.unitBlock(u, i, byUnit.get(u.id) ?? [])] : []));
+    let section: string | undefined;
+    const blocks = doc.units.flatMap((u, i) => {
+      if (u.page !== undefined || doc.gridUnits?.has(u.id) || (u.quiet && !byUnit.has(u.id))) return [];
+      const heading = u.section !== undefined && u.section !== section ? [h('h3', { className: 'unit-section' }, u.section)] : [];
+      section = u.section;
+      return [...heading, this.unitBlock(u, i, byUnit.get(u.id) ?? [])];
+    });
     const MAX = 2000;
-    this.preview.replaceChildren(
-      h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select text to add more.'),
+    const text = [
       h('div', { className: 'text-preview' + (doc.kind === 'docx' ? ' docx' : '') }, ...blocks.slice(0, MAX)),
       ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
-      ...pictures,
-    );
+    ];
+    if (doc.mountView) this.extras.replaceChildren(...(blocks.length ? text : []));
+    else this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select text to add more.'), ...text, ...pictures);
   }
 
   private mark(f: Finding, text: string | Node) {

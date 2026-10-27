@@ -1,6 +1,8 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import JSZip from 'jszip';
 import sharp from 'sharp';
+import ExcelJS from 'exceljs';
+import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 const out = process.argv[2] || 'e2e-out';
 const pdf = await PDFDocument.create();
@@ -49,6 +51,44 @@ ${pic('rId8', 2, 'Logo')}
 }
 
 writeFileSync(`${out}/sample.txt`, 'Hi, I am Jane Doe. Reach me at jane@example.com or 415-555-0132.\nServer: 10.0.0.12\nAlt number: 415-555-\n0199. Ask Jane.\nNext steps\nHelpline: 0800 123 4567\n');
+
+// Spreadsheet: styled header, a phone stored as a number, a formula copying an email,
+// a note, a footer, a hidden sheet and workbook properties.
+const book = new ExcelJS.Workbook();
+book.creator = 'Bob Author';
+book.lastModifiedBy = 'Bob Author';
+book.company = 'Acme Ltd';
+const sheet = book.addWorksheet('Customers');
+sheet.columns = [{ width: 18 }, { width: 28 }, { width: 16 }, { width: 28 }];
+sheet.addRow(['Name', 'Email', 'Phone', 'Contact']);
+sheet.getRow(1).font = { bold: true };
+sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+sheet.addRow(['Customer', 'jane.doe@example.com', 4155550132, { formula: 'B2', result: 'jane.doe@example.com' }]);
+sheet.addRow(['Supplier', { text: 'bob@corp.io', hyperlink: 'mailto:bob@corp.io' }, '415-555-0199', 'Helpline: 0800 123 4567']);
+sheet.getCell('C2').numFmt = '0';
+sheet.getCell('A2').note = 'Called back from 415-555-0177';
+sheet.headerFooter.oddFooter = 'Prepared by Dr. Maria Gonzalez';
+sheet.views = [{ state: 'frozen', ySplit: 1 }];
+const orders = book.addWorksheet('Orders', { properties: { tabColor: { argb: 'FF4472C4' } } });
+orders.columns = [{ width: 14 }, { width: 14 }, { width: 12 }];
+orders.mergeCells('A1:C1');
+orders.getCell('A1').value = 'Orders for Jane Doe';
+orders.getCell('A1').alignment = { horizontal: 'center' };
+orders.getCell('A1').font = { bold: true, size: 14 };
+orders.addRow(['Date', 'Amount', 'Paid']);
+orders.addRow([new Date(Date.UTC(2026, 9, 1)), 1234.5, true]);
+orders.getCell('A3').numFmt = 'yyyy-mm-dd';
+orders.getCell('B3').numFmt = '#,##0.00';
+orders.getCell('B3').border = { bottom: { style: 'double' } };
+const old = book.addWorksheet('Old', { state: 'hidden' });
+old.addRow(['Customer', 'old ssn 123-45-6789']);
+await book.xlsx.writeFile(`${out}/sample.xlsx`);
+try {
+  // LibreOffice, when installed, turns the same workbook into an ODS file.
+  execFileSync('soffice', ['--headless', '--convert-to', 'ods', '--outdir', out, `${out}/sample.xlsx`], { stdio: 'ignore' });
+} catch {
+  /* the ODS test is skipped */
+}
 
 /** Adds EXIF (camera, author, date, GPS) and XMP to a JPEG, for the metadata test. */
 export function withMetadata(jpeg) {

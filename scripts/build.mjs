@@ -16,6 +16,8 @@ await mkdir(path.join(dist, 'assets'), { recursive: true });
 
 const pdfjsVersion = require('pdfjs-dist/package.json').version;
 const pdfWorker = `/assets/pdf.worker-${pdfjsVersion}.min.mjs`;
+const univerVersion = JSON.parse(await readFile(path.join(root, 'node_modules/@univerjs/preset-sheets-core/package.json'), 'utf8')).version;
+const univerCss = `/assets/univer-${univerVersion}.css`;
 const mediapipeVersion = JSON.parse(await readFile(path.join(root, 'node_modules/@mediapipe/tasks-vision/package.json'), 'utf8')).version;
 
 const result = await build({
@@ -27,11 +29,14 @@ const result = await build({
   target: 'es2022',
   minify: true,
   sourcemap: true,
+  // Without sources the maps stay under the 25 MiB Workers asset limit.
+  sourcesContent: false,
   entryNames: '[name]-[hash]',
   chunkNames: 'chunk-[hash]',
   metafile: true,
   define: {
     __PDF_WORKER_SRC__: JSON.stringify(pdfWorker),
+    __UNIVER_CSS__: JSON.stringify(univerCss),
     __MEDIAPIPE_WASM__: JSON.stringify(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${mediapipeVersion}/wasm`),
   },
   logLevel: 'warning',
@@ -44,6 +49,7 @@ const appSrc = entrySrc('main');
 const accountSrc = entrySrc('account');
 
 await cp(require.resolve('pdfjs-dist/build/pdf.worker.min.mjs'), path.join(dist, pdfWorker));
+await cp(path.join(root, 'node_modules/@univerjs/preset-sheets-core/lib/index.css'), path.join(dist, univerCss));
 await cp(path.join(root, 'static'), dist, { recursive: true });
 const css = await readFile(path.join(root, 'static/styles.css'));
 const cssHash = (await import('node:crypto')).createHash('sha256').update(css).digest('hex').slice(0, 8);
@@ -248,7 +254,7 @@ ${sitemapUrls.map((s) => `  <url><loc>${url(s)}</loc><lastmod>${today}</lastmod>
 );
 await writeFile(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${SITE.origin}/sitemap.xml\n`);
 
-const keep = new Set([...Object.keys(result.metafile.outputs).map((f) => path.basename(f)), path.basename(pdfWorker)]);
+const keep = new Set([...Object.keys(result.metafile.outputs).map((f) => path.basename(f)), path.basename(pdfWorker), path.basename(univerCss)]);
 for (const f of await readdir(path.join(dist, 'assets'))) {
   if (!keep.has(f)) await rm(path.join(dist, 'assets', f), { force: true });
 }

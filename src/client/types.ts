@@ -13,6 +13,10 @@ export interface Unit {
   text: string;
   /** Page index for visual formats. */
   page?: number;
+  /** Heading the preview shows above the first unit of a group, such as a sheet name. */
+  section?: string;
+  /** Shown in the preview only when something was found in it, e.g. a header holding just a page number. */
+  quiet?: boolean;
   /** Maps a character range to rectangles in page bitmap pixels. */
   rectsFor?(start: number, end: number): Rect[];
 }
@@ -53,8 +57,22 @@ export interface MetaField {
 
 export type RedactStyle = 'block' | 'label';
 
+export interface ViewHandlers {
+  toggle(keys: string[], on: boolean): void;
+  /** A spot the user selected in the view, or null when the selection holds none. */
+  select(pick: { unitId: string; start: number; end: number } | null): void;
+}
+
+/** A preview drawn by the format itself, such as the spreadsheet grid. */
+export interface DocView {
+  update(findings: Finding[]): void;
+  /** Shows the finding in the view; false when it has no place there. */
+  reveal(f: Finding): boolean;
+  dispose(): void;
+}
+
 export interface LoadedDoc {
-  kind: 'text' | 'image' | 'pdf' | 'docx';
+  kind: 'text' | 'image' | 'pdf' | 'docx' | 'sheet';
   name: string;
   units: Unit[];
   pages: Page[];
@@ -64,6 +82,9 @@ export interface LoadedDoc {
   metadata?: MetaField[];
   /** Word: lays out the pages in the preview, as Word shows them. */
   render?(container: HTMLElement): Promise<Layout>;
+  /** Units shown in the custom view; the rest are listed under it. */
+  gridUnits?: Set<string>;
+  mountView?(el: HTMLElement, on: ViewHandlers): Promise<DocView>;
   exportFile(findings: Finding[], boxes: ManualBox[], style: RedactStyle): Promise<{ blob: Blob; filename: string }>;
 }
 
