@@ -11,7 +11,7 @@ import { audioCredits } from '../src/shared/pricing.ts';
 // Minimal D1 over node:sqlite, with the real schema.
 function d1(): D1Database {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(new URL('../migrations/0001_accounts.sql', import.meta.url), 'utf8'));
+  for (const m of ['0001_accounts.sql', '0002_purchases.sql']) db.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
   const prepare = (sql: string) => {
     let args: unknown[] = [];
     const stmt = {
@@ -141,10 +141,19 @@ test('email sign-in sends a one-time link that starts a session', async () => {
   assert.equal(res.status, 200);
   assert.equal(sent[0].to, 'jane@example.com');
   const link = sent[0].text.match(/https:\S+/)![0];
-  const verify = await fetchWorker(new Request(link), e);
-  assert.equal(verify.headers.get('location'), '/account');
-  assert.match(verify.headers.get('set-cookie') || '', /^session=/);
-  assert.equal((await fetchWorker(new Request(link), e)).headers.get('location'), '/account?error=link');
+  // Opening the link spends nothing; the page's Sign in button posts the token.
+  assert.match(link, /^https:\/\/anyredact\.app\/account#signin=/);
+  const token = decodeURIComponent(link.split('#signin=')[1]);
+  const verify = (t: string, origin = 'https://anyredact.app') =>
+    fetchWorker(new Request('https://anyredact.app/auth/email/verify', { method: 'POST', body: JSON.stringify({ token: t }), headers: { origin } }), e);
+  assert.equal((await verify(token, 'https://evil.example')).status, 403);
+  const ok = await verify(token);
+  assert.equal(ok.status, 200);
+  assert.match(ok.headers.get('set-cookie') || '', /^session=/);
+  assert.equal((await verify(token)).status, 400);
+  // Links sent before the button existed land on the same page.
+  const old = await fetchWorker(new Request(`https://anyredact.app/auth/email/verify?token=${encodeURIComponent(token)}`), e);
+  assert.equal(old.headers.get('location'), `/account#signin=${encodeURIComponent(token)}`);
 });
 
 test('audio costs three credits per started minute', () => {
@@ -192,4 +201,34 @@ test('stops sending sign-in links to one address after a few', async () => {
   for (let i = 0; i < 3; i++) assert.equal((await ask()).status, 200);
   assert.equal((await ask()).status, 429);
   assert.equal(sent.length, 3);
+});
+
+test('refunds and disputes take pack credits back, and a negative balance blocks free use', async () => {
+  const db = d1();
+  const e = env(db);
+  const userId = await upsertUser(e, 'jane@example.com');
+  const send = async (event: object) => {
+    const body = JSON.stringify(event);
+    return fetchWorker(new Request('https://anyredact.app/api/stripe/webhook', { method: 'POST', body, headers: { 'stripe-signature': await sign(body) } }), e);
+  };
+  const balance = async () => ((await db.prepare('SELECT pack_pages FROM users WHERE id = ?').bind(userId).first()) as { pack_pages: number }).pack_pages;
+  await send({ id: 'evt_buy', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_1', metadata: { user_id: userId, product: 'pack-100' } } } });
+  assert.equal(await balance(), 100);
+  await spendPaidPages(e, userId, 80);
+  // Half refunded, then the rest disputed: 100 taken back in all, even though 80 were spent.
+  await send({ id: 'evt_ref', type: 'charge.refunded', data: { object: { payment_intent: 'pi_1', customer: 'cus_1', amount: 500, amount_refunded: 250 } } });
+  assert.equal(await balance(), -30);
+  await send({ id: 'evt_dis', type: 'charge.dispute.created', data: { object: { payment_intent: 'pi_1', amount: 500 } } });
+  assert.equal(await balance(), -80);
+  await send({ id: 'evt_dis2', type: 'charge.dispute.created', data: { object: { payment_intent: 'pi_1', amount: 500 } } });
+  assert.equal(await balance(), -80);
+
+  const session = await sha256('tok');
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(session, userId, 4102444800).run();
+  const res = await fetchWorker(
+    new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane' }), headers: { origin: 'https://anyredact.app', cookie: 'session=tok' } }),
+    e,
+  );
+  assert.equal(res.status, 402);
+  assert.equal(((await res.json()) as { code: string }).code, 'negative');
 });

@@ -1111,7 +1111,7 @@ class App {
 const credits = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
 
 function aiFailure(err: unknown, fallback: string): string {
-  if (err instanceof QuotaError) return `${err.message} They reset tomorrow, or you can buy more under Account.`;
+  if (err instanceof QuotaError) return err.negative ? err.message : `${err.message} They reset tomorrow, or you can buy more under Account.`;
   return err instanceof Error ? err.message : fallback;
 }
 

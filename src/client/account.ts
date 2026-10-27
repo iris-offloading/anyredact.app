@@ -119,10 +119,28 @@ function balance(user: NonNullable<Me['user']>) {
   return h('section', {}, h('h2', {}, 'Your credits'), ...rows, actions);
 }
 
+/** The emailed link opens this page; the token is only spent when the person presses the button. */
+function confirmSignIn(token: string) {
+  const button = h('button', {
+    type: 'button',
+    className: 'btn primary',
+    textContent: 'Sign in',
+    onclick: async () => {
+      button.disabled = true;
+      const r = await post('/auth/email/verify', { token });
+      history.replaceState(null, '', '/account');
+      if (!r.ok) say(r.error || 'Sign-in failed.', true);
+      render();
+    },
+  });
+  root.replaceChildren(status, h('section', {}, h('h2', {}, 'Sign in to AnyRedact'), button));
+}
+
 async function render() {
+  const token = new URLSearchParams(location.hash.slice(1)).get('signin');
+  if (token) return confirmSignIn(token);
   const params = new URLSearchParams(location.search);
   if (params.get('paid')) say('Thanks! Your credits appear once the payment is confirmed, usually within seconds.');
-  if (params.get('error') === 'link') say('That sign-in link has expired or was already used. Ask for a new one.', true);
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
   const me = (await fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null }))) as Me;
   root.replaceChildren(

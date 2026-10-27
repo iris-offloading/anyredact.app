@@ -99,7 +99,8 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
   await env.DB!.prepare('INSERT INTO login_tokens (token_hash, email, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), email, now() + LOGIN_MINUTES * 60)
     .run();
-  const link = `${origin}/auth/email/verify?token=${encodeURIComponent(token)}`;
+  // The page only shows a Sign in button: mail scanners that open links can't use up the token.
+  const link = `${origin}/account#signin=${encodeURIComponent(token)}`;
   try {
     await env.EMAIL.send({
       from: env.EMAIL_FROM || 'sign-in@anyredact.app',
@@ -143,14 +144,20 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     return sendLoginEmail(env, origin, email.trim().toLowerCase());
   }
 
-  if (path === '/auth/email/verify') {
-    const token = url.searchParams.get('token') || '';
+  // Links sent before the Sign in button existed.
+  if (path === '/auth/email/verify' && request.method === 'GET') {
+    return redirect(`/account#signin=${encodeURIComponent(url.searchParams.get('token') || '')}`);
+  }
+
+  if (path === '/auth/email/verify' && request.method === 'POST') {
+    if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
+    const { token } = (await request.json().catch(() => ({}))) as { token?: unknown };
     const row = await env.DB.prepare('DELETE FROM login_tokens WHERE token_hash = ? RETURNING email, expires_at')
-      .bind(await sha256(token))
+      .bind(await sha256(typeof token === 'string' ? token : ''))
       .first<{ email: string; expires_at: number }>();
-    if (!row || row.expires_at < now()) return redirect('/account?error=link');
+    if (!row || row.expires_at < now()) return json({ error: 'That sign-in link has expired or was already used. Ask for a new one.' }, 400);
     const userId = await upsertUser(env, row.email);
-    return redirect('/account', [await startSession(env, userId), signedInHint(true)]);
+    return json({ ok: true }, 200, [await startSession(env, userId), signedInHint(true)]);
   }
 
   if (path === '/auth/google') {

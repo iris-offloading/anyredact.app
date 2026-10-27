@@ -96,6 +96,14 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
     if (!product || !userId) return;
     if (obj.mode === 'payment' && obj.payment_status === 'paid') {
       await db.prepare('UPDATE users SET pack_pages = pack_pages + ? WHERE id = ?').bind(product.pages, userId).run();
+      // Kept for refunds. Never fails the event: the credits above are already granted, and a retry would grant them again.
+      if (obj.payment_intent) {
+        await db
+          .prepare('INSERT OR IGNORE INTO purchases (payment_intent, user_id, pages, created_at) VALUES (?, ?, ?, ?)')
+          .bind(obj.payment_intent, userId, product.pages, now())
+          .run()
+          .catch((err: unknown) => console.error('purchase not recorded', obj.payment_intent, err));
+      }
     } else if (obj.mode === 'subscription') {
       // invoice.paid sets the exact period end; until then allow a month.
       await db
@@ -106,8 +114,31 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
   } else if (event.type === 'invoice.paid' && invoiceSubscription(obj)) {
     const periodEnd = obj.lines?.data?.[0]?.period?.end ?? now() + 31 * 86400;
     await db.prepare('UPDATE users SET sub_id = ?, sub_used = 0, sub_period_end = ? WHERE stripe_customer = ?').bind(invoiceSubscription(obj), periodEnd, obj.customer).run();
+  } else if (event.type === 'charge.refunded' && obj.amount > 0) {
+    await takeBack(db, obj.payment_intent, obj.customer, obj.amount_refunded / obj.amount);
+  } else if (event.type === 'charge.dispute.created') {
+    await takeBack(db, obj.payment_intent, null, 1);
   } else if (event.type === 'customer.subscription.deleted') {
     await db.prepare('UPDATE users SET sub_id = NULL, sub_pages = 0, sub_used = 0, sub_period_end = 0 WHERE sub_id = ?').bind(obj.id).run();
+  }
+}
+
+/**
+ * Takes back the credits a refunded or disputed payment bought, in proportion to
+ * the amount returned. A pack's credits come off the balance even when already
+ * spent, which can leave it negative. A plan payment ends this period's credits.
+ */
+async function takeBack(db: D1Database, paymentIntent: string | null, customer: string | null, share: number): Promise<void> {
+  const purchase = paymentIntent
+    ? await db.prepare('SELECT user_id, pages, taken FROM purchases WHERE payment_intent = ?').bind(paymentIntent).first<{ user_id: string; pages: number; taken: number }>()
+    : null;
+  if (purchase) {
+    const due = Math.min(purchase.pages, Math.ceil(purchase.pages * share)) - purchase.taken;
+    if (due <= 0) return;
+    await db.prepare('UPDATE users SET pack_pages = pack_pages - ? WHERE id = ?').bind(due, purchase.user_id).run();
+    await db.prepare('UPDATE purchases SET taken = taken + ? WHERE payment_intent = ?').bind(due, paymentIntent).run();
+  } else if (customer) {
+    await db.prepare('UPDATE users SET sub_used = sub_pages WHERE stripe_customer = ? AND sub_id IS NOT NULL').bind(customer).run();
   }
 }
 
