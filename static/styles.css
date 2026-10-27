@@ -457,10 +457,27 @@ mark.saying { outline: 2px solid var(--accent); }
 .credit-table th, .credit-table td { text-align: left; vertical-align: top; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--line); }
 .credit-table th { font-weight: 600; width: 45%; }
 .credit-table td { color: var(--muted); }
-.signin-box { display: flex; flex-direction: column; gap: 10px; max-width: 400px; margin-top: 24px; }
+/* Short pages (404, account): one centred block filling the space between header and footer. */
+.solo { min-height: min(680px, calc(100svh - var(--header-h))); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-top: 48px; padding-bottom: 64px; }
+.solo h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.03em; margin: 0 0 12px; }
+#account { width: 100%; display: flex; justify-content: center; }
+.auth-card { width: min(100%, 420px); padding: 32px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); }
+.auth-card h1 { font-size: 1.6rem; letter-spacing: -0.02em; margin: 0 0 24px; text-align: center; }
+.auth-card .status { margin: 0 0 16px; }
+.auth-card p { margin: 0 0 10px; }
+.auth-card .btn { width: 100%; min-height: 48px; border-radius: 12px; }
+.auth-card .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+.auth-card .credit-line { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.auth-card .credit-line span { color: var(--muted); }
+.auth-card .who { color: var(--muted); text-align: center; overflow-wrap: anywhere; margin-bottom: 16px; }
+.auth-card .who strong { color: var(--text); }
+.or { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: 0.875rem; }
+.or::before, .or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
 .signin { display: flex; flex-direction: column; gap: 10px; }
-.signin input { font: inherit; min-height: 48px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); }
-.signin-box .btn { width: 100%; min-height: 48px; border-radius: 12px; }
+.signin input { font: inherit; min-height: 48px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--text); }
+.signin input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.google svg { flex: none; }
+@media (max-width: 640px) { .solo { justify-content: flex-start; min-height: 0; padding-top: 40px; } .auth-card { padding: 24px 20px; border-radius: 16px; } }
 .btn.google[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 .cell-bar { display: flex; align-items: baseline; gap: 12px; min-height: 38px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .cell-ref { flex: none; min-width: 3em; color: var(--muted); font-variant-numeric: tabular-nums; }
