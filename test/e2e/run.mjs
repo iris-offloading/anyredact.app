@@ -63,7 +63,7 @@ async function run(slug, file, wait = 'label.finding') {
 }
 
 async function download(name) {
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.panel > button.primary')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.panel-foot > button.primary')]);
   const p = fx(name);
   await dl.saveAs(p);
   return { path: p, filename: dl.suggestedFilename() };
@@ -297,7 +297,7 @@ if (existsSync(fx('sample.ods'))) {
   check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
   await page.click('.consent button.primary');
   await page.waitForSelector('.consent', { state: 'hidden' });
-  await page.click('.panel > button.primary');
+  await page.click('.panel-foot > button.primary');
   await page.waitForSelector('.warn-text');
   const warning = await page.textContent('.warn-text');
   check(/names may still be readable/.test(warning) && !/phone/.test(warning), `check warning: ${warning}`);

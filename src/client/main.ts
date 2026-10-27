@@ -159,8 +159,13 @@ class App {
       'label',
       { className: 'drop', for: 'file-input' },
       this.fileInput,
-      h('span', { className: 'drop-icon', 'aria-hidden': 'true' }, '⬆'),
-      h('span', { className: 'drop-title' }, 'Drop a file here or ', h('u', {}, 'choose one')),
+      h('span', {
+        className: 'drop-icon',
+        'aria-hidden': 'true',
+        innerHTML: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
+      }),
+      h('span', { className: 'drop-title' }, 'Drop a file to start'),
+      h('span', { className: 'drop-or' }, 'or ', h('u', {}, 'choose one'), ' from your device'),
       h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
@@ -248,23 +253,26 @@ class App {
     this.consentBox = h('div', { className: 'consent', hidden: true });
 
     this.panelHead = h('div', { className: 'panel-head' }, this.docName, reset);
+    // The body scrolls on its own so the download button stays in view at the foot of the panel.
     const panel = h(
       'aside',
-      { className: 'panel' },
-      this.panelHead,
-      this.consentBox,
-      h('h3', {}, 'Look for'),
-      typeBoxes,
-      this.pictureBox,
-      h('h3', {}, 'Always redact'),
-      termsArea,
-      h('h3', {}, 'Found'),
-      this.list,
-      this.metaBox,
-      this.styleRow,
-      this.download,
-      this.warn,
-      this.notes,
+      { className: 'panel', 'aria-label': 'Review' },
+      h(
+        'div',
+        { className: 'panel-body' },
+        this.panelHead,
+        this.consentBox,
+        h('h3', {}, 'Found'),
+        this.list,
+        h('h3', {}, 'Look for'),
+        typeBoxes,
+        this.pictureBox,
+        h('h3', {}, 'Always redact'),
+        termsArea,
+        this.metaBox,
+        this.notes,
+      ),
+      h('div', { className: 'panel-foot' }, this.styleRow, this.download, this.warn),
     );
     this.preview = h('div', { className: 'preview' });
     this.workspace = h('div', { className: 'workspace', hidden: true }, panel, this.preview);
@@ -520,7 +528,7 @@ class App {
     if (!groups.size && !manual) {
       const visual = this.doc?.pages.length;
       this.list.replaceChildren(
-        h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw boxes, or add words above.' : this.doc?.audio ? 'Nothing detected. Drag on the timeline to bleep a stretch.' : 'Nothing detected. Add words above, or select text in the preview to redact it.'),
+        h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw boxes, or add words below.' : this.doc?.audio ? 'Nothing detected. Drag on the timeline to bleep a stretch.' : 'Nothing detected. Add words below, or select text in the preview to redact it.'),
       );
       return;
     }

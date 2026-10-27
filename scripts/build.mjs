@@ -131,7 +131,8 @@ function layout(page, main) {
 <title>${esc(page.title)}</title>
 <meta name="description" content="${esc(page.description)}">
 <link rel="canonical" href="${url(page.slug)}">
-<meta name="theme-color" content="#111318">
+<meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111216" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${SITE.name}">
 <meta property="og:title" content="${esc(page.title)}">
@@ -154,36 +155,50 @@ ${footer()}
 `;
 }
 
+const CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const POINT_ICON = '<path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>';
+const STEPS = [
+  ['Open your file', 'Our AI finds the personal information in it.'],
+  ['Review what was found', 'Untick anything you want to keep, or mark more by hand.'],
+  ['Download the redacted copy', 'The sensitive content is removed from the file itself.'],
+];
+const BADGES = { pdf: 'PDF', image: 'IMG', docx: 'DOC', sheet: 'XLS', text: 'TXT', audio: 'MP3' };
+
 function toolPage(page) {
   const points = page.points
-    .map(([t, d]) => `<div class="point"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`)
+    .map(
+      ([t, d]) =>
+        `<div class="point"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${POINT_ICON}</svg><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`,
+    )
     .join('');
+  const steps = STEPS.map(([t, d], i) => `<li><span class="step-n">0${i + 1}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join('');
   const faq = page.faq.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
   const others = TOOLS.filter((t) => t.slug !== page.slug)
-    .map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.h1)}</strong><span>${esc(t.lead)}</span></a>`)
+    .map(
+      (t) =>
+        `<a class="card" href="/${t.slug}"><span class="badge" aria-hidden="true">${BADGES[t.format] ?? t.nav.slice(0, 3).toUpperCase()}</span><span class="card-text"><strong>${esc(t.h1)}</strong><span>${esc(t.lead)}</span></span></a>`,
+    )
     .join('');
   return layout(
     { ...page, tool: true },
     `<section class="hero wrap">
-  <h1>${esc(page.h1)}</h1>
-  <p class="lead">${esc(page.lead)}</p>
-</section>
-<section class="wrap">
+  <div class="hero-copy">
+    <p class="eyebrow">${CHECK}Processed, never stored</p>
+    <h1>${esc(page.h1)}</h1>
+    <p class="lead">${esc(page.lead)}</p>
+    <ul class="trust"><li>${CHECK}Free daily credits</li><li>${CHECK}No watermark</li><li>${CHECK}No account needed</li></ul>
+  </div>
   <div id="tool" class="tool" data-format="${page.format}" data-hint="${esc(page.hint)}">
     <noscript><p class="status error">AnyRedact runs in your browser and needs JavaScript enabled.</p></noscript>
   </div>
 </section>
-<section class="wrap points">${points}</section>
-<section class="wrap how">
+<section class="band"><div class="wrap points">${points}</div></section>
+<section class="wrap section how">
   <h2>How it works</h2>
-  <ol>
-    <li><strong>Open your file.</strong> Our AI finds the personal information in it.</li>
-    <li><strong>Review what was found.</strong> Untick anything you want to keep, or mark more by hand.</li>
-    <li><strong>Download the redacted copy.</strong> The sensitive content is removed from the file itself.</li>
-  </ol>
+  <ol class="steps">${steps}</ol>
 </section>
-<section class="wrap faq"><h2>Frequently asked questions</h2>${faq}</section>
-<section class="wrap more"><h2>${page.slug ? 'More redaction tools' : 'Tools for each format'}</h2><div class="cards">${others}</div></section>`,
+<section class="wrap section more"><h2>${page.slug ? 'More redaction tools' : 'Tools for each format'}</h2><div class="cards">${others}</div></section>
+<section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>`,
   );
 }
 
