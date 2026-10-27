@@ -1,11 +1,12 @@
 // Builds the static site into dist/: bundles the client, then renders one
 // HTML page per tool plus the home page, sitemap and robots.txt.
-import { build } from 'esbuild';
+import { build, transform } from 'esbuild';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { CONTACT, LEGAL, UPDATED } from './legal.mjs';
 import { HOME, SITE, TOOLS } from './pages.mjs';
+import { PRICING } from './pricing.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const dist = path.join(root, 'dist');
@@ -90,13 +91,13 @@ function nav(current) {
   return `<header class="site-header"><div class="wrap">
   <a class="logo" href="/">${logoMark(28)}AnyRedact</a>
   <nav aria-label="Tools">${links}</nav>
-  <div class="header-actions">${themeButton}<a class="btn signin-link" href="/account">Sign in</a></div>
+  <div class="header-actions"><a class="header-link" href="/pricing"${current === 'pricing' ? ' aria-current="page"' : ''}>Pricing</a>${themeButton}<a class="btn signin-link" href="/account">Sign in</a></div>
 </div></header>`;
 }
 
 function footer() {
   const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
-  const about = LEGAL.map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('');
+  const about = [PRICING, ...LEGAL].map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
   <div><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
@@ -156,7 +157,7 @@ function layout(page, main) {
 <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css?v=${cssHash}">
 <script src="/theme.js?v=${themeHash}"></script>
-${page.jsonLd === false ? '' : `<script type="application/ld+json">${jsonLd(page)}</script>`}
+${page.jsonLd === false ? '' : `<script type="application/ld+json">${typeof page.jsonLd === 'string' ? page.jsonLd : jsonLd(page)}</script>`}
 ${page.tool ? `<script type="module" src="${appSrc}"></script>` : ''}
 ${page.script ? `<script type="module" src="${page.script}"></script>` : ''}
 </head>
@@ -223,8 +224,13 @@ await writeFile(
   ),
 );
 
+// The pricing page reads plans and packs from src/shared/pricing.ts, so it can't drift from checkout.
+const pricingTs = await transform(await readFile(path.join(root, 'src/shared/pricing.ts'), 'utf8'), { loader: 'ts', format: 'esm' });
+const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.code).toString('base64')}`);
+await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, jsonLd: PRICING.jsonLd(plans, url) }, PRICING.body(plans, esc)));
+
 const today = new Date().toISOString().slice(0, 10);
-const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'account', ...LEGAL.map((p) => p.slug)];
+const sitemapUrls = ['', ...TOOLS.map((t) => t.slug), 'pricing', 'account', ...LEGAL.map((p) => p.slug)];
 await writeFile(
   path.join(dist, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>
@@ -243,4 +249,4 @@ for (const f of await readdir(path.join(dist, 'assets'))) {
   if (!keep.has(f)) await rm(path.join(dist, 'assets', f), { force: true });
 }
 
-console.log(`Built ${pages.length + LEGAL.length + 2} pages into dist/ (app: ${appSrc})`);
+console.log(`Built ${pages.length + LEGAL.length + 3} pages into dist/ (app: ${appSrc})`);

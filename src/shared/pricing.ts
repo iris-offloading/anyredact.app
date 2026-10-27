@@ -3,6 +3,8 @@
 // allowance in src/worker/quota.ts. Code and the database still call them pages.
 
 export const PAGE_CHARS = 3_000;
+/** Free credits each browser gets a day. */
+export const FREE_CREDITS = 10;
 // Most characters one AI request may carry.
 export const MAX_CHARS = 60_000;
 
