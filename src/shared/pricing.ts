@@ -3,6 +3,8 @@
 // allowance in src/worker/quota.ts. Code and the database still call them pages.
 
 export const PAGE_CHARS = 3_000;
+/** Free credits each browser gets a day. */
+export const FREE_CREDITS = 10;
 // Most characters one AI request may carry.
 export const MAX_CHARS = 60_000;
 
@@ -16,13 +18,13 @@ export interface Product {
   monthly?: boolean;
 }
 
-// Prices set by Iris on 2026-10-27 after comparing similar redaction tools.
+// Prices set by Iris on 2026-10-27 after comparing similar redaction tools; packs lowered the same day so they sit closer to plan rates.
 export const PRODUCTS: Product[] = [
   { id: 'plus', name: 'Plus', pages: 600, cents: 900, monthly: true },
   { id: 'pro', name: 'Pro', pages: 3_000, cents: 2_400, monthly: true },
   { id: 'pack-100', name: '100 credits', pages: 100, cents: 500 },
-  { id: 'pack-500', name: '500 credits', pages: 500, cents: 1_900 },
-  { id: 'pack-2000', name: '2,000 credits', pages: 2_000, cents: 5_900 },
+  { id: 'pack-500', name: '500 credits', pages: 500, cents: 1_500 },
+  { id: 'pack-2000', name: '2,000 credits', pages: 2_000, cents: 3_900 },
 ];
 
 /** Credits for a final check after the free first one. */

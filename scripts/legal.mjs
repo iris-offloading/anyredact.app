@@ -93,7 +93,7 @@ export const LEGAL = [
 <li>Packs are paid once and their credits do not expire.</li>
 <li>Free credits are used first, then the plan, then packs.</li>
 <li>Credits have no cash value and cannot be transferred.</li>
-<li>Prices are in US dollars and shown on the account page.</li>
+<li>Prices are in US dollars and shown on the <a href="/pricing">pricing page</a>.</li>
 </ul>
 <p>Refunds are covered by our <a href="/refunds">refund policy</a>.</p>
 

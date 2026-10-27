@@ -4,6 +4,7 @@
 // behind a shared office or mobile network don't block each other, but it
 // still stops someone who clears their browser ID to start over.
 
+import { FREE_CREDITS, PAGE_CHARS } from '../shared/pricing.ts';
 import { clientNetwork } from './http.ts';
 
 export interface QuotaEnv {
@@ -12,7 +13,7 @@ export interface QuotaEnv {
 }
 
 // 10 credits: 10 pages of dense text, or 3 minutes of audio.
-export const DEFAULT_FREE_CHARS = 30_000;
+export const DEFAULT_FREE_CHARS = FREE_CREDITS * PAGE_CHARS;
 export const IP_MULTIPLIER = 5;
 
 export interface QuotaState {

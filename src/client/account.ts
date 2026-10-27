@@ -1,7 +1,7 @@
-import { PRODUCTS, price } from '../shared/pricing.ts';
+import { PRODUCTS, type Product } from '../shared/pricing.ts';
 import { h } from './dom.ts';
 
-// The /account page: sign in, see balances, buy a monthly plan or packs.
+// The /account page: sign in, see balances, manage a plan. Plans and packs are bought from /pricing.
 
 interface Me {
   user: {
@@ -27,32 +27,35 @@ async function post(path: string, body: unknown = {}): Promise<{ url?: string; e
   return res.json().catch(() => ({ error: `Request failed (${res.status}).` }));
 }
 
-function pricing(signedIn: boolean, monthly: boolean) {
-  return h(
-    'div',
-    { className: 'cards plans' },
-    ...PRODUCTS.filter((p) => !!p.monthly === monthly).map((p) =>
-      h(
-        'div',
-        { className: 'card plan' },
-        h('strong', {}, p.name),
-        h('span', { className: 'plan-price' }, `${price(p.cents)}${p.monthly ? ' / month' : ''}`),
-        h('span', {}, `${p.pages.toLocaleString()} credits${p.monthly ? ' every month' : ' that never expire'}`),
-        h('button', {
-          type: 'button',
-          className: 'btn primary',
-          textContent: signedIn ? (p.monthly ? 'Subscribe' : 'Buy') : 'Sign in to buy',
-          disabled: !signedIn,
-          onclick: async () => {
-            say('Opening secure checkout…');
-            const r = await post('/api/checkout', { product: p.id });
-            if (r.url) location.href = r.url;
-            else say(r.error || 'Checkout failed.', true);
-          },
-        }),
-      ),
-    ),
-  );
+// A plan button on /pricing links here with ?buy=<product>. The choice is kept
+// through sign-in (the emailed link may open in another tab) and checkout opens once signed in.
+const BUY_KEY = 'anyredact-buy';
+const BUY_TTL = 3_600_000;
+
+function pendingBuy() {
+  const id = new URLSearchParams(location.search).get('buy');
+  try {
+    if (id) localStorage.setItem(BUY_KEY, JSON.stringify({ id, at: Date.now() }));
+    const saved = JSON.parse(localStorage.getItem(BUY_KEY) || 'null') as { id: string; at: number } | null;
+    if (saved && Date.now() - saved.at < BUY_TTL) return PRODUCTS.find((p) => p.id === saved.id);
+  } catch {
+    // Storage blocked: the buy still works if the visitor is already signed in.
+  }
+  return PRODUCTS.find((p) => p.id === id);
+}
+
+function clearBuy() {
+  try {
+    localStorage.removeItem(BUY_KEY);
+  } catch {}
+  if (location.search.includes('buy=')) history.replaceState(null, '', '/account');
+}
+
+async function checkout(product: Product) {
+  say('Opening secure checkout…');
+  const r = await post('/api/checkout', { product: product.id });
+  if (r.url) location.href = r.url;
+  else say(r.error || 'Checkout failed.', true);
 }
 
 function signInForm(opts: { email: boolean; google: boolean }) {
@@ -72,9 +75,7 @@ function signInForm(opts: { email: boolean; google: boolean }) {
   });
   return h(
     'section',
-    {},
-    h('h2', {}, 'Sign in'),
-    h('p', {}, 'Sign in to buy credits.'),
+    { className: 'signin-box' },
     form,
     h('a', { className: 'btn google', href: '/auth/google', 'aria-disabled': String(!opts.google), onclick: (e: Event) => !opts.google && e.preventDefault() }, 'Sign in with Google'),
     ...(!opts.email && !opts.google ? [h('p', { className: 'hint' }, 'Sign-in is being set up and will be available soon.')] : []),
@@ -89,7 +90,7 @@ function balance(user: NonNullable<Me['user']>) {
       ? h('p', {}, `Monthly plan: ${(sub.pages - sub.used).toLocaleString()} of ${sub.pages.toLocaleString()} credits left, renews ${new Date(sub.renews * 1000).toLocaleDateString()}.`)
       : h('p', {}, 'No monthly plan.'),
     h('p', {}, `Packs: ${user.packPages.toLocaleString()} credits left.`),
-      ];
+  ];
   const actions = h('div', { className: 'row' });
   if (user.canManage) {
     actions.append(
@@ -106,6 +107,7 @@ function balance(user: NonNullable<Me['user']>) {
     );
   }
   actions.append(
+    h('a', { className: 'btn', href: '/pricing' }, 'Buy credits'),
     h('button', {
       type: 'button',
       className: 'btn ghost',
@@ -146,15 +148,15 @@ async function render() {
   if (params.get('paid')) say('Thanks! Your credits appear once the payment is confirmed, usually within seconds.');
   if (params.get('error') === 'google') say('Google sign-in did not work. Please try again or use email.', true);
   const me = (await fetch('/api/me').then((r) => r.json()).catch(() => ({ user: null }))) as Me;
-  root.replaceChildren(
-    status,
-    me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }),
-    h('h2', {}, 'Plans and packs'),
-    h('p', {}, 'Free every day: 10 credits. One credit covers one page of text or one picture, and a minute of audio takes 3. The daily credits are used first, then the monthly plan, then packs.'),
-    pricing(!!me.user, true),
-    pricing(!!me.user, false),
-  );
-  if (params.get('paid') && paidChecks-- > 0) setTimeout(render, 4000);
+  const buying = params.get('paid') ? undefined : pendingBuy();
+  root.replaceChildren(status, me.user ? balance(me.user) : signInForm(me.signIn ?? { email: false, google: false }));
+  if (params.get('paid')) {
+    clearBuy();
+    if (paidChecks-- > 0) setTimeout(render, 4000);
+  } else if (me.user && buying) {
+    clearBuy();
+    checkout(buying);
+  }
 }
 
 render();
