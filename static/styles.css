@@ -271,20 +271,15 @@ body.editing .hero { max-width: none; padding: 0; }
   .preview-bar { top: 106px; margin: 0 -16px 16px; padding: 8px 16px; min-height: 40px; }
   /* On a phone the download stays at the bottom of the screen. */
   .panel-foot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px -12px rgba(0, 0, 0, 0.25); }
-  /* The check and style share a row; the download button gets the full width beneath. */
-  .panel-foot { grid-template-columns: minmax(0, 1fr) auto; grid-auto-flow: row dense; align-items: center; }
-  .panel-foot > * { grid-column: 1 / -1; }
-  .panel-foot > .check-row:not([hidden]) { grid-column: 1; order: -1; }
-  .panel-foot > .style-row { grid-column: 2; order: -1; }
-  .panel-foot > .style-row:has(+ .check-row[hidden]) { grid-column: 1 / -1; }
+  /* One control per line: the check, the style, then the download button. */
+  .panel-foot { gap: 8px; }
   .panel-foot > .status, .panel-foot > .warn { order: -2; }
+  .panel-foot > .check-row { white-space: nowrap; }
   .panel-foot > .transcript { order: 1; }
-  /* The select keeps its aria-label, so the visible "Style" word can go to save room. */
-  .panel-foot .style-row { font-size: 0; }
-  .panel-foot .style-row select { font-size: 0.875rem; min-height: 40px; max-width: 150px; }
+  .panel-foot .style-row select { min-height: 40px; }
   .panel-foot .btn.primary { white-space: nowrap; font-size: 1rem; min-height: 52px; padding: 12px; }
-  body:has(.workspace:not([hidden])) { padding-bottom: 150px; }
-  .sel-add { bottom: 150px; }
+  body:has(.workspace:not([hidden])) { padding-bottom: 180px; }
+  .sel-add { bottom: 180px; }
 }
 .panel .btn.transcript { width: 100%; padding: 10px 16px; }
 .panel h3 { font-size: 0.875rem; font-weight: 600; margin: 28px 0 10px; }
@@ -311,6 +306,8 @@ body.editing .hero { max-width: none; padding: 0; }
 .finding small { color: var(--muted); }
 .public-pref { display: flex; gap: 8px; align-items: center; margin: 0; padding: 10px 12px; border: 1px dashed var(--mark-off-line); border-radius: 10px; background: var(--mark-off); font-size: 0.9rem; cursor: pointer; }
 .public-pref input, .check-row input { accent-color: var(--ink); }
+.row.check-row { color: var(--text); }
+.check-row input { width: 18px; height: 18px; margin: 0; flex: none; }
 .empty, .manual-count, .hint { color: var(--muted); font-size: 0.9rem; }
 .empty { margin: 0; padding: 14px; border: 1px dashed var(--line-strong); border-radius: 12px; }
 .row { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 0.9rem; color: var(--muted); }
