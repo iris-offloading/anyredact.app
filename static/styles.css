@@ -15,6 +15,7 @@
   --mark-off: #ffe7a0;
   --mark-off-line: #b7791f;
   --error: #c92a2a;
+  --success: #2b8a3e;
   --footer-bg: #15161a;
   --footer-text: #b9bcc4;
   --radius: 14px;
@@ -41,6 +42,8 @@
     --mark-off: #5c3d1e;
     --mark-off-line: #e8a13a;
     --error: #ff8787;
+  --success: #69db7c;
+    --success: #69db7c;
     --footer-bg: #0b0c0f;
     --footer-text: #a0a4ad;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px -12px rgba(0, 0, 0, 0.5);
@@ -64,6 +67,7 @@
   --mark-off: #5c3d1e;
   --mark-off-line: #e8a13a;
   --error: #ff8787;
+  --success: #69db7c;
   --footer-bg: #0b0c0f;
   --footer-text: #a0a4ad;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px -12px rgba(0, 0, 0, 0.5);
@@ -207,6 +211,12 @@ textarea { resize: vertical; }
   border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.status.success { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); font-weight: 600; }
+.status.success::before {
+  content: ''; flex: none; width: 18px; height: 18px; background: var(--success);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4.5 12.5l5 5L19.5 7' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4.5 12.5l5 5L19.5 7' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 @media (prefers-reduced-motion: reduce) { .status.busy::before { animation-duration: 2.4s; } }
 .warn { margin: 0; font-size: 0.92rem; }
 .consent { margin: 14px 0 4px; padding: 14px; border: 1.5px solid var(--accent); border-radius: 12px; display: grid; gap: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
