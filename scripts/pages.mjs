@@ -41,12 +41,12 @@ export const TOOLS = [
     format: 'image',
     name: 'Redact images',
     nav: 'Image',
-    title: 'Auto Redact JPG Online with AI: PNG, WebP, Screenshots | AnyRedact',
+    title: 'Auto Redact Images Online with AI: JPG, PNG, WebP | AnyRedact',
     description:
-      'Auto redact JPG photos online with AI. Text in the picture is read, personal details get solid black boxes, and EXIF and GPS data are stripped. PNG, WebP and screenshots work too.',
-    h1: 'Auto redact JPG online with AI',
+      'Auto redact images online with AI. Text in the picture is read, personal details get solid black boxes, and EXIF and GPS data are stripped. Works with JPG, PNG, WebP and screenshots.',
+    h1: 'Auto redact images online with AI',
     lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
-    also: 'Also works with PNG and WebP.',
+    also: 'Works with JPG, PNG and WebP.',
     hint: 'PNG, JPG or WebP, or paste a screenshot',
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
@@ -101,7 +101,7 @@ export const TOOLS = [
       'Auto redact Excel (XLSX) workbooks online with AI. Names, emails and account numbers are found on every sheet, hidden sheets included. Accepts ODS and CSV as well.',
     h1: 'Auto redact Excel online with AI',
     lead: 'Upload a spreadsheet to redact personal data in columns, cells, hidden sheets, and comments without breaking your layout.',
-    also: 'Also works with ODS and CSV.',
+    also: 'Works with ODS and CSV.',
     hint: 'Excel .xlsx, OpenDocument .ods or CSV',
     points: [
       ['Cells keep their styles', 'Only redacted cells change. Number formats, colours, column widths and charts stay put.'],
@@ -132,8 +132,8 @@ export const TOOLS = [
     description:
       'Auto redact text online with AI. Paste text or upload a CSV, JSON or log file to mask emails, phone numbers, IP addresses and card numbers before sharing.',
     h1: 'Auto redact text online with AI',
-    lead: 'Paste text or upload a file to mask personal info, passwords, and other secrets in seconds.',
-    also: 'Also works with CSV, JSON, Markdown and log files.',
+    lead: 'Paste text or upload a file to mask personal info, passwords, API keys, and other secrets in seconds.',
+    also: 'Works with CSV, JSON, Markdown and log files.',
     hint: 'TXT, CSV, JSON, Markdown or logs',
     points: [
       ['Great for logs and support tickets', 'Strip customer details before sharing logs, transcripts or datasets.'],
@@ -152,12 +152,12 @@ export const TOOLS = [
     format: 'audio',
     name: 'Redact audio',
     nav: 'Audio',
-    title: 'Auto Redact MP3 Online with AI: M4A, WAV, FLAC | AnyRedact',
+    title: 'Auto Redact Audio Online with AI: MP3, M4A, WAV | AnyRedact',
     description:
-      'Auto redact MP3 recordings online with AI. The speech is transcribed, and names, phone numbers and card numbers are bleeped in a new file. Handles M4A, WAV, FLAC, OGG and Opus.',
-    h1: 'Auto redact MP3 online with AI',
-    lead: 'Upload a recording and we’ll bleep spoken sensitive details, then give you a new file to download.',
-    also: 'Also works with M4A, WAV, FLAC, OGG and Opus.',
+      'Auto redact audio online with AI. The speech is transcribed, and names, phone numbers and card numbers are bleeped in a new file. Handles MP3, M4A, WAV, FLAC, OGG and Opus.',
+    h1: 'Auto redact audio online with AI',
+    lead: 'Upload a recording and we’ll bleep spoken sensitive details, then give you the redacted audio and a redacted transcript.',
+    also: 'Works with MP3, M4A, WAV, FLAC, OGG and Opus.',
     hint: 'MP3, M4A, WAV, FLAC, OGG or Opus, up to 2 hours',
     points: [
       ['Found in the transcript', 'Speech is written out with a time for every word, so each finding is bleeped where it was said.'],
