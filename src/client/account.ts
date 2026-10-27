@@ -4,12 +4,20 @@ import { h } from './dom.ts';
 
 // The /account page: sign in, see balances, buy a plan or credits, manage a plan.
 
+interface Activity {
+  kind: string;
+  credits: number;
+  cents: number | null;
+  at: number;
+}
+
 interface Me {
   user: {
     email: string | null;
     subscription: { pages: number; used: number; renews: number; ending: boolean } | null;
     packPages: number;
     canManage: boolean;
+    activity?: Activity[];
   } | null;
   signIn?: { email: boolean; google: boolean };
   error?: string;
@@ -197,6 +205,81 @@ function deleteAccount() {
   return row;
 }
 
+const ICONS = {
+  doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  audio: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5L5 20"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+};
+
+const FORMAT_NAMES: Record<string, string> = { pdf: 'PDF', docx: 'Word', pptx: 'PowerPoint', sheet: 'Excel', text: 'Text', image: 'Image', audio: 'Audio' };
+
+const plural = (n: number, one: string) => `${n.toLocaleString('en-US')} ${one}${n === 1 ? '' : 's'}`;
+
+function when(at: number) {
+  const d = new Date(at * 1000);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }) });
+}
+
+/** One activity row: what it was, when and how much, and its credits. */
+function activityRow(a: Activity) {
+  const used = -a.credits;
+  const [icon, title, detail] = (() => {
+    switch (a.kind) {
+      case 'audio':
+        return ['audio', 'Audio', plural(Math.round(used / 3), 'minute')];
+      case 'image':
+        return ['image', 'Image', ''];
+      case 'check':
+        return ['check', 'Check for anything left', ''];
+      case 'pack':
+        return ['plus', `Bought ${a.credits.toLocaleString('en-US')} credits`, a.cents ? usd(a.cents) : ''];
+      case 'plan':
+        return ['plus', `${PRODUCTS.find((p) => p.monthly && p.pages === a.credits)?.name ?? 'Monthly'} plan`, a.cents ? usd(a.cents) : ''];
+      case 'refund':
+        return ['minus', 'Refund', ''];
+      case 'dispute':
+        return ['minus', 'Disputed payment', ''];
+      default:
+        return ['doc', FORMAT_NAMES[a.kind] ?? 'File', plural(used, 'page')];
+    }
+  })();
+  const svg = h('span', { className: 'activity-icon', 'aria-hidden': 'true' });
+  svg.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[icon as keyof typeof ICONS]}</svg>`;
+  return h(
+    'li',
+    {},
+    svg,
+    h('div', {}, h('strong', {}, title), h('span', {}, [when(a.at), detail].filter(Boolean).join(', '))),
+    h('span', { className: a.credits > 0 ? 'activity-credits added' : 'activity-credits' }, `${a.credits > 0 ? '+' : '\u2212'}${Math.abs(a.credits).toLocaleString('en-US')}`),
+  );
+}
+
+const SHOWN = 4;
+
+/** Recent activity, the latest few with a button for the rest. Nothing while there is none. */
+function activityList(items: Activity[]) {
+  if (!items.length) return [];
+  const list = h('ul', { className: 'activity' }, ...items.slice(0, SHOWN).map(activityRow));
+  const more =
+    items.length > SHOWN
+      ? h('button', {
+          type: 'button',
+          className: 'link-button',
+          textContent: 'View all',
+          onclick: () => {
+            list.replaceChildren(...items.map(activityRow));
+            more?.remove();
+          },
+        })
+      : null;
+  return [h('div', { className: 'activity-head' }, h('h3', {}, 'Recent activity'), ...(more ? [more] : [])), list];
+}
+
 function balance(user: NonNullable<Me['user']>, free: number | null) {
   const sub = user.subscription;
   const plan = sub && PRODUCTS.find((p) => p.monthly && p.pages === sub.pages);
@@ -235,6 +318,7 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
     { className: 'panel-card balance-card' },
     h('h2', {}, 'Balance'),
     h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString('en-US')), h('span', { className: 'total-label' }, 'credits left')),
+    ...activityList(user.activity ?? []),
     h('div', { className: 'meters' }, ...meters),
   );
   const planCard = sub

@@ -1,6 +1,7 @@
 // Sign-in for paying users: an emailed link (via Cloudflare Email Service) or Google. Free use
 // needs no account. Sessions are random tokens in an HttpOnly cookie; only
 // their SHA-256 hashes are stored.
+import { recentActivity } from './activity.ts';
 import { stripe } from './billing.ts';
 import { crossOrigin, hex, json, now, rateLimited, type Limiter } from './http.ts';
 
@@ -145,6 +146,8 @@ async function deleteAccount(request: Request, env: AccountsEnv): Promise<Respon
     }
   }
   const db = env.DB!;
+  // On its own, since the table may not exist yet (migration 0003).
+  await db.prepare('DELETE FROM activity WHERE user_id = ?').bind(user.id).run().catch(() => {});
   await db.batch([
     db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM purchases WHERE user_id = ?').bind(user.id),
@@ -186,6 +189,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
         subscription: subActive ? { pages: user.sub_pages, used: user.sub_used, renews: user.sub_period_end, ending: await planEnding(env, user.sub_id!) } : null,
         packPages: user.pack_pages,
         canManage: !!user.stripe_customer,
+        activity: (await recentActivity(env.DB, user.id)).filter((a) => a.credits),
       },
     });
   }
