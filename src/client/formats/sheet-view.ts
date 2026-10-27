@@ -197,11 +197,16 @@ function runBoxes(sk: SpreadsheetSkeleton, row: number, col: number, runs: Run[]
   const { startX, startY, endX, endY } = cell.isMergedMainCell ? cell.mergeInfo : cell;
   let x = startX;
   let y = startY;
+  // Text is clipped to the cell, or to the cells it overflows into.
+  const clip = { x0: startX, x1: endX, y0: startY, y1: endY };
   const overflow = font.wrapStrategy !== WrapStrategy.WRAP && sk.overflowCache.getValue(row, col);
   if (overflow) {
     const first = sk.getCellWithCoordByIndex(overflow.startRow, overflow.startColumn, false);
-    x = first.startX;
-    y = first.startY;
+    const last = sk.getCellWithCoordByIndex(overflow.endRow, overflow.endColumn, false);
+    x = clip.x0 = first.startX;
+    y = clip.y0 = first.startY;
+    clip.x1 = last.endX;
+    clip.y1 = last.endY;
   }
   const { horizontalAlign = HorizontalAlign.LEFT, verticalAlign = VerticalAlign.TOP, cellValueType } = page.renderConfig ?? {};
   const h = horizontalAlign !== HorizontalAlign.UNSPECIFIED ? horizontalAlign
@@ -226,10 +231,12 @@ function runBoxes(sk: SpreadsheetSkeleton, row: number, col: number, runs: Run[]
             const gx = x + column.left + divide.left + divide.paddingLeft + glyph.left;
             runs.forEach((r, n) => {
               if (i >= r.ed || i + glyph.count <= r.st) return;
+              const b = { x0: Math.max(gx, clip.x0), x1: Math.min(gx + glyph.width, clip.x1), y0: Math.max(y0, clip.y0), y1: Math.min(y1, clip.y1) };
+              if (b.x1 <= b.x0 || b.y1 <= b.y0) return;
               const boxes = out[n];
               const last = boxes[boxes.length - 1];
-              if (last && last.y0 === y0 && Math.abs(last.x1 - gx) < 1) last.x1 = gx + glyph.width;
-              else boxes.push({ x0: gx, x1: gx + glyph.width, y0, y1 });
+              if (last && last.y0 === b.y0 && Math.abs(last.x1 - b.x0) < 1) last.x1 = b.x1;
+              else boxes.push(b);
             });
             i += glyph.count;
           }
@@ -394,6 +401,8 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
       for (const cell of next.values()) {
         const base = original(cell.sheet, cell.row, cell.col);
         const runs = cell.runs.sort((a, b) => a.st - b.st);
+        // Univer ends paragraphs with \r and reads \n as a section break, which hides the text. Same length, so runs keep their offsets.
+        const lines = cell.text.replace(/\r\n/g, ' \r').replace(/\n/g, '\r');
         book
           .getSheetBySheetId(ids.get(cell.sheet)!)
           ?.getRange(cell.row, cell.col)
@@ -404,8 +413,8 @@ export async function mountSheetView(el: HTMLElement, opts: Options, on: ViewHan
               id: 'cell',
               documentStyle: {},
               body: {
-                dataStream: `${cell.text}\r\n`,
-                paragraphs: [{ startIndex: cell.text.length, paragraphId: 'p' }],
+                dataStream: `${lines}\r\n`,
+                paragraphs: [...lines.matchAll(/\r/g), { index: lines.length }].map((m, i) => ({ startIndex: m.index!, paragraphId: `p${i}` })),
                 textRuns: runs.map((r) => ({ st: r.st, ed: r.ed, ts: { bg: { rgb: r.on ? ON : OFF } } })),
               },
             },
