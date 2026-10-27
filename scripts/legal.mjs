@@ -12,7 +12,7 @@ export const LEGAL = [
     slug: 'privacy',
     nav: 'Privacy',
     title: 'Privacy Policy | AnyRedact',
-    description: 'What AnyRedact sends to its servers, what it keeps, and who processes it: files open in your browser, content goes to AI only after you agree, and nothing you redact is stored.',
+    description: 'Files open in your browser, content goes to AI only after you agree, and nothing you redact is kept. Our processors and your rights.',
     h1: 'Privacy policy',
     body: `
 <h2>Your files</h2>
@@ -69,7 +69,7 @@ export const LEGAL = [
     slug: 'terms',
     nav: 'Terms',
     title: 'Terms of Service | AnyRedact',
-    description: 'The terms for using AnyRedact: free daily credits, plans and paid credits, your responsibility to review every redacted file, and the limits of our liability.',
+    description: 'Terms for using AnyRedact: daily credits, plans and paid credits, reviewing every redacted file, and the limits of our liability.',
     h1: 'Terms of service',
     body: `
 <p>These terms apply when you use anyredact.app. By using it, you agree to them.</p>

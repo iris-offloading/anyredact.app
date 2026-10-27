@@ -17,7 +17,7 @@ export const PRICING = {
   slug: 'pricing',
   nav: 'Pricing',
   title: 'Pricing | AnyRedact',
-  description: 'AnyRedact pricing: 10 free AI redaction credits a day, monthly plans from $9 and credits from $5 that never expire. One credit covers about a page of text.',
+  description: '10 free AI redaction credits a day, monthly plans from $9, and credits from $5 that never expire. One credit covers about a page of text.',
   h1: 'Pricing',
 
   jsonLd({ PRODUCTS, FREE_CREDITS }, url) {
