@@ -124,6 +124,23 @@ export function findTerms(
   return spans;
 }
 
+/** Splits text into pieces of at most `size` characters, at the last line break or space where there is one. */
+export function chunkText(text: string, size: number): string[] {
+  const chunks: string[] = [];
+  let pos = 0;
+  while (pos < text.length) {
+    let end = Math.min(text.length, pos + size);
+    if (end < text.length) {
+      const slice = text.slice(pos, end);
+      const brk = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf(' '));
+      if (brk > size / 2) end = pos + brk + 1;
+    }
+    chunks.push(text.slice(pos, end));
+    pos = end;
+  }
+  return chunks;
+}
+
 // Field labels a model sometimes returns as if they were the sensitive value.
 const LABEL_WORDS = new Set([
   'ssn', 'itin', 'ein', 'tin', 'ssn/itin', 'itin/ssn', 'ssn or itin', 'dob', 'date of birth', 'name', 'full name',

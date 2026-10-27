@@ -1,6 +1,6 @@
 import type JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { burnBoxes, canvasToBlob, rectsForPage, type Finding, type ManualMark, type Page, type Progress, type RedactStyle, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, outputName, rectsForPage, type Finding, type ManualMark, type Page, type Progress, type RedactStyle, type Unit } from '../types.ts';
 import { ocrUnit } from './ocr.ts';
 
 // Helpers shared by the Word, Excel and PowerPoint formats, which are all zipped XML parts.
@@ -248,8 +248,41 @@ export function resolveTarget(relsName: string, target: string): string {
   return base.join('/');
 }
 
-/** The .rels file that lists a part's relationships. */
-export const relsOf = (part: string) => part.replace(/([^/]+)$/, '_rels/$1.rels');
+/** The .rels file that lists a part's relationships ('' is the package itself). */
+export const relsOf = (part: string) => (part ? part.replace(/([^/]+)$/, '_rels/$1.rels') : '_rels/.rels');
+
+export interface Rel {
+  el: Element;
+  type: string;
+  /** The part's path in the zip, or the URL as written for an external target. */
+  target: string;
+  external: boolean;
+}
+
+/** A part's relationships by id, with internal targets resolved to zip paths. */
+export async function readRels(zip: JSZip, part: string): Promise<{ xml: Document | null; rels: Map<string, Rel> }> {
+  const name = relsOf(part);
+  const xml = await readXml(zip, name);
+  const rels = new Map<string, Rel>();
+  for (const el of Array.from(xml?.getElementsByTagName('Relationship') ?? [])) {
+    const external = el.getAttribute('TargetMode') === 'External';
+    const target = el.getAttribute('Target') ?? '';
+    rels.set(el.getAttribute('Id') ?? '', { el, type: el.getAttribute('Type') ?? '', target: external ? target : resolveTarget(name, target), external });
+  }
+  return { xml, rels };
+}
+
+/** Drops a part along with the relationship and content type that point at it. */
+export async function removePart(zip: JSZip, owner: string, part: string) {
+  zip.remove(part);
+  const { xml, rels } = await readRels(zip, owner);
+  for (const r of rels.values()) if (!r.external && r.target === part) r.el.remove();
+  if (xml) saveXml(zip, relsOf(owner), xml);
+  await editXml(zip, '[Content_Types].xml', (types) => {
+    for (const o of Array.from(types.getElementsByTagName('Override'))) if (o.getAttribute('PartName') === `/${part}`) o.remove();
+    return true;
+  });
+}
 
 export async function readXml(zip: JSZip, name: string): Promise<Document | null> {
   const f = zip.file(name);
@@ -258,9 +291,11 @@ export async function readXml(zip: JSZip, name: string): Promise<Document | null
   return xml.getElementsByTagName('parsererror').length ? null : xml;
 }
 
+export const saveXml = (zip: JSZip, name: string, xml: Document) => zip.file(name, new XMLSerializer().serializeToString(xml));
+
 export async function editXml(zip: JSZip, name: string, edit: (xml: Document) => boolean) {
   const xml = await readXml(zip, name);
-  if (xml && edit(xml)) zip.file(name, new XMLSerializer().serializeToString(xml));
+  if (xml && edit(xml)) saveXml(zip, name, xml);
 }
 
 /** Moves a part to a new name and points every relationship and content type at it. */
@@ -290,21 +325,29 @@ async function renamePart(zip: JSZip, from: string, to: string) {
   });
 }
 
-/** Word and PowerPoint can save a picture of the first page in docProps; it would show the text before redaction. */
+/** Office apps can save a picture of the first page or sheet in docProps; it would show the text before redaction. */
 export async function removeThumbnail(zip: JSZip) {
-  const thumbs = Object.keys(zip.files).filter((n) => /^docProps\/thumbnail\.\w+$/i.test(n));
-  if (!thumbs.length) return;
-  thumbs.forEach((n) => zip.remove(n));
-  await editXml(zip, '_rels/.rels', (xml) => {
-    for (const rel of Array.from(xml.getElementsByTagName('Relationship'))) {
-      if (thumbs.includes(resolveTarget('_rels/.rels', rel.getAttribute('Target') ?? ''))) rel.remove();
-    }
-    return true;
-  });
-  await editXml(zip, '[Content_Types].xml', (xml) => {
-    for (const o of Array.from(xml.getElementsByTagName('Override'))) if (thumbs.includes((o.getAttribute('PartName') ?? '').slice(1))) o.remove();
-    return true;
-  });
+  const { rels } = await readRels(zip, '');
+  for (const r of rels.values()) if (r.type.endsWith('/thumbnail') && !r.external) await removePart(zip, '', r.target);
+  for (const n of Object.keys(zip.files)) if (/^docProps\/thumbnail\.\w+$/i.test(n)) await removePart(zip, '', n);
+}
+
+/** Replaces each redacted string inside `value` with █, keeping spaces. */
+export function maskStrings(value: string, redacted: Set<string>): string {
+  let out = value;
+  for (const t of redacted) if (t.trim()) out = out.split(t).join(t.replace(/\S/gu, '█'));
+  return out;
+}
+
+/** Whether a link target is a mail address or holds redacted text. */
+export function linkHidesText(target: string, redacted: Set<string>): boolean {
+  let decoded = target;
+  try {
+    decoded = decodeURIComponent(target);
+  } catch {
+    // A stray % (a "5%" in a query string): compare the raw target.
+  }
+  return /^mailto:/i.test(decoded) || [...redacted].some((t) => decoded.includes(t) || target.includes(t));
 }
 
 /** Hyperlink targets live in .rels files; blank any that point at redacted text or a mail address. */
@@ -314,8 +357,7 @@ export async function scrubRelationships(zip: JSZip, redacted: Set<string>, part
       let changed = false;
       for (const rel of Array.from(xml.getElementsByTagName('Relationship'))) {
         if (rel.getAttribute('TargetMode') !== 'External') continue;
-        const target = decodeURIComponent(rel.getAttribute('Target') ?? '');
-        if (/^mailto:/i.test(target) || [...redacted].some((t) => target.includes(t))) {
+        if (linkHidesText(rel.getAttribute('Target') ?? '', redacted)) {
           rel.setAttribute('Target', 'about:blank');
           changed = true;
         }
@@ -356,4 +398,29 @@ export async function scrubProperties(zip: JSZip) {
       return true;
     });
   }
+}
+
+/** The load notes Word and PowerPoint files share. */
+export function officeNotes(zip: JSZip, root: 'word' | 'ppt', unreadable: number, extra: string[] = []): string[] {
+  const notes = ['Author names and document properties are removed on download.', ...extra];
+  if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} in EMF, WMF or TIFF format could not be opened and stay as they are.`);
+  if (Object.keys(zip.files).some((n) => new RegExp(`^${root}/embeddings/[^/]+$`).test(n))) notes.push('Embedded files and chart data are removed on download.');
+  return notes;
+}
+
+/** The last export steps Word and PowerPoint share: drop embeddings, redact pictures, scrub links and metadata, then zip. */
+export async function packOffice(
+  zip: JSZip,
+  opts: { root: 'word' | 'ppt'; parts: Map<string, Document>; pictures: Picture[]; findings: Finding[]; marks: ManualMark[]; redacted: Set<string>; name: string; mime: string; progress: Progress },
+): Promise<{ blob: Blob; filename: string }> {
+  const { root, progress } = opts;
+  await dropEmbeddings(zip, opts.parts, root);
+  progress('Redacting pictures…');
+  await writePictures(zip, opts.pictures, opts.findings, opts.marks);
+  await scrubRelationships(zip, opts.redacted, new RegExp(`^${root}/.*_rels/.*\\.rels$`));
+  await scrubProperties(zip);
+  await removeThumbnail(zip);
+  progress(root === 'word' ? 'Packing document…' : 'Packing presentation…');
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: opts.mime });
+  return { blob, filename: outputName(opts.name, root === 'word' ? 'docx' : 'pptx') };
 }

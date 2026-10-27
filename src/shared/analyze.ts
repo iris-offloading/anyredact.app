@@ -41,7 +41,9 @@ export function analyzeUnits(units: { id: string; text: string }[], opts: { term
   const owned = (owner: Term['owner']) => new Set(ai.filter((e) => e.owner === owner && ORG_TYPES.has(e.type)).map((e) => e.text.trim().toLowerCase()));
   const orgOwned = owned('organization');
   const personOwned = owned('person');
-  for (let s of findTerms(text, ai, 'ai')) {
+  // A one-word name ("Will") is matched case-sensitively below, so it doesn't catch "will".
+  const singleName = (e: Term) => e.type === 'name' && !/\s/.test(e.text.trim());
+  for (let s of findTerms(text, ai.filter((e) => !singleName(e)), 'ai')) {
     // Models sometimes call an SSN/ITIN-shaped number a phone number.
     if (s.type === 'phone' && SSN_SHAPE.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
     if (ORG_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };

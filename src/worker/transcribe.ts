@@ -63,6 +63,7 @@ export async function handleTranscribe(request: Request, env: Env & { TRANSCRIBE
     return json({ words: found.words, language: language ?? found.language ?? null, quota: quota.state });
   } catch (err) {
     console.error('transcription failed', err);
+    await quota.refund();
     return json({ error: 'Transcription is unavailable right now.' }, 502);
   }
 }

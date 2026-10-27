@@ -67,7 +67,6 @@ export async function loadAudio(file: File, progress: Progress): Promise<LoadedD
 
   const doc: LoadedDoc = {
     kind: 'audio',
-    name: file.name,
     units: [],
     pages: [],
     notes: [],

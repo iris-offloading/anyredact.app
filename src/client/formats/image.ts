@@ -47,7 +47,6 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
   const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[type]!;
   return {
     kind: 'image',
-    name: file.name,
     units: [unit],
     pages: [{ index: 0, canvas }],
     notes,

@@ -37,7 +37,12 @@ export async function sha256(text: string): Promise<string> {
 
 function cookie(request: Request, name: string): string | null {
   const m = (request.headers.get('cookie') || '').match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
 }
 
 const setCookie = (name: string, value: string, maxAge: number) =>

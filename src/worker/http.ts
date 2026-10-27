@@ -34,6 +34,8 @@ export interface Limiter {
 export function clientNetwork(request: Request): string {
   const ip = request.headers.get('cf-connecting-ip') || 'anon';
   if (!ip.includes(':')) return ip;
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return mapped[1];
   const [head, tail = ''] = ip.toLowerCase().split('::');
   const left = head ? head.split(':') : [];
   const right = tail ? tail.split(':') : [];
@@ -85,5 +87,16 @@ export async function readAiPost(request: Request, env: { AI?: unknown; DETECT_L
     return body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   } catch {
     return json({ error: 'Invalid JSON' }, 400);
+  }
+}
+
+/** A model's answer as an object: as given, or the first {...} in its text. */
+export function modelJson(content: unknown): unknown {
+  if (typeof content !== 'string') return content;
+  const m = content.match(/\{[\s\S]*\}/);
+  try {
+    return m ? JSON.parse(m[0]) : null;
+  } catch {
+    return null;
   }
 }

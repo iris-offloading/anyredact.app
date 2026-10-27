@@ -53,28 +53,40 @@ export async function verifyStripeSignature(body: string, header: string | null,
   return signatures.some((s) => s.length === expected.length && [...s].every((c, i) => c === expected[i]));
 }
 
+export interface PaidSpend {
+  fromSub: number;
+  fromPack: number;
+}
+
 /**
- * Spends paid pages: the monthly plan first, then packs. Returns false when the
+ * Spends paid pages: the monthly plan first, then packs. Returns null when the
  * account doesn't have enough. Uses compare-and-set so parallel requests can't overspend.
  */
-export async function spendPaidPages(env: BillingEnv, userId: string, pages: number): Promise<boolean> {
+export async function spendPaidPages(env: BillingEnv, userId: string, pages: number): Promise<PaidSpend | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const u = await env.DB!.prepare('SELECT sub_id, sub_pages, sub_used, sub_period_end, pack_pages FROM users WHERE id = ?')
       .bind(userId)
       .first<Pick<User, 'sub_id' | 'sub_pages' | 'sub_used' | 'sub_period_end' | 'pack_pages'>>();
-    if (!u) return false;
+    if (!u) return null;
     const subLeft = u.sub_id && u.sub_period_end > now() ? Math.max(0, u.sub_pages - u.sub_used) : 0;
     const fromSub = Math.min(subLeft, pages);
     const fromPack = pages - fromSub;
-    if (fromPack > u.pack_pages) return false;
+    if (fromPack > u.pack_pages) return null;
     const res = await env.DB!.prepare(
       'UPDATE users SET sub_used = sub_used + ?, pack_pages = pack_pages - ? WHERE id = ? AND sub_used = ? AND pack_pages = ?',
     )
       .bind(fromSub, fromPack, userId, u.sub_used, u.pack_pages)
       .run();
-    if (res.meta.changes) return true;
+    if (res.meta.changes) return { fromSub, fromPack };
   }
-  return false;
+  return null;
+}
+
+/** Gives back pages spent on a request whose model call failed. */
+export async function refundPaidPages(env: BillingEnv, userId: string, spent: PaidSpend): Promise<void> {
+  await env.DB!.prepare('UPDATE users SET sub_used = MAX(0, sub_used - ?), pack_pages = pack_pages + ? WHERE id = ?')
+    .bind(spent.fromSub, spent.fromPack, userId)
+    .run();
 }
 
 interface StripeEvent {
@@ -90,7 +102,9 @@ const invoiceSubscription = (invoice: Record<string, any>): string | undefined =
 async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
   const db = env.DB!;
   const obj = event.data.object;
-  if (event.type === 'checkout.session.completed') {
+  // A delayed payment method (a bank debit) completes the session unpaid and confirms later.
+  const delayed = event.type === 'checkout.session.async_payment_succeeded';
+  if (event.type === 'checkout.session.completed' || delayed) {
     const product = PRODUCTS.find((p) => p.id === obj.metadata?.product);
     const userId = obj.metadata?.user_id ?? obj.client_reference_id;
     if (!product || !userId) return;
@@ -104,7 +118,7 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
           .run()
           .catch((err: unknown) => console.error('purchase not recorded', obj.payment_intent, err));
       }
-    } else if (obj.mode === 'subscription') {
+    } else if (obj.mode === 'subscription' && !delayed) {
       // invoice.paid sets the exact period end; until then allow a month.
       await db
         .prepare('UPDATE users SET sub_id = ?, sub_pages = ?, sub_used = 0, sub_period_end = MAX(sub_period_end, ?), stripe_customer = COALESCE(stripe_customer, ?) WHERE id = ?')

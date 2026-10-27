@@ -1,8 +1,8 @@
 import { parseAsync, renderDocument } from 'docx-preview';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { outputName, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
-import { collectAlts, drawingText, dropEmbeddings, enabledByUnit, loadPictures, readXml, removeThumbnail, renamePictures, scrubProperties, scrubRelationships, writeAlts, writePictures, writeRun, type Alt, type Picture, type TextRun } from './office.ts';
+import { TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { collectAlts, drawingText, editXml, enabledByUnit, maskStrings, loadPictures, officeNotes, packOffice, readXml, renamePictures, writeAlts, writeRun, type Alt, type Picture, type TextRun } from './office.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const TEXT_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
@@ -74,24 +74,20 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
 
   const { pictures, pages, units: pictureUnits, unreadable } = await loadPictures(zip, 'word/media/', progress);
 
-  const notes = ['Author names and document properties are removed on download.'];
-  if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} in EMF, WMF or TIFF format could not be opened and stay as they are.`);
-  if (Object.keys(zip.files).some((n) => /^word\/embeddings\/[^/]+$/.test(n))) notes.push('Embedded files and chart data are removed on download.');
+  const notes = officeNotes(zip, 'word', unreadable);
 
   return {
     kind: 'docx',
     styles: TEXT_STYLES,
-    name: file.name,
     units: [...paras.map((p) => p.unit), ...charts.map((c) => c.unit), ...[...alts.values()].map((a) => a.unit), ...pictureUnits],
     pages,
     notes,
     render: (container) => render(file, parts, paras, pictures, container),
-    async exportFile(findings, boxes, style) {
+    async exportFile(findings, boxes, style, say = progress) {
       const byUnit = enabledByUnit(findings);
-      const redacted = new Set<string>();
+      const redacted = new Set(findings.filter((f) => f.enabled).map((f) => f.text));
       for (const p of paras) {
         const spans = byUnit.get(p.unit.id) ?? [];
-        for (const f of spans) redacted.add(f.text);
         const next = spans.length ? rewriteSegments(p.original, spans, style) : p.original;
         p.nodes.forEach((n, i) => {
           if (!TEXT_TAGS.has(n.localName) || n.textContent === next[i]) return;
@@ -101,7 +97,6 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
       }
       for (const c of charts) {
         const spans = byUnit.get(c.unit.id) ?? [];
-        for (const f of spans) redacted.add(f.text);
         writeRun(c, spans, style);
       }
       writeAlts(alts, byUnit, style, redacted);
@@ -111,25 +106,41 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
         for (const el of Array.from(xml.getElementsByTagNameNS(W, '*'))) {
           if (el.hasAttributeNS(W, 'author')) el.setAttributeNS(W, 'w:author', 'Redacted');
           if (el.hasAttributeNS(W, 'initials')) el.setAttributeNS(W, 'w:initials', 'R');
+          // Simple fields keep their code in an attribute, such as HYPERLINK "mailto:…".
+          if (el.localName === 'fldSimple' && el.hasAttributeNS(W, 'instr')) el.setAttributeNS(W, 'w:instr', maskStrings(el.getAttributeNS(W, 'instr')!, redacted));
+          // A bound content control is refilled from customXml when Word opens the file; unbind it so it keeps the redacted text.
+          if (el.localName === 'dataBinding') el.remove();
         }
         renamePictures(xml);
         zip.file(name, ser.serializeToString(xml));
       }
-      await dropEmbeddings(zip, parts, 'word');
-      progress('Redacting pictures…');
-      await writePictures(zip, pictures, findings, boxes);
-      await scrubRelationships(zip, redacted);
-      await scrubProperties(zip);
-      await removeThumbnail(zip);
-      progress('Packing document…');
-      const blob = await zip.generateAsync({
-        type: 'blob',
-        compression: 'DEFLATE',
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
-      return { blob, filename: outputName(file.name, 'docx') };
+      await maskCustomXml(zip, redacted);
+      return packOffice(zip, { root: 'word', parts, pictures, findings, marks: boxes, redacted, name: file.name, progress: say, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
     },
   };
+}
+
+/** Content controls bound to customXml/item*.xml hold a second copy of their text there. */
+async function maskCustomXml(zip: JSZip, redacted: Set<string>) {
+  if (!redacted.size) return;
+  for (const name of Object.keys(zip.files).filter((n) => /^customXml\/item\d+\.xml$/.test(n))) {
+    await editXml(zip, name, (xml) => {
+      let changed = false;
+      const walker = xml.createTreeWalker(xml.documentElement, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      for (let n: Node | null = walker.currentNode; n; n = walker.nextNode()) {
+        if (n.nodeType === Node.TEXT_NODE) {
+          const next = maskStrings(n.nodeValue ?? '', redacted);
+          if (next !== n.nodeValue) (n.nodeValue = next), (changed = true);
+        } else {
+          for (const a of Array.from((n as Element).attributes)) {
+            const next = maskStrings(a.value, redacted);
+            if (next !== a.value) (a.value = next), (changed = true);
+          }
+        }
+      }
+      return changed;
+    });
+  }
 }
 
 /**

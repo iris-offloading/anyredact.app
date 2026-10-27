@@ -7,7 +7,6 @@ export async function loadText(file: File): Promise<LoadedDoc> {
   return {
     kind: 'text',
     styles: TEXT_STYLES,
-    name: file.name,
     units: [{ id: 'text', text }],
     pages: [],
     notes: [],
