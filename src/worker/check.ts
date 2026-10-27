@@ -50,7 +50,7 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
 
   // Each scan's first check is free; later ones cost credits like detection.
   const free = await redeemFreeCheck(env, checkToken, text.length);
-  const quota = free ? null : await chargeUsage(request, env, CHECK_CREDITS * CREDIT_CHARS);
+  const quota = free ? null : await chargeUsage(request, env, CHECK_CREDITS * CREDIT_CHARS, 'check');
   if (quota instanceof Response) return quota;
 
   const questions = Object.fromEntries(

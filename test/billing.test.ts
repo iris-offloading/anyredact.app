@@ -18,6 +18,7 @@ function d1(): D1Database {
     const stmt = {
       bind: (...a: unknown[]) => ((args = a), stmt),
       first: async () => (db.prepare(sql).get(...(args as never[])) as unknown) ?? null,
+      all: async () => ({ results: db.prepare(sql).all(...(args as never[])) }),
       run: async () => {
         const r = db.prepare(sql).run(...(args as never[]));
         return { meta: { changes: Number(r.changes) } };
@@ -406,4 +407,44 @@ test('an account stays when Stripe could not cancel its plan', async () => {
     globalThis.fetch = realFetch;
   }
   assert.equal(((await db.prepare('SELECT COUNT(*) AS n FROM users').first()) as { n: number }).n, 1);
+});
+
+test('activity shows credits per file and payments, without file names', async () => {
+  const db = d1();
+  const e = env(db);
+  const send = webhook(e);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), userId, 4102444800).run();
+  await send({ id: 'evt_buy', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_1', amount_total: 500, metadata: { user_id: userId, product: 'credits-100' } } } });
+  const scan = (text: string, job: string, format: string) =>
+    fetchWorker(
+      new Request('https://anyredact.app/api/detect', {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+        headers: { origin: 'https://anyredact.app', cookie: 'session=tok', 'x-job': job, 'x-format': format },
+      }),
+      e,
+    );
+  // Two requests for one file make one row.
+  assert.equal((await scan('a'.repeat(4000), 'job-aaaaaaaa', 'pdf')).status, 200);
+  assert.equal((await scan('b'.repeat(100), 'job-aaaaaaaa', 'pdf')).status, 200);
+  const me = (await (await fetchWorker(new Request('https://anyredact.app/api/me', { headers: { cookie: 'session=tok' } }), e)).json()) as { user: { activity: Record<string, unknown>[] } };
+  const rows = me.user.activity.map(({ kind, credits, cents }) => ({ kind, credits, cents }));
+  assert.deepEqual(rows.sort((a, b) => String(a.kind).localeCompare(String(b.kind))), [
+    { kind: 'credits', credits: 100, cents: 500 },
+    { kind: 'pdf', credits: -3, cents: null },
+  ]);
+});
+
+test('a failed scan takes its credits off the activity again', async () => {
+  const db = d1();
+  const e = { ...env(db), AI: { run: async () => { throw new Error('down'); } } as unknown as Ai } as Env;
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), userId, 4102444800).run();
+  const res = await fetchWorker(
+    new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane' }), headers: { origin: 'https://anyredact.app', cookie: 'session=tok', 'x-job': 'job-bbbbbbbb', 'x-format': 'docx' } }),
+    e,
+  );
+  assert.equal(res.status, 502);
+  assert.equal(((await db.prepare('SELECT credits FROM activity WHERE user_id = ?').bind(userId).first()) as { credits: number }).credits, 0);
 });

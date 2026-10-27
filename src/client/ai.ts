@@ -21,11 +21,19 @@ export function deviceId(): string {
   }
 }
 
+// The open file, so a signed-in account's activity shows one row per file with its format.
+let job: { id: string; format: string } | undefined;
+
+/** Starts a new activity row for a file of this format (pdf, docx, audio and so on). */
+export function startJob(format: string) {
+  job = { id: crypto.randomUUID(), format };
+}
+
 /** POSTs to a metered API route, as JSON unless another content type is given; a 402 becomes a QuotaError. */
 export async function postApi<T>(path: string, body: unknown, failure: string, contentType = 'application/json'): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'content-type': contentType, 'x-device-id': deviceId() },
+    headers: { 'content-type': contentType, 'x-device-id': deviceId(), ...(job ? { 'x-job': job.id, 'x-format': job.format } : {}) },
     body: contentType === 'application/json' ? JSON.stringify(body) : (body as BodyInit),
   });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };

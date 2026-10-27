@@ -4,6 +4,7 @@
 // first, then one-off credits, which never expire.
 import { findProduct } from '../shared/pricing.ts';
 import { currentUser, type AccountsEnv, type User } from './accounts.ts';
+import { logActivity, type ActivityKind } from './activity.ts';
 import { crossOrigin, hex, json, now, rateLimited } from './http.ts';
 
 export interface BillingEnv extends AccountsEnv {
@@ -156,6 +157,7 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
         .prepare('INSERT OR IGNORE INTO purchases (payment_intent, user_id, credits, created_at) SELECT ?, id, ?, ? FROM users WHERE id = ?')
         .bind(obj.payment_intent, product.credits, now(), userId);
       await (obj.payment_intent ? db.batch([grant, record]) : grant.run());
+      await logActivity(db, userId, event.id, 'credits', product.credits, obj.amount_total ?? product.cents);
     } else if (obj.mode === 'subscription' && paid) {
       const current = await db.prepare('SELECT plan_subscription, plan_period_end FROM users WHERE id = ?').bind(userId).first<Pick<User, 'plan_subscription' | 'plan_period_end'>>();
       if (current?.plan_subscription && current.plan_subscription !== obj.subscription && current.plan_period_end > now()) {
@@ -167,6 +169,7 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
         .prepare('UPDATE users SET plan_subscription = ?, plan_credits = ?, plan_used = 0, plan_period_end = MAX(plan_period_end, ?), stripe_customer = COALESCE(stripe_customer, ?) WHERE id = ?')
         .bind(obj.subscription, product.credits, now() + 31 * 86400, obj.customer, userId)
         .run();
+      await logActivity(db, userId, event.id, 'plan', product.credits, obj.amount_total ?? product.cents);
     }
   } else if (event.type === 'invoice.paid' && invoiceSubscription(obj)) {
     const periodEnd = obj.lines?.data?.[0]?.period?.end ?? now() + 31 * 86400;
@@ -178,10 +181,15 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
       .prepare('UPDATE users SET plan_subscription = ?1, plan_credits = COALESCE(?2, plan_credits), plan_used = 0, plan_period_end = ?3 WHERE stripe_customer = ?4 AND (plan_subscription IS NULL OR plan_subscription = ?1 OR plan_period_end <= ?5)')
       .bind(invoiceSubscription(obj), plan?.monthly ? plan.credits : null, periodEnd, obj.customer, now())
       .run();
+    // The first payment shows with its checkout; later ones are renewals.
+    if (obj.billing_reason === 'subscription_cycle') {
+      const owner = await db.prepare('SELECT id, plan_credits FROM users WHERE stripe_customer = ? AND plan_subscription = ?').bind(obj.customer, invoiceSubscription(obj)).first<{ id: string; plan_credits: number }>();
+      if (owner) await logActivity(db, owner.id, event.id, 'plan', owner.plan_credits, obj.amount_paid ?? null);
+    }
   } else if (event.type === 'charge.refunded' && obj.amount > 0) {
-    await takeBack(db, obj.payment_intent, async () => obj.customer ?? null, obj.amount_refunded / obj.amount);
+    await takeBack(db, event.id, 'refund', obj.payment_intent, async () => obj.customer ?? null, obj.amount_refunded / obj.amount);
   } else if (event.type === 'charge.dispute.created') {
-    await takeBack(db, obj.payment_intent, () => chargeCustomer(env, obj.charge), 1);
+    await takeBack(db, event.id, 'dispute', obj.payment_intent, () => chargeCustomer(env, obj.charge), 1);
   } else if (event.type === 'customer.subscription.deleted') {
     await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE plan_subscription = ?').bind(obj.id).run();
   }
@@ -192,7 +200,14 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
  * the amount returned. One-off credits come off the balance even when already
  * spent, which can leave it negative. A plan payment ends this period's credits.
  */
-async function takeBack(db: D1Database, paymentIntent: string | null, customer: () => Promise<string | null>, share: number): Promise<void> {
+async function takeBack(
+  db: D1Database,
+  eventId: string,
+  kind: ActivityKind,
+  paymentIntent: string | null,
+  customer: () => Promise<string | null>,
+  share: number,
+): Promise<void> {
   const purchase = paymentIntent
     ? await db.prepare('SELECT user_id, credits, taken FROM purchases WHERE payment_intent = ?').bind(paymentIntent).first<{ user_id: string; credits: number; taken: number }>()
     : null;
@@ -206,10 +221,15 @@ async function takeBack(db: D1Database, paymentIntent: string | null, customer: 
     ]);
     // Stripe retries the event, which then works out what is still due.
     if (!marked.meta.changes) throw new Error(`purchase ${paymentIntent} changed while taking credits back`);
+    await logActivity(db, purchase.user_id, eventId, kind, -due);
     return;
   }
   const owner = await customer();
-  if (owner) await db.prepare('UPDATE users SET plan_used = plan_credits WHERE stripe_customer = ? AND plan_subscription IS NOT NULL').bind(owner).run();
+  if (!owner) return;
+  const user = await db.prepare('SELECT id, plan_credits - plan_used AS left FROM users WHERE stripe_customer = ? AND plan_subscription IS NOT NULL').bind(owner).first<{ id: string; left: number }>();
+  if (!user) return;
+  await db.prepare('UPDATE users SET plan_used = plan_credits WHERE id = ?').bind(user.id).run();
+  await logActivity(db, user.id, eventId, kind, -Math.max(0, user.left));
 }
 
 /** Handles /api/checkout, /api/portal and /api/stripe/webhook. Returns null for other paths. */

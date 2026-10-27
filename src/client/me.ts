@@ -1,11 +1,21 @@
 // The signed-in account as /api/me returns it, shared by /account and /pricing.
 
+export interface Activity {
+  /** A format, check, credits (bought once), plan, refund or dispute. */
+  kind: string;
+  /** Signed: spent credits are negative. */
+  credits: number;
+  cents: number | null;
+  at: number;
+}
+
 export interface User {
   email: string | null;
   plan: { credits: number; used: number; renews: number; ending: boolean } | null;
   /** One-off credits, which never expire. */
   credits: number;
   canManage: boolean;
+  activity?: Activity[];
 }
 
 export interface Me {

@@ -1,7 +1,7 @@
 import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
 import { h } from './dom.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
-import { detectWithAi, freeCreditsLeft, QuotaError, type AiEntity } from './ai.ts';
+import { detectWithAi, freeCreditsLeft, QuotaError, startJob, type AiEntity } from './ai.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
@@ -364,6 +364,8 @@ class App {
     this.reset(false);
     this.say(`Opening ${file.name}…`);
     try {
+      // Before loading: audio is transcribed while it loads.
+      startJob(kindOf(file) ?? 'text');
       this.doc = await load(file, (m) => this.say(m));
       this.docName.textContent = file.name;
       const styles = this.doc.styles ?? [];
