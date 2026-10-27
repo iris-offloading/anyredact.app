@@ -4,7 +4,7 @@
 export const SITE = {
   name: 'AnyRedact',
   origin: 'https://anyredact.app',
-  tagline: 'Free online redaction for PDF, images, Word, Excel, text and audio',
+  tagline: 'Free online redaction for PDF, images, Word, PowerPoint, Excel, text and audio',
 };
 
 
@@ -84,6 +84,33 @@ export const TOOLS = [
       {
         q: 'Can I replace text with a label instead of black boxes?',
         a: 'Yes. Pick "Replace with label" to turn an email address into [EMAIL], for example.',
+      },
+    ],
+  },
+  {
+    slug: 'redact-powerpoint',
+    format: 'pptx',
+    name: 'Redact PowerPoint',
+    nav: 'PowerPoint',
+    title: 'Auto Redact PowerPoint Online with AI: PPTX | AnyRedact',
+    description:
+      'Auto redact PowerPoint (PPTX) decks online with AI. Personal details are removed from slides, speaker notes, comments and pictures, and author names are cleared.',
+    h1: 'Auto redact PowerPoint online with AI',
+    lead: 'Upload a .pptx to redact names, numbers and other personal details on slides, in speaker notes, comments and pictures.',
+    hint: 'PowerPoint .pptx files',
+    points: [
+      ['Design kept', 'Themes, fonts, shapes and animations are untouched.'],
+      ['Notes and comments too', 'Speaker notes, comments, hidden slides, tables, SmartArt and alt text are redacted along with the slides.'],
+      ['Pictures checked', 'Text in photos and scans is read and boxed out, and the first-slide thumbnail is removed.'],
+    ],
+    faq: [
+      {
+        q: 'Does it work with old .ppt files?',
+        a: 'Not yet. Save it as .pptx in PowerPoint, Keynote, LibreOffice or Google Slides first.',
+      },
+      {
+        q: 'Are charts redacted?',
+        a: 'Not yet. Charts and embedded files are kept as they are, so check them before sharing.',
       },
     ],
   },
@@ -170,12 +197,12 @@ export const TOOLS = [
 export const HOME = {
   slug: '',
   format: 'all',
-  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word, Excel, Text & Audio',
+  title: 'AnyRedact: Free Online Redaction Tool for PDF, Images, Word, PowerPoint, Excel, Text & Audio',
   description:
-    'Redact PDFs, images, Word documents, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
+    'Redact PDFs, images, Word documents, slide decks, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
-  lead: 'Drop a PDF, image, Word document, spreadsheet, text file or recording. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
-  hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
+  lead: 'Drop a PDF, image, Word document, slide deck, spreadsheet, text file or recording. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
+  hint: 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
@@ -200,7 +227,7 @@ export const HOME = {
     },
     {
       q: 'Which file types are supported?',
-      a: 'PDF, Word (.docx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, text files such as TXT, CSV, JSON and logs, and audio such as MP3, M4A and WAV. Video is planned.',
+      a: 'PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OpenDocument spreadsheets (.ods), PNG, JPG, WebP, text files such as TXT, CSV, JSON and logs, and audio such as MP3, M4A and WAV. Video is planned.',
     },
   ],
 };

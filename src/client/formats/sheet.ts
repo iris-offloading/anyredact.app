@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
 import { outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
-import { scrubProperties, scrubRelationships } from './docx.ts';
+import { scrubProperties, scrubRelationships } from './office.ts';
 import type { GridCell, SheetMeta } from './sheet-view.ts';
 
 // Spreadsheets are edited in place, like DOCX: only the text of redacted cells

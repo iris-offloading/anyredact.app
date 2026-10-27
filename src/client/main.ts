@@ -16,12 +16,13 @@ const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
   image: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp',
   docx: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation',
   sheet: '.xlsx,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,text/csv',
   text: '.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.yaml,.yml,text/*',
   audio: 'audio/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.aac,.weba',
   all: '',
 };
-ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.sheet, ACCEPT.text, ACCEPT.audio].join(',');
+ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.pptx, ACCEPT.sheet, ACCEPT.text, ACCEPT.audio].join(',');
 
 // What the "Look for" chips offer. AI findings are filtered by these.
 const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
@@ -33,7 +34,12 @@ const MAX_AI_PICTURE_PAGES = 30;
 
 /** Whether the preview shows text: everything except PDF pages and images. */
 function hasText(doc: LoadedDoc) {
-  return doc.kind === 'text' || doc.kind === 'docx' || doc.kind === 'sheet' || doc.kind === 'audio';
+  return doc.kind === 'text' || isOffice(doc) || doc.kind === 'sheet' || doc.kind === 'audio';
+}
+
+/** Word and PowerPoint: pictures inside a laid-out document rather than pages. */
+function isOffice(doc: LoadedDoc | null) {
+  return doc?.kind === 'docx' || doc?.kind === 'pptx';
 }
 
 function kindOf(file: File): Kind | null {
@@ -41,9 +47,10 @@ function kindOf(file: File): Kind | null {
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
   if (/^image\/(png|jpeg|webp)$/.test(file.type) || /\.(png|jpe?g|webp)$/.test(n)) return 'image';
   if (n.endsWith('.docx')) return 'docx';
+  if (n.endsWith('.pptx')) return 'pptx';
   if (/\.(xlsx|ods)$/.test(n)) return 'sheet';
   if (file.type.startsWith('audio/') || /\.(mp3|m4a|wav|flac|ogg|opus|aac|weba)$/.test(n)) return 'audio';
-  if (/\.(doc|xls)$/.test(n)) return null;
+  if (/\.(doc|xls|ppt)$/.test(n)) return null;
   if (file.type.startsWith('text/') || /\.(txt|md|csv|tsv|json|log|xml|html?|ya?ml)$/.test(n) || !file.type) return 'text';
   return null;
 }
@@ -56,6 +63,8 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
       return (await import('./formats/image.ts')).loadImage(file, progress);
     case 'docx':
       return (await import('./formats/docx.ts')).loadDocx(file, progress);
+    case 'pptx':
+      return (await import('./formats/pptx.ts')).loadPptx(file, progress);
     case 'sheet':
       return (await import('./formats/sheet.ts')).loadSheet(file, progress);
     case 'text':
@@ -63,7 +72,7 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
     case 'audio':
       return (await import('./formats/audio.ts')).loadAudio(file, progress);
     default:
-      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, DOCX, XLSX, ODS, a text file or audio. Old .doc and .xls files need to be saved as .docx or .xlsx first.');
+      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
   }
 }
 
@@ -94,7 +103,7 @@ class App {
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
   private focused: string | null = null;
-  // Word files laid out as pages, when the layout worked.
+  // Word pages or PowerPoint slides as laid out, when the layout worked.
   private sheet: HTMLElement | null = null;
   private layout: Layout | null = null;
   private view: DocView | null = null;
@@ -161,7 +170,7 @@ class App {
       this.fileInput,
       h('span', { className: 'drop-icon', 'aria-hidden': 'true' }, '⬆'),
       h('span', { className: 'drop-title' }, 'Drop a file here or ', h('u', {}, 'choose one')),
-      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio'),
+      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, () => drop.classList.remove('over'));
@@ -543,7 +552,7 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.times ? clock(f.times[0]) : f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (this.doc?.kind === 'docx' ? `picture ${f.page + 1}` : `p${f.page + 1}`) : '';
+        const where = f.times ? clock(f.times[0]) : f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (isOffice(this.doc) ? `picture ${f.page + 1}` : `p${f.page + 1}`) : '';
         const tag = [f.publicHint ? 'public?' : '', where].filter(Boolean).join(', ');
         const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, tag));
         // Only a moving mouse: mouseenter also fires when the list scrolls under a still pointer, and a tap fires it too, so the page jumped.
@@ -608,7 +617,7 @@ class App {
     if (!sheet?.isConnected) return;
     sheet.style.zoom = '';
     // Pages wider than the column overflow on both sides, so measure the pages rather than the scroll width.
-    const widest = Math.max(sheet.scrollWidth, ...Array.from(sheet.querySelectorAll<HTMLElement>('section.docx'), (s) => s.offsetWidth));
+    const widest = Math.max(sheet.scrollWidth, ...Array.from(sheet.querySelectorAll<HTMLElement>('section.docx, .slide'), (s) => s.offsetWidth));
     const ratio = this.preview.clientWidth / widest;
     if (ratio < 1) sheet.style.zoom = String(ratio);
   }
@@ -632,8 +641,8 @@ class App {
       return;
     }
     this.editors = doc.pages.map((page) => this.pageEditor(page));
-    // Pictures in a Word file show at their own size rather than full width.
-    if (doc.kind === 'docx') this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
+    // Pictures in a Word or PowerPoint file show at their own size rather than full width.
+    if (isOffice(doc)) this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
     // On laid-out pages the editor takes the picture's place and size; a picture used twice gets a second editor.
     for (const { page, img } of this.layout?.pictures ?? []) {
       let editor = this.editors[page];
@@ -778,7 +787,7 @@ class App {
     this.timeline?.draw();
     const loose = this.editors.filter((e) => !e.el.classList.contains('placed'));
     const pictures = loose.length
-      ? [h('p', { className: 'hint' }, doc.kind === 'docx' ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...loose.map((e) => e.el)]
+      ? [h('p', { className: 'hint' }, isOffice(doc) ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...loose.map((e) => e.el)]
       : [];
     if (!hasText(doc)) {
       if (!this.preview.childElementCount) this.preview.replaceChildren(...pictures);
@@ -810,7 +819,7 @@ class App {
       return;
     }
     const text = [
-      h('div', { className: 'text-preview' + (doc.kind === 'docx' || doc.kind === 'audio' ? ' flow' : '') }, ...blocks.slice(0, MAX)),
+      h('div', { className: 'text-preview' + (isOffice(doc) || doc.kind === 'audio' ? ' flow' : '') }, ...blocks.slice(0, MAX)),
       ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
     ];
     if (doc.mountView) this.extras.replaceChildren(...(blocks.length ? text : []));
@@ -839,17 +848,20 @@ class App {
     return el;
   }
 
-  /** Word pages: highlights go into the laid-out paragraphs; comments, alt text and other text off the pages follow below. */
+  /** Word pages and slides: highlights go into the laid-out paragraphs; notes, comments, alt text and other text off the pages follow below. */
   private refreshSheet(sheet: HTMLElement, layout: Layout, byUnit: Map<string, Finding[]>, pictures: HTMLElement[]) {
     const doc = this.doc!;
     for (const m of Array.from(sheet.querySelectorAll('mark[data-key]'))) m.replaceWith(...m.childNodes);
     sheet.normalize();
     const rest: HTMLElement[] = [];
+    let section: string | undefined;
     doc.units.forEach((u, i) => {
       if (u.page !== undefined) return;
       const findings = byUnit.get(u.id) ?? [];
       const blocks = layout.blocks.get(u.id);
-      if (!blocks) rest.push(this.unitBlock(u, i, findings));
+      if (!blocks && u.quiet && !findings.length) return;
+      if (!blocks && u.section !== undefined && u.section !== section) rest.push(h('h4', { className: 'unit-section' }, u.section));
+      if (!blocks) (section = u.section), rest.push(this.unitBlock(u, i, findings));
       else if (findings.length) for (const b of blocks) highlight(b, u.text, findings, (f) => this.mark(f));
     });
     const placed = this.editors.some((e) => e.el.classList.contains('placed'));
@@ -984,7 +996,7 @@ class App {
       this.consentBox.hidden = true;
       this.analyze();
     };
-    const images = `${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
+    const images = `${isOffice(doc) ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
     const what = seconds ? `the recording (${clock(seconds)})` : words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
     // Speech runs at about 900 characters a minute, which detection then reads.
     const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + pagesFor((seconds / 60) * 900) : 0);

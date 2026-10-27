@@ -97,7 +97,7 @@ export interface DocView {
 }
 
 export interface LoadedDoc {
-  kind: 'text' | 'image' | 'pdf' | 'docx' | 'sheet' | 'audio';
+  kind: 'text' | 'image' | 'pdf' | 'docx' | 'pptx' | 'sheet' | 'audio';
   name: string;
   units: Unit[];
   pages: Page[];
@@ -105,7 +105,7 @@ export interface LoadedDoc {
   notes: string[];
   /** Embedded metadata, listed for review; the export leaves it out. */
   metadata?: MetaField[];
-  /** Word: lays out the pages in the preview, as Word shows them. */
+  /** Word and PowerPoint: lays out the pages or slides in the preview, as the app shows them. */
   render?(container: HTMLElement): Promise<Layout>;
   /** Units shown in the custom view; the rest are listed under it. */
   gridUnits?: Set<string>;

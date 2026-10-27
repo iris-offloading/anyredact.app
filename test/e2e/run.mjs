@@ -186,6 +186,37 @@ async function download(name) {
   check(!zip.file('docProps/thumbnail.jpeg') && !root.includes('thumbnail'), 'docx thumbnail removed');
 }
 
+// PowerPoint
+{
+  const found = await run('redact-powerpoint', fx('sample.pptx'));
+  check(['jane.doe@example.com', 'bob@corp.io', '+1 (415) 555-0132', 'Maria Gonzalez', '123-45-6789', '4111 1111 1111 1111', '415-555-0177', '415-555-0199'].every((f) => found.includes(f)), `pptx findings: ${found.join(', ')}`);
+  check((await page.$$('.sheet .slide-page')).length === 3, 'pptx shows every slide');
+  const email = await page.$$eval('.sheet .slide-page mark.on', (m) => m.map((e) => e.textContent));
+  check(email.includes('jane.doe@example.com') && email.includes('4111 1111 1111 1111'), `pptx highlights sit on the slides: ${email.join(', ')}`);
+  check((await page.$$('.sheet .page.placed')).length === 1, 'pptx shows the picture in place');
+  const notes = await page.textContent('.notes');
+  check(notes.includes('Includes hidden slides: 3'), `pptx hidden slide flagged: ${notes}`);
+  const rest = await page.textContent('.text-preview');
+  check(rest.includes('Slide 1 notes') && rest.includes('Slide 1 comments') && rest.includes('Alt text'), 'pptx lists notes, comments and alt text below the slides');
+  await page.screenshot({ path: fx('pptx.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('pptx-phone.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { path: p, filename } = await download('out.pptx');
+  check(filename === 'sample-redacted.pptx', `pptx filename ${filename}`);
+  const zip = await JSZip.loadAsync(readFileSync(p));
+  const all = (await Promise.all(Object.keys(zip.files).filter((n) => n.endsWith('.xml') || n.endsWith('.rels')).map((n) => zip.file(n).async('string')))).join('\n');
+  check(!/jane\.doe|corp\.io|0132|0177|0199|Gonzalez|123-45|4111|Bob Author|Acme/.test(all), 'pptx slides, notes, comments, links, alt text and authors redacted');
+  const slide = await zip.file('ppt/slides/slide1.xml').async('string');
+  check(slide.includes('Onboarding: ') && slide.includes('srgbClr val="1F3A5F"'), 'pptx formatting kept');
+  check(!zip.file('docProps/thumbnail.jpeg'), 'pptx thumbnail removed');
+  const photo = await zip.file(Object.keys(zip.files).find((n) => n.startsWith('ppt/media/') && !zip.files[n].dir)).async('nodebuffer');
+  const tags = await exifr.parse(photo, { gps: true }).catch(() => null);
+  check(!tags?.latitude && !tags?.Make, `pptx picture metadata stripped: ${JSON.stringify(tags)}`);
+  const { channels } = await sharp(await sharp(photo).extract({ left: 160, top: 178, width: 250, height: 30 }).toBuffer()).stats();
+  check(channels[0].mean < 60, `pptx picture SSN covered (mean ${channels[0].mean.toFixed(0)})`);
+}
+
 // Spreadsheets
 {
   const found = await run('redact-excel', fx('sample.xlsx'));
