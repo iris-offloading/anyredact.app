@@ -129,7 +129,7 @@ async function quotaNamespace() {
     get: (name: string) => {
       if (!objects.has(name)) {
         const data = new Map<string, unknown>();
-        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v) };
+        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v), delete: async (k: string) => data.delete(k) };
         objects.set(name, new Quota({ storage } as unknown as DurableObjectState));
       }
       const obj = objects.get(name)!;
@@ -159,20 +159,24 @@ test('free allowance is enforced per browser, with a larger shared IP allowance'
   assert.equal(((await res.json()) as { code: string }).code, 'quota');
 });
 
-test('the first final check per browser is free, later ones use the allowance', async () => {
+test('each scan comes with one free final check, later ones use the allowance', async () => {
   const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '5000' };
-  const req = (device: string) =>
-    new Request('https://anyredact.app/api/check', {
-      method: 'POST',
-      body: JSON.stringify({ text: 'Jane Doe' }),
-      headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9' },
-    });
-  const first = (await (await worker.fetch(req('device-aaaa'), e)).json()) as { free: boolean };
+  const post = (path: string, body: object) =>
+    worker.fetch(
+      new Request(`https://anyredact.app${path}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' },
+      }),
+      e,
+    );
+  const { checkToken } = (await (await post('/api/detect', { text: 'Jane' })).json()) as { checkToken: string };
+  const first = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean };
   assert.equal(first.free, true);
-  const second = (await (await worker.fetch(req('device-aaaa'), e)).json()) as { free: boolean; quota: { used: number } };
-  assert.deepEqual([second.free, second.quota.used], [false, 3000]);
-  // 3000 of 5000 used, so a third paid check doesn't fit.
-  assert.equal((await worker.fetch(req('device-aaaa'), e)).status, 402);
+  const second = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean; quota: { used: number } };
+  // 4 characters for the scan, then 3,000 for the paid check.
+  assert.deepEqual([second.free, second.quota.used], [false, 3004]);
+  assert.equal(((await (await post('/api/check', { text: 'Jane Doe', checkToken: crypto.randomUUID() })).json()) as { free?: boolean }).free, undefined);
 });
 
 test('vision regions are validated and scaled to thousandths', async () => {

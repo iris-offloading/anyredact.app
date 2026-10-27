@@ -31,12 +31,22 @@ export class Quota {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const { amount = 0, limit, dryRun = false, once = false } = (await request.json()) as { amount?: number; limit: number; dryRun?: boolean; once?: boolean };
-    // A one-time grant, such as the first free final check: ok only the first time.
-    if (once) {
-      const taken = (await this.state.storage.get<boolean>('once')) ?? false;
-      if (!taken) await this.state.storage.put('once', true);
-      return Response.json({ ok: !taken, used: 0, limit });
+    const { amount = 0, limit, dryRun = false, grant = false, redeem = false } = (await request.json()) as {
+      amount?: number;
+      limit: number;
+      dryRun?: boolean;
+      grant?: boolean;
+      redeem?: boolean;
+    };
+    // A one-time pass, such as a scan's free final check: granted once, redeemed once.
+    if (grant) {
+      await this.state.storage.put('pass', true);
+      return Response.json({ ok: true, used: 0, limit });
+    }
+    if (redeem) {
+      const pass = (await this.state.storage.get<boolean>('pass')) ?? false;
+      if (pass) await this.state.storage.delete('pass');
+      return Response.json({ ok: pass, used: 0, limit });
     }
     const day = today();
     const stored = (await this.state.storage.get<{ day: string; used: number }>('usage')) ?? { day, used: 0 };
@@ -54,16 +64,11 @@ export function freeLimit(env: QuotaEnv): number {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_FREE_CHARS;
 }
 
-const deviceOf = (request: Request) => {
-  const device = request.headers.get('x-device-id');
-  return device && /^[\w-]{8,64}$/.test(device) ? device : null;
-};
-
 function identities(request: Request, env: QuotaEnv): { key: string; limit: number }[] {
   const limit = freeLimit(env);
   const out = [{ key: `ip:${clientNetwork(request)}`, limit: limit * IP_MULTIPLIER }];
-  const device = deviceOf(request);
-  if (device) out.unshift({ key: `device:${device}`, limit });
+  const device = request.headers.get('x-device-id');
+  if (device && /^[\w-]{8,64}$/.test(device)) out.unshift({ key: `device:${device}`, limit });
   return out;
 }
 
@@ -97,16 +102,16 @@ export async function quotaStatus(request: Request, env: QuotaEnv): Promise<Quot
   return { used: r.used, limit: r.limit };
 }
 
-// Free first checks per network a day, so new browser IDs can't keep getting them.
-const FREE_CHECKS_PER_IP = 3;
+/** Each scan comes with one free final check: returns its token, or undefined without the binding (local dev). */
+export async function grantFreeCheck(env: QuotaEnv): Promise<string | undefined> {
+  if (!env.QUOTA) return undefined;
+  const token = crypto.randomUUID();
+  await call(env, `free-check:${token}`, { grant: true, limit: 1 });
+  return token;
+}
 
-/** True once per browser: its first final check is free. Without the binding (local dev) never. */
-export async function takeFreeCheck(request: Request, env: QuotaEnv): Promise<boolean> {
-  const device = deviceOf(request);
-  if (!env.QUOTA || !device) return false;
-  const ip = `free-check:ip:${clientNetwork(request)}`;
-  if (!(await call(env, ip, { dryRun: true, amount: 1, limit: FREE_CHECKS_PER_IP })).ok) return false;
-  if (!(await call(env, `free-check:device:${device}`, { once: true, limit: 1 })).ok) return false;
-  await call(env, ip, { amount: 1, limit: FREE_CHECKS_PER_IP });
-  return true;
+/** True when the token is a scan's unused free check, which it then uses up. */
+export async function redeemFreeCheck(env: QuotaEnv, token: unknown): Promise<boolean> {
+  if (!env.QUOTA || typeof token !== 'string' || !/^[\w-]{36}$/.test(token)) return false;
+  return (await call(env, `free-check:${token}`, { redeem: true, limit: 1 })).ok;
 }

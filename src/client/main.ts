@@ -111,7 +111,7 @@ class App {
   // The word last clicked, by its place in `spoken`.
   private pinned: number | null = null;
   private transcribing: Promise<void> | null = null;
-  private detecting: Promise<AiEntity[]> | null = null;
+  private detecting: ReturnType<typeof detectWithAi> | null = null;
   private aiError: string | null = null;
   // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
@@ -145,6 +145,8 @@ class App {
   private download: HTMLButtonElement;
   private warn: HTMLElement;
   private checkBox: HTMLInputElement;
+  /** The current scan's free final check, until it is used. */
+  private checkToken: string | undefined;
   private checkRow: HTMLElement;
   private styleRow: HTMLElement;
   private styleSel: HTMLSelectElement;
@@ -244,9 +246,10 @@ class App {
 
     this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
-    // The first final check is free and starts ticked; later ones cost credits and start unticked.
-    this.checkBox = h('input', { type: 'checkbox', checked: store.get('check-used') !== '1' });
-    this.checkRow = h('label', { className: 'row check-row', hidden: true }, this.checkBox, checkLabel());
+    // Each scan's first final check is free and starts ticked; later ones cost credits and start unticked.
+    this.checkBox = h('input', { type: 'checkbox', checked: true });
+    this.checkRow = h('label', { className: 'row check-row', hidden: true });
+    this.setFreeCheck(undefined);
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
     this.metaBox = h('div', { className: 'meta', hidden: true });
@@ -346,6 +349,7 @@ class App {
     this.consent = 'ask';
     this.consentBox.hidden = true;
     this.checkRow.hidden = true;
+    this.setFreeCheck(undefined);
     this.overrides.clear();
     this.editors = [];
     this.sheet = null;
@@ -385,8 +389,11 @@ class App {
       if (text.trim()) {
         this.say('Finding names, addresses and other personal details…');
         try {
-          const entities = await (this.detecting ??= detectWithAi(text));
-          if (this.doc === doc) this.aiEntities = entities;
+          const { entities, checkToken } = await (this.detecting ??= detectWithAi(text));
+          if (this.doc === doc) {
+            this.aiEntities = entities;
+            this.setFreeCheck(checkToken);
+          }
         } catch (err) {
           if (this.doc === doc) this.aiError = aiFailure(err, 'AI detection failed.');
         }
@@ -948,14 +955,10 @@ class App {
       if (!skipCheck && this.consent === 'yes' && this.checkBox.checked) {
         this.say('Checking the redacted file for anything left…', false, true);
         try {
-          const { left, free } = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
-          // Once used, the check costs credits, so it is no longer ticked by default.
-          if (store.get('check-used') !== '1') {
-            store.set('check-used', '1');
-            this.checkBox.checked = false;
-            this.checkRow.replaceChildren(this.checkBox, checkLabel());
-          }
+          const { left, free } = await checkRemaining(remainingText(doc.units, this.findings, this.boxes), this.checkToken);
           if (this.doc !== doc) return;
+          // Once the free check is used, further checks cost credits, so the box is no longer ticked.
+          if (this.checkToken) this.setFreeCheck(undefined);
           if (left.length) return this.warnLeft(left, free);
         } catch (err) {
           console.warn(err);
@@ -1016,6 +1019,13 @@ class App {
     });
   }
 
+  /** Ticks the final check while the scan's free one is unused, and labels its price. */
+  private setFreeCheck(token: string | undefined) {
+    this.checkToken = token;
+    this.checkBox.checked = !!token;
+    this.checkRow.replaceChildren(this.checkBox, `Check for anything left (${token ? 'free' : credits(CHECK_CREDITS)})`);
+  }
+
   private warnLeft(left: string[], free: boolean) {
     const list = left.map((k) => CHECK_LABELS[k]);
     const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
@@ -1036,10 +1046,6 @@ class App {
 }
 
 const credits = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
-
-function checkLabel(): string {
-  return `Check for anything left (${store.get('check-used') === '1' ? credits(CHECK_CREDITS) : 'free'})`;
-}
 
 function aiFailure(err: unknown, fallback: string): string {
   if (err instanceof QuotaError) return `${err.message} They reset tomorrow, or you can buy more under Account.`;

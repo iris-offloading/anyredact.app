@@ -46,11 +46,11 @@ export function remainingText(units: Unit[], findings: Finding[], marks: ManualM
     .join('\n\n');
 }
 
-/** Returns the categories that are likely still readable, most likely first, and whether the check was the free one. */
-export async function checkRemaining(text: string): Promise<{ left: string[]; free: boolean }> {
+/** Returns the categories that are likely still readable, most likely first, and whether the scan's free check paid for it. */
+export async function checkRemaining(text: string, checkToken?: string): Promise<{ left: string[]; free: boolean }> {
   if (!text.replace(/[█\s]/g, '')) return { left: [], free: false };
   // Longer documents are checked from the start.
-  const data = await postApi<{ risks?: Record<string, number>; free?: boolean }>('/api/check', { text: text.slice(0, MAX_CHARS) }, 'The final check failed');
+  const data = await postApi<{ risks?: Record<string, number>; free?: boolean }>('/api/check', { text: text.slice(0, MAX_CHARS), checkToken }, 'The final check failed');
   const left = Object.entries(data.risks ?? {})
     .filter(([k, p]) => p >= RISK_THRESHOLD && k in CHECK_LABELS)
     .sort((a, b) => b[1] - a[1])

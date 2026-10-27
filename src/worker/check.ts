@@ -1,7 +1,7 @@
 import { CHECK_CREDITS, MAX_CHARS, PAGE_CHARS } from '../shared/pricing.ts';
 import { chargeUsage, runWithRetry, type Env } from './detect.ts';
 import { json, readAiPost, trialsAllowed } from './http.ts';
-import { takeFreeCheck } from './quota.ts';
+import { redeemFreeCheck } from './quota.ts';
 
 // Final check before download: the browser sends the document text with every
 // redaction already masked (█), and a decision model estimates, per category,
@@ -44,12 +44,12 @@ export function yesProbability(answer: unknown): number | null {
 export async function handleCheck(request: Request, env: Env): Promise<Response> {
   const body = await readAiPost(request, env, 'The final check is not configured on this server.');
   if (body instanceof Response) return body;
-  const { text } = body;
+  const { text, checkToken } = body;
   if (typeof text !== 'string' || !text.replace(/[█\s]/g, '')) return json({ risks: {} });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long to check (max ${MAX_CHARS} characters).` }, 413);
 
-  // Each browser's first check is free; later ones cost credits like detection.
-  const free = await takeFreeCheck(request, env);
+  // Each scan's first check is free; later ones cost credits like detection.
+  const free = await redeemFreeCheck(env, checkToken);
   const quota = free ? null : await chargeUsage(request, env, CHECK_CREDITS * PAGE_CHARS);
   if (quota instanceof Response) return quota;
 

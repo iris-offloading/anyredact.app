@@ -3,7 +3,7 @@ import { pool } from '../shared/pool.ts';
 import { MAX_CHARS, pagesFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
 import { spendPaidPages, type BillingEnv } from './billing.ts';
-import { chargeQuota, type QuotaEnv, type QuotaState } from './quota.ts';
+import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
 import { json, readAiPost, trialsAllowed } from './http.ts';
 
 // AI detection endpoint. The browser sends the text it extracted from a file
@@ -311,7 +311,8 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
       text,
     );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
-    return json({ entities, quota: quota.state });
+    // The scan comes with one free final check (src/worker/check.ts).
+    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env) });
   } catch (err) {
     console.error('detect failed', err);
     if (trial) return json({ error: String(err), model }, 502);
