@@ -171,6 +171,14 @@ textarea, select {
 }
 .text-preview.docx { font-family: inherit; font-size: 1rem; }
 .text-preview.docx .unit { margin-bottom: 0.6em; }
+.sheet { margin-bottom: 16px; }
+.sheet .docx-wrapper { background: none; padding: 0; }
+.sheet .docx-wrapper > section.docx { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); margin-bottom: 16px; }
+.sheet .page.placed { margin: 0; box-shadow: none; background: none; }
+.sheet .page.placed canvas { height: 100%; }
+/* The pages stay white in dark mode, so highlights keep their light colors. */
+.sheet mark.on { background: rgba(0, 0, 0, 0.45); color: inherit; }
+.sheet mark.off { background: #ffe8cc; }
 mark { cursor: pointer; border-radius: 3px; padding: 0 1px; }
 mark.on { background: var(--mark-on); color: inherit; }
 mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e8590c; }

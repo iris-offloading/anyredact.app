@@ -1,6 +1,7 @@
+import { parseAsync, renderDocument } from 'docx-preview';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { burnBoxes, canvasToBlob, outputName, rectsForPage, type LoadedDoc, type Page, type Progress, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, outputName, rectsForPage, type Layout, type LoadedDoc, type Page, type Progress, type Unit } from '../types.ts';
 import { ocrUnit } from './ocr.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -24,6 +25,7 @@ function textOf(el: Element): string {
 
 interface Para {
   unit: Unit;
+  el: Element;
   nodes: Element[];
   /** Original node texts, so repeated exports always start from the source. */
   original: string[];
@@ -72,11 +74,11 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
       byPara.get(p)!.push(el);
     }
     let i = 0;
-    for (const nodes of byPara.values()) {
+    for (const [el, nodes] of byPara) {
       const original = nodes.map(textOf);
       const text = original.join('');
       if (!text.trim()) continue;
-      paras.push({ unit: { id: `${name}#${i++}`, text }, nodes, original });
+      paras.push({ unit: { id: `${name}#${i++}`, text }, el, nodes, original });
     }
     for (const el of Array.from(xml.getElementsByTagName('*'))) {
       for (const attr of Array.from(el.attributes)) {
@@ -131,6 +133,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
     units: [...paras.map((p) => p.unit), ...[...alts.values()].map((a) => a.unit), ...pictureUnits],
     pages,
     notes,
+    render: (container) => render(file, parts, paras, pictures, container),
     async exportFile(findings, boxes, style) {
       const byUnit = new Map<string, typeof findings>();
       for (const f of findings) if (f.enabled) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
@@ -192,6 +195,54 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
       return { blob, filename: outputName(file.name, 'docx') };
     },
   };
+}
+
+/**
+ * Lays out the document with docx-preview. A bookmark at the start of each
+ * paragraph shows where its unit lands; the bookmarks go into a copy of the
+ * package, so the download never carries them.
+ */
+async function render(file: File, parts: Map<string, Document>, paras: Para[], pictures: Picture[], container: HTMLElement): Promise<Layout> {
+  const marks = paras.map((p, i) => {
+    const b = p.el.ownerDocument.createElementNS(W, 'w:bookmarkStart');
+    b.setAttributeNS(W, 'w:id', String(1e9 + i));
+    b.setAttributeNS(W, 'w:name', `anyredact-${i}`);
+    const props = Array.from(p.el.children).find((c) => c.localName === 'pPr');
+    p.el.insertBefore(b, props ? props.nextSibling : p.el.firstChild);
+    return b;
+  });
+  const copy = await JSZip.loadAsync(file);
+  const ser = new XMLSerializer();
+  for (const [name, xml] of parts) copy.file(name, ser.serializeToString(xml));
+  for (const b of marks) b.remove();
+
+  // Tracked deletions stay in the file until redacted, so show them as Word does.
+  const options = { renderChanges: true };
+  const doc = await parseAsync(await copy.generateAsync({ type: 'blob', compression: 'STORE' }), options);
+  // Note which part each picture came from, so the editor can take its place.
+  const sources = new Map<string, string>();
+  const loadImage = doc.loadDocumentImage.bind(doc);
+  doc.loadDocumentImage = async (id: string, part: unknown) => {
+    const url = await loadImage(id, part);
+    const path = doc.getPathById(part ?? doc.documentPart, id);
+    if (url && path) sources.set(url, path);
+    return url;
+  };
+  container.replaceChildren(...(await renderDocument(doc, options)));
+
+  const blocks = new Map<string, HTMLElement[]>();
+  paras.forEach((p, i) => {
+    // Headers and footers repeat on every page.
+    const found = Array.from(container.querySelectorAll<HTMLElement>(`[id="anyredact-${i}"]`), (span) => span.parentElement!);
+    if (found.length) blocks.set(p.unit.id, found);
+  });
+  const pageOf = new Map(pictures.filter((p) => p.page >= 0).map((p) => [p.name, p.page]));
+  const placed: Layout['pictures'] = [];
+  for (const img of Array.from(container.querySelectorAll('img'))) {
+    const page = pageOf.get(sources.get(img.src) ?? '');
+    if (page !== undefined) placed.push({ page, img });
+  }
+  return { blocks, pictures: placed };
 }
 
 async function decode(blob: Blob): Promise<HTMLCanvasElement> {

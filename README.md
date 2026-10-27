@@ -12,7 +12,7 @@ Free online redaction for PDF, images, Word (DOCX) and text, served from Cloudfl
 | --- | --- |
 | PDF | Every page flattened to an image with solid boxes. Original text, links, forms and metadata are gone. Up to 60 pages. |
 | Image (PNG/JPG/WebP) | Re-encoded image with solid boxes; EXIF, GPS, XMP and IPTC metadata is listed in the editor and dropped from the download. |
-| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded pictures are read with OCR, can take picture redaction and drawn boxes, and are re-encoded so their metadata is dropped (GIF and BMP become PNG); alt text and the first-page thumbnail are handled too. EMF, WMF and TIFF pictures are left as they are. |
+| DOCX | Same document with redacted characters replaced (█ or a `[LABEL]`). Covers body, headers, footers, footnotes, comments, tracked deletions, field codes and hyperlink targets; author names and document properties are cleared. Embedded pictures are read with OCR, can take picture redaction and drawn boxes, and are re-encoded so their metadata is dropped (GIF and BMP become PNG); alt text and the first-page thumbnail are handled too. EMF, WMF and TIFF pictures are left as they are. The editor lays the pages out with docx-preview, with highlights and picture boxes in place. |
 | Text (TXT, CSV, JSON, logs…) | Masked or labelled text. |
 
 Users can untick any detection, add their own terms, select text to redact everywhere, and draw boxes on PDF pages and images.

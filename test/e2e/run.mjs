@@ -115,6 +115,34 @@ async function download(name) {
 {
   const found = await run('redact-word', fx('sample.docx'));
   check(found.includes('bob@corp.io') && found.includes('123-45-6789'), `docx findings: ${found.join(', ')}`);
+  // The address spans two runs, so it shows as two pieces of one highlight.
+  const email = await page.$$eval('.sheet section.docx mark.on', (m) => m.filter((e) => e.dataset.key === m.find((x) => x.textContent === 'bob@')?.dataset.key).map((e) => e.textContent).join(''));
+  check(email === 'bob@corp.io', `docx highlights sit on the laid-out page: ${email}`);
+  const mark = page.locator('.sheet mark', { hasText: '123-45-6789' }).first();
+  await mark.click();
+  check((await mark.getAttribute('class')) === 'off', 'docx clicking a highlight on the page keeps it');
+  await mark.click();
+  check((await mark.getAttribute('class')) === 'on', 'docx clicking a kept highlight on the page redacts it');
+  // Selecting a word on the page redacts that spot.
+  await page.evaluate(() => {
+    const sheet = document.querySelector('.sheet');
+    const w = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      const at = n.data.indexOf('today');
+      if (at >= 0) {
+        const r = document.createRange();
+        r.setStart(n, at);
+        r.setEnd(n, at + 5);
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+        n.parentElement.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        return;
+      }
+    }
+  });
+  await page.click('.sel-add >> text=Redact here');
+  await page.waitForFunction(() => [...document.querySelectorAll('.sheet mark.on')].some((e) => e.textContent === 'today'));
   await page.screenshot({ path: fx('docx.png') });
   const { path: p } = await download('out.docx');
   const zip = await JSZip.loadAsync(readFileSync(p));
@@ -125,13 +153,16 @@ async function download(name) {
   check(!/Gonzalez|0132|0199/.test(doc) && doc.includes('<w:br/>'), 'docx name and wrapped phones redacted, line break kept');
   check(!doc.includes('Bob Author') && !core.includes('Bob Author'), 'docx authors removed');
   check(!rels.includes('mailto'), 'docx hyperlink target removed');
+  check(!doc.includes('anyredact-'), 'docx download has no layout bookmarks');
+  check(!doc.includes('today') && doc.includes('Call '), 'docx spot picked on the page redacted');
 }
 
 // DOCX with pictures
 {
   const found = await run('redact-word', fx('pictures.docx'));
   check(found.includes('123-45-6789') && found.includes('415-555-0132'), `docx picture and alt text findings: ${found.join(', ')}`);
-  check((await page.$$('.page')).length === 2 && (await page.$$('.text-preview .unit')).length >= 2, 'docx shows text and both pictures');
+  check((await page.$$('.sheet .page.placed')).length === 2, 'docx shows both pictures in place');
+  check((await page.$$('.text-preview .unit')).length >= 1, 'docx shows alt text below the pages');
   await page.screenshot({ path: fx('docx-pictures.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: fx('docx-pictures-phone.png'), fullPage: true });

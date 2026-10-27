@@ -5,7 +5,8 @@ import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts'
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import { pagesFor } from '../shared/pricing.ts';
-import type { Finding, LoadedDoc, ManualBox, MetaField, RedactStyle } from './types.ts';
+import { highlight, pieces, unitRange } from './highlight.ts';
+import type { Finding, Layout, LoadedDoc, ManualBox, MetaField, Page, RedactStyle, Unit } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
@@ -84,6 +85,9 @@ class App {
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
   private focused: string | null = null;
+  // Word files laid out as pages, when the layout worked.
+  private sheet: HTMLElement | null = null;
+  private layout: Layout | null = null;
   private aiError: string | null = null;
   // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
@@ -276,6 +280,7 @@ class App {
       this.pictureBox.hidden = !this.doc.pages.length;
       this.notes.replaceChildren(...this.doc.notes.map((n) => h('li', {}, n)));
       this.renderMetadata(this.doc.metadata);
+      if (this.doc.render) await this.layOut(this.doc);
       this.intake.hidden = true;
       this.workspace.hidden = false;
       this.renderPreview();
@@ -304,6 +309,8 @@ class App {
     this.consentBox.hidden = true;
     this.overrides.clear();
     this.editors = [];
+    this.sheet = null;
+    this.layout = null;
     this.preview.replaceChildren();
     this.list.replaceChildren();
     this.metaBox.hidden = true;
@@ -533,37 +540,76 @@ class App {
     if (r.bottom < 0 || r.top > innerHeight) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
+  private async layOut(doc: LoadedDoc) {
+    this.say('Laying out pages…');
+    const sheet = h('div', { className: 'sheet' });
+    try {
+      this.layout = await doc.render!(sheet);
+    } catch (err) {
+      // The plain text view still covers every paragraph.
+      console.warn(err);
+      return;
+    }
+    this.sheet = sheet;
+    // Highlights sit inside links; clicking one toggles it rather than leaving the page.
+    sheet.addEventListener('click', (e) => (e.target as Element).closest('a') && e.preventDefault());
+    new ResizeObserver(() => this.fitSheet()).observe(this.preview);
+  }
+
+  /** Scales the pages down to the preview width, as on a phone. */
+  private fitSheet() {
+    const sheet = this.sheet;
+    if (!sheet?.isConnected) return;
+    sheet.style.zoom = '';
+    // Pages wider than the column overflow on both sides, so measure the pages rather than the scroll width.
+    const widest = Math.max(sheet.scrollWidth, ...Array.from(sheet.querySelectorAll<HTMLElement>('section.docx'), (s) => s.offsetWidth));
+    const ratio = this.preview.clientWidth / widest;
+    if (ratio < 1) sheet.style.zoom = String(ratio);
+  }
+
   private renderPreview() {
     const doc = this.doc!;
-    this.editors = doc.pages.map(
-      (page) =>
-        new PageEditor({
-          page,
-          overlays: () => this.overlaysFor(page.index),
-          onDraw: (rect) => {
-            this.boxes.push({ ...rect, page: page.index, id: crypto.randomUUID() });
-            this.renderList();
-            this.refreshPreview();
-          },
-          onClick: (o) => {
-            if (o.kind === 'manual') this.boxes = this.boxes.filter((b) => b.id !== o.id);
-            else {
-              const f = this.findings.find((x) => x.key === o.id);
-              if (f) return this.toggle([f.key], !f.enabled);
-            }
-            this.renderList();
-            this.refreshPreview();
-          },
-        }),
-    );
+    this.editors = doc.pages.map((page) => this.pageEditor(page));
     // Pictures in a Word file show at their own size rather than full width.
     if (doc.kind === 'docx') this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
+    // On laid-out pages the editor takes the picture's place and size; a picture used twice gets a second editor.
+    for (const { page, img } of this.layout?.pictures ?? []) {
+      let editor = this.editors[page];
+      if (editor.el.classList.contains('placed')) {
+        editor = this.pageEditor(doc.pages[page]);
+        this.editors.push(editor);
+      }
+      editor.el.style.cssText = img.style.cssText;
+      editor.el.classList.add('placed');
+      img.replaceWith(editor.el);
+    }
     this.preview.replaceChildren();
     if (hasText(doc)) {
       this.preview.addEventListener('mouseup', this.onSelect);
       this.preview.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
     }
     this.refreshPreview();
+  }
+
+  private pageEditor(page: Page) {
+    return new PageEditor({
+      page,
+      overlays: () => this.overlaysFor(page.index),
+      onDraw: (rect) => {
+        this.boxes.push({ ...rect, page: page.index, id: crypto.randomUUID() });
+        this.renderList();
+        this.refreshPreview();
+      },
+      onClick: (o) => {
+        if (o.kind === 'manual') this.boxes = this.boxes.filter((b) => b.id !== o.id);
+        else {
+          const f = this.findings.find((x) => x.key === o.id);
+          if (f) return this.toggle([f.key], !f.enabled);
+        }
+        this.renderList();
+        this.refreshPreview();
+      },
+    });
   }
 
   private onSelect = (e?: Event) => {
@@ -607,6 +653,13 @@ class App {
       while (end > start && /\s/.test(unit.text[end - 1])) end--;
       if (end > start) out.push({ unitId: unit.id, start, end });
     }
+    for (const [unitId, blocks] of this.layout?.blocks ?? []) {
+      const unit = units.find((u) => u.id === unitId)!;
+      for (const block of blocks) {
+        const span = range.intersectsNode(block) && unitRange(block, unit.text, range);
+        if (span) out.push({ unitId, ...span });
+      }
+    }
     return out;
   }
 
@@ -629,8 +682,9 @@ class App {
     const doc = this.doc;
     if (!doc) return;
     for (const e of this.editors) e.draw();
-    const pictures = this.editors.length
-      ? [h('p', { className: 'hint' }, doc.kind === 'docx' ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...this.editors.map((e) => e.el)]
+    const loose = this.editors.filter((e) => !e.el.classList.contains('placed'));
+    const pictures = loose.length
+      ? [h('p', { className: 'hint' }, doc.kind === 'docx' ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...loose.map((e) => e.el)]
       : [];
     if (!hasText(doc)) {
       if (!this.preview.childElementCount) this.preview.replaceChildren(...pictures);
@@ -639,43 +693,51 @@ class App {
     // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
     const byUnit = new Map<string, Finding[]>();
     for (const f of this.findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-    const blocks = doc.units.flatMap((u, i) => {
-      if (u.page !== undefined) return [];
-      const el = h('div', { className: 'unit', 'data-unit': String(i) });
-      const spans = byUnit.get(u.id) ?? [];
-      // Spans can overlap (a spot picked inside a kept finding), so cut the text at every
-      // edge and show each piece as the span on top: a redacted one beats a kept one.
-      const cuts = [...new Set([0, u.text.length, ...spans.flatMap((f) => [f.start, f.end])])].sort((x, y) => x - y);
-      let pos = 0;
-      let top: Finding | undefined;
-      const flush = (to: number) => {
-        if (to <= pos) return;
-        const text = u.text.slice(pos, to);
-        const f = top;
-        if (!f) el.append(text);
-        else {
-          const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, text);
-          mark.addEventListener('click', () => this.toggle([f.key], !f.enabled));
-          el.append(mark);
-        }
-        pos = to;
-      };
-      for (let i = 0; i < cuts.length - 1; i++) {
-        const cover = spans.filter((f) => f.start <= cuts[i] && f.end >= cuts[i + 1]);
-        const next = [...cover].reverse().find((f) => f.enabled) ?? cover[0];
-        if (next !== top) flush(cuts[i]);
-        top = next;
-      }
-      flush(u.text.length);
-      return [el];
-    });
+    const { sheet, layout } = this;
+    if (sheet && layout) return this.refreshSheet(sheet, layout, byUnit, pictures);
+    const blocks = doc.units.flatMap((u, i) => (u.page === undefined ? [this.unitBlock(u, i, byUnit.get(u.id) ?? [])] : []));
     const MAX = 2000;
     this.preview.replaceChildren(
-      h('p', { className: 'hint' }, 'Click a highlight to keep it. Select text to redact it.'),
+      h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select text to add more.'),
       h('div', { className: 'text-preview' + (doc.kind === 'docx' ? ' docx' : '') }, ...blocks.slice(0, MAX)),
       ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
       ...pictures,
     );
+  }
+
+  private mark(f: Finding, text: string | Node) {
+    const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, text);
+    mark.addEventListener('click', () => this.toggle([f.key], !f.enabled));
+    return mark;
+  }
+
+  private unitBlock(u: Unit, index: number, spans: Finding[]) {
+    const el = h('div', { className: 'unit', 'data-unit': String(index) });
+    for (const p of pieces(u.text.length, spans)) el.append(p.top ? this.mark(p.top, u.text.slice(p.start, p.end)) : u.text.slice(p.start, p.end));
+    return el;
+  }
+
+  /** Word pages: highlights go into the laid-out paragraphs; comments, alt text and other text off the pages follow below. */
+  private refreshSheet(sheet: HTMLElement, layout: Layout, byUnit: Map<string, Finding[]>, pictures: HTMLElement[]) {
+    const doc = this.doc!;
+    for (const m of Array.from(sheet.querySelectorAll('mark[data-key]'))) m.replaceWith(...m.childNodes);
+    sheet.normalize();
+    const rest: HTMLElement[] = [];
+    doc.units.forEach((u, i) => {
+      if (u.page !== undefined) return;
+      const findings = byUnit.get(u.id) ?? [];
+      const blocks = layout.blocks.get(u.id);
+      if (!blocks) rest.push(this.unitBlock(u, i, findings));
+      else if (findings.length) for (const b of blocks) highlight(b, u.text, findings, (f) => this.mark(f, ''));
+    });
+    const placed = this.editors.some((e) => e.el.classList.contains('placed'));
+    this.preview.replaceChildren(
+      h('p', { className: 'hint' }, placed ? 'Click a highlight or box to redact or keep it. Select text, or drag on a picture, to add more.' : 'Click a highlight to redact or keep it. Select text to add more.'),
+      sheet,
+      ...(rest.length ? [h('h3', {}, 'Also in this file'), h('div', { className: 'text-preview docx' }, ...rest)] : []),
+      ...pictures,
+    );
+    this.fitSheet();
   }
 
   private async export(skipCheck = false) {
