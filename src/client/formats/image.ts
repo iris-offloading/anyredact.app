@@ -1,8 +1,7 @@
-import { burnBoxes, canvasToBlob, outputName, rectsForPage, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, outputName, rectsForPage, scaledCanvas, type LoadedDoc, type Progress, type Unit } from '../types.ts';
 import { readMetadata } from './metadata.ts';
 import { ocrUnit } from './ocr.ts';
 
-const MAX_SIDE = 6000;
 const HEIC = /^image\/hei[cf]/;
 
 function isHeic(file: File) {
@@ -25,11 +24,7 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
   progress('Opening image…');
   const metadata = readMetadata(file);
   const bitmap = await decode(file, progress);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const canvas = scaledCanvas(bitmap);
   bitmap.close();
 
   const notes: string[] = [];

@@ -27,9 +27,15 @@ export const PRODUCTS: Product[] = [
   { id: 'credits-2000', name: '2,000 credits', credits: 2_000, cents: 3_900 },
 ];
 
-/** The product with this id. Ids from before the rename (pack-500) still name their product, for checkouts started then and old links. */
-export const findProduct = (id: unknown): Product | undefined =>
-  typeof id === 'string' ? PRODUCTS.find((p) => p.id === id.replace(/^pack-/, 'credits-')) : undefined;
+// Ids before credits were renamed, still carried by checkouts started then (a bank debit confirms days later) and by old links.
+const OLD_IDS: Record<string, string> = { 'pack-100': 'credits-100', 'pack-500': 'credits-500', 'pack-2000': 'credits-2000' };
+
+/** The product with this id, or with the id it had before the rename. */
+export const findProduct = (id: unknown): Product | undefined => {
+  if (typeof id !== 'string') return undefined;
+  const current = Object.hasOwn(OLD_IDS, id) ? OLD_IDS[id] : id;
+  return PRODUCTS.find((p) => p.id === current);
+};
 
 /** Credits for a final check after the free first one. */
 export const CHECK_CREDITS = 1;

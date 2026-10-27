@@ -142,6 +142,34 @@ export function outputName(name: string, ext?: string): string {
   return `${base}-redacted.${e}`;
 }
 
+/** Items grouped by key, in their original order. */
+export function groupBy<T, K>(items: Iterable<T>, key: (item: T) => K): Map<K, T[]> {
+  const out = new Map<K, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    const list = out.get(k);
+    if (list) list.push(item);
+    else out.set(k, [item]);
+  }
+  return out;
+}
+
+/** The text of every finding left on, for redacting the same strings elsewhere in a file (links, chart caches). */
+export const enabledTexts = (findings: Finding[]) => new Set(findings.filter((f) => f.enabled).map((f) => f.text));
+
+// Largest side a picture is decoded at, opened alone or inside a document.
+export const MAX_PICTURE_SIDE = 6000;
+
+/** Draws a picture onto a new canvas, scaled down so its longer side is at most `maxSide`. */
+export function scaledCanvas(src: ImageBitmap | HTMLCanvasElement, maxSide = MAX_PICTURE_SIDE): HTMLCanvasElement {
+  const scale = Math.min(1, maxSide / Math.max(src.width, src.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(src.width * scale));
+  canvas.height = Math.max(1, Math.round(src.height * scale));
+  canvas.getContext('2d')!.drawImage(src, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 export function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode image'))), type, quality),

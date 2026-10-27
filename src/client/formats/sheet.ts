@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
+import { enabledTexts, outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
 import { enabledByUnit, linkHidesText, readRels, readXml, removePart, removeThumbnail, saveXml, scrubProperties, scrubRelationships } from './office.ts';
 import type { GridCell, SheetMeta } from './sheet-view.ts';
 
@@ -117,7 +117,7 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
 /** Rewrites every block with enabled findings; returns the old to new text of each changed cell. */
 function applyFindings(blocks: Block[], findings: Finding[], style: RedactStyle) {
   const byUnit = enabledByUnit(findings);
-  const redacted = new Set(findings.filter((f) => f.enabled).map((f) => f.text));
+  const redacted = enabledTexts(findings);
   const changed = new Map<string, string>();
   for (const b of blocks) {
     const spans = byUnit.get(b.unit.id);

@@ -2,7 +2,7 @@
 // needs no account. Sessions are random tokens in an HttpOnly cookie; only
 // their SHA-256 hashes are stored.
 import { stripe } from './billing.ts';
-import { crossOrigin, hex, json, now, rateLimited, type Limiter } from './http.ts';
+import { crossOrigin, hex, json, now, rateLimited, withCookies, type Limiter } from './http.ts';
 
 export interface AccountsEnv {
   DB?: D1Database;
@@ -55,11 +55,7 @@ const setCookie = (name: string, value: string, maxAge: number) =>
 // Readable by page scripts only to label the header link; carries no identity.
 const signedInHint = (on: boolean) => `signed_in=${on ? 1 : ''}; Path=/; Secure; SameSite=Lax; Max-Age=${on ? SESSION_DAYS * 86400 : 0}`;
 
-const redirect = (location: string, cookies: string[] = []) => {
-  const headers = new Headers({ location });
-  for (const c of cookies) headers.append('set-cookie', c);
-  return new Response(null, { status: 302, headers });
-};
+const redirect = (location: string, cookies: string[] = []) => new Response(null, { status: 302, headers: withCookies({ location }, cookies) });
 
 export async function currentUser(request: Request, env: AccountsEnv): Promise<User | null> {
   const token = cookie(request, 'session');

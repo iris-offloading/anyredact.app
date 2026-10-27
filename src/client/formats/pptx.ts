@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { enabledTexts, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
 import { collectAlts, drawingText, enabledByUnit, loadPictures, officeNotes, packOffice, readRels, readXml, renamePictures, writeAlts, writeRun, type Alt, type Picture, type Rel, type TextRun } from './office.ts';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
@@ -115,7 +115,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
     render: (container) => render(file, zip, slides.length, width, height, [...bodies.values()], pictures, container),
     async exportFile(findings, boxes, style, say = progress) {
       const byUnit = enabledByUnit(findings);
-      const redacted = new Set(findings.filter((f) => f.enabled).map((f) => f.text));
+      const redacted = enabledTexts(findings);
       for (const b of bodies.values()) {
         const spans = byUnit.get(b.unit.id) ?? [];
         writeRun(b, spans, style);

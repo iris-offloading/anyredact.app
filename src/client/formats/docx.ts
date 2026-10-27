@@ -1,7 +1,7 @@
 import { parseAsync, renderDocument } from 'docx-preview';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { enabledTexts, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
 import { collectAlts, drawingText, editXml, enabledByUnit, maskStrings, loadPictures, officeNotes, packOffice, readXml, renamePictures, writeAlts, writeRun, type Alt, type Picture, type TextRun } from './office.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -85,7 +85,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
     render: (container) => render(file, parts, paras, pictures, container),
     async exportFile(findings, boxes, style, say = progress) {
       const byUnit = enabledByUnit(findings);
-      const redacted = new Set(findings.filter((f) => f.enabled).map((f) => f.text));
+      const redacted = enabledTexts(findings);
       for (const p of paras) {
         const spans = byUnit.get(p.unit.id) ?? [];
         const next = spans.length ? rewriteSegments(p.original, spans, style) : p.original;

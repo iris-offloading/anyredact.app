@@ -13,6 +13,16 @@ export interface Me {
   signIn?: { email: boolean; google: boolean };
 }
 
+/** POSTs JSON to an account route. Failures come back as { error }. */
+export async function post(path: string, body: unknown = {}): Promise<{ url?: string; error?: string; ok?: boolean }> {
+  try {
+    const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return await res.json().catch(() => ({ error: `Request failed (${res.status}).` }));
+  } catch {
+    return { error: 'Could not reach the server. Please try again.' };
+  }
+}
+
 export const fetchMe = (): Promise<Me> =>
   fetch('/api/me')
     .then((r) => r.json() as Promise<Me>)

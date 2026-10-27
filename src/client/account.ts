@@ -1,7 +1,7 @@
 import { findProduct, FREE_CREDITS, price, PRODUCTS, type Product } from '../shared/pricing.ts';
 import { freeCreditsLeft } from './ai.ts';
 import { h } from './dom.ts';
-import { fetchMe, forgetPaidBase, paidBase, paidLeft, planLeft, rememberPaidBase, type User } from './me.ts';
+import { fetchMe, forgetPaidBase, paidBase, paidLeft, planLeft, post, rememberPaidBase, type User } from './me.ts';
 
 // The /account page: sign in, see balances, buy a plan or credits, manage a plan.
 
@@ -14,11 +14,6 @@ const say = (msg: string, kind: boolean | 'busy' | 'success' = false) => {
   status.classList.toggle('busy', kind === 'busy');
   status.classList.toggle('success', kind === 'success');
 };
-
-async function post(path: string, body: unknown = {}): Promise<{ url?: string; error?: string; ok?: boolean }> {
-  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  return res.json().catch(() => ({ error: `Request failed (${res.status}).` }));
-}
 
 // A plan button on /pricing links here with ?buy=<product>. The choice is kept
 // through sign-in (the emailed link may open in another tab) and checkout opens once signed in.

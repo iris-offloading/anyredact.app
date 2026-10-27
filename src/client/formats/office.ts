@@ -1,6 +1,6 @@
 import type JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { burnBoxes, canvasToBlob, outputName, rectsForPage, type Finding, type ManualMark, type Page, type Progress, type RedactStyle, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, groupBy, outputName, rectsForPage, scaledCanvas, type Finding, type ManualMark, type Page, type Progress, type RedactStyle, type Unit } from '../types.ts';
 import { ocrUnit } from './ocr.ts';
 
 // Helpers shared by the Word, Excel and PowerPoint formats, which are all zipped XML parts.
@@ -20,7 +20,6 @@ export interface TextRun {
 // Pictures the browser can decode; EMF, WMF and TIFF are left as they are.
 const PICTURE = /\.(png|jpe?g|gif|bmp|webp)$/i;
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' };
-const MAX_SIDE = 6000;
 // Bullets, rules and icons: re-encoded on download but not shown for review.
 const MIN_REVIEW_SIDE = 48;
 // Alt text and titles on pictures and shapes (DrawingML docPr/cNvPr, VML shapes).
@@ -221,18 +220,15 @@ export function renamePictures(xml: Document) {
 
 /** Findings per unit, leaving out the ones turned off. */
 export function enabledByUnit(findings: Finding[]) {
-  const byUnit = new Map<string, Finding[]>();
-  for (const f of findings) if (f.enabled) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-  return byUnit;
+  return groupBy(
+    findings.filter((f) => f.enabled),
+    (f) => f.unitId,
+  );
 }
 
 async function decode(blob: Blob): Promise<HTMLCanvasElement> {
   const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const canvas = scaledCanvas(bitmap);
   bitmap.close();
   return canvas;
 }

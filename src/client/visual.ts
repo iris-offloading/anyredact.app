@@ -1,6 +1,6 @@
 import type { FaceDetector, ObjectDetector } from '@mediapipe/tasks-vision';
 import { postApi } from './ai.ts';
-import type { Rect } from './types.ts';
+import { scaledCanvas, type Rect } from './types.ts';
 
 // Optional picture redaction: faces, screens, road signs and number plates.
 // A local MediaPipe pass runs in the browser and uploads nothing (models from
@@ -179,11 +179,7 @@ const AI_MAX_SIDE = 1280;
 /** Asks the server's vision model for the same regions, plus number plates and other signs. */
 export async function detectVisualAi(canvas: HTMLCanvasElement, kinds: Set<VisualKind>): Promise<VisualHit[]> {
   if (!kinds.size) return [];
-  const scale = Math.min(1, AI_MAX_SIDE / Math.max(canvas.width, canvas.height));
-  const small = document.createElement('canvas');
-  small.width = Math.round(canvas.width * scale);
-  small.height = Math.round(canvas.height * scale);
-  small.getContext('2d')!.drawImage(canvas, 0, 0, small.width, small.height);
+  const small = scaledCanvas(canvas, AI_MAX_SIDE);
   const data = await postApi<{ regions?: { kind: VisualKind; box: number[] }[] }>(
     '/api/vision',
     { image: small.toDataURL('image/jpeg', 0.85), kinds: [...kinds] },
