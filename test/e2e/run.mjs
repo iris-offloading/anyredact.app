@@ -331,6 +331,8 @@ if (existsSync(fx('sample.ods'))) {
   await page.locator('.meta').scrollIntoViewIfNeeded();
   await page.screenshot({ path: fx('metadata.png') });
   await page.setViewportSize({ width: 390, height: 844 });
+  // Phones show the panel under the Found tab.
+  await page.click('.tabs [data-view="found"]');
   await page.locator('.meta').scrollIntoViewIfNeeded();
   await page.screenshot({ path: fx('metadata-phone.png') });
   await page.setViewportSize({ width: 1280, height: 900 });

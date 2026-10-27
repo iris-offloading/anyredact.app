@@ -1,4 +1,4 @@
-// Header behaviour. Theme: system (default), light or dark, picked with the header switch and
+// Header behaviour. Theme: system (default), light or dark, picked with the header button and
 // kept in localStorage. Loaded in <head> so a saved theme applies before first paint.
 (() => {
   const root = document.documentElement;
@@ -29,19 +29,17 @@
     const account = document.querySelector('.signin-link');
     if (account && /(?:^|;\s*)signed_in=1/.test(document.cookie)) account.textContent = 'Account';
 
-    const group = document.querySelector('.theme-switch');
-    if (!group) return;
-    const buttons = [...group.querySelectorAll('button')];
+    const button = document.querySelector('.theme-button');
+    if (!button) return;
+    const ORDER = ['system', 'light', 'dark'];
     const sync = () => {
       const current = root.dataset.theme || 'system';
-      for (const b of buttons) {
-        const on = b.dataset.themeValue === current;
-        b.setAttribute('aria-checked', String(on));
-        b.tabIndex = on ? 0 : -1;
-      }
+      button.setAttribute('aria-label', `Theme: ${current}`);
+      button.title = `Theme: ${current}`;
+      for (const icon of button.querySelectorAll('[data-theme-icon]')) icon.style.display = icon.dataset.themeIcon === current ? '' : 'none';
     };
-    const choose = (b) => {
-      const value = b.dataset.themeValue;
+    button.addEventListener('click', () => {
+      const value = ORDER[(ORDER.indexOf(root.dataset.theme || 'system') + 1) % ORDER.length];
       apply(value);
       try {
         if (value === 'system') localStorage.removeItem('theme');
@@ -50,19 +48,8 @@
         /* storage unavailable: the choice lasts for this page only */
       }
       sync();
-    };
-    for (const b of buttons) b.addEventListener('click', () => choose(b));
-    // Arrow keys move between options, as in any radio group.
-    group.addEventListener('keydown', (e) => {
-      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-      if (!step) return;
-      e.preventDefault();
-      const i = buttons.indexOf(document.activeElement);
-      const next = buttons[(i + step + buttons.length) % buttons.length];
-      choose(next);
-      next.focus();
     });
     sync();
-    group.hidden = false;
+    button.hidden = false;
   });
 })();
