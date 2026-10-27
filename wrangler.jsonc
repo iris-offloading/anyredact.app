@@ -21,9 +21,14 @@
   // Free daily AI allowance per browser and per IP (src/worker/quota.ts).
   "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Quota"] }],
-  "vars": { "FREE_CHARS_PER_DAY": "30000", "EMAIL_FROM": "sign-in@anyredact.app" },
+  "vars": {
+    "FREE_CHARS_PER_DAY": "30000",
+    "EMAIL_FROM": "sign-in@anyredact.app",
+    // Not set for previews: Google only accepts the redirect URIs listed on the OAuth client.
+    "GOOGLE_CLIENT_ID": "879116354493-2dl85a7u6n5tkucbk36a5cbo07hsgnpb.apps.googleusercontent.com"
+  },
   // Accounts and paid page balances (migrations/). Secrets set in the dashboard:
-  // STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  // STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_CLIENT_SECRET,
   // and TRIAL_KEY, which benchmark requests to previews must send.
   // Sign-in links go out through Cloudflare Email Service (needs anyredact.app onboarded).
   "send_email": [{ "name": "EMAIL" }],
