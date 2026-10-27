@@ -105,6 +105,7 @@ class App {
 
   private intake: HTMLElement;
   private status: HTMLElement;
+  private panelHead: HTMLElement;
   private workspace: HTMLElement;
   private list: HTMLElement;
   private preview: HTMLElement;
@@ -216,10 +217,11 @@ class App {
     this.metaBox = h('div', { className: 'meta', hidden: true });
     this.consentBox = h('div', { className: 'consent', hidden: true });
 
+    this.panelHead = h('div', { className: 'panel-head' }, this.docName, reset);
     const panel = h(
       'aside',
       { className: 'panel' },
-      h('div', { className: 'panel-head' }, this.docName, reset),
+      this.panelHead,
       this.consentBox,
       h('h3', {}, 'Look for'),
       typeBoxes,
@@ -247,7 +249,13 @@ class App {
 
   private addTerm: (t: string) => void = () => {};
 
-  private say(msg: string, error = false) {
+  /** Shows the status at the top of the panel while a file is open, or above the download button while exporting. */
+  private say(msg: string, error = false, nearDownload = false) {
+    if (this.workspace.hidden) this.intake.after(this.status);
+    else if (nearDownload) this.download.before(this.status);
+    else this.panelHead.after(this.status);
+    // Progress messages carry an ellipsis and get a spinner.
+    this.status.classList.toggle('busy', !error && msg.includes('…'));
     this.status.hidden = !msg;
     this.status.textContent = msg;
     this.status.classList.toggle('error', error);
@@ -668,7 +676,7 @@ class App {
     try {
       // Ask a second model whether anything sensitive is still readable before handing over the file.
       if (!skipCheck && this.consent === 'yes') {
-        this.say('Checking the redacted file for anything left…');
+        this.say('Checking the redacted file for anything left…', false, true);
         try {
           const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
           if (this.doc !== doc) return;
@@ -678,7 +686,7 @@ class App {
           checkNote = ' The final check could not run, so review the file carefully.';
         }
       }
-      this.say('Preparing your redacted file…');
+      this.say('Preparing your redacted file…', false, true);
       const { blob, filename } = await doc.exportFile(this.findings, this.boxes, this.style);
       const url = URL.createObjectURL(blob);
       const a = h('a', { href: url, download: filename });
@@ -688,10 +696,10 @@ class App {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
       if (this.consent !== 'yes') checkNote = ' The AI check was skipped because nothing is sent to our server, so review the file carefully.';
-      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`);
+      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`, false, true);
     } catch (err) {
       console.error(err);
-      this.say(err instanceof Error ? err.message : 'Export failed.', true);
+      this.say(err instanceof Error ? err.message : 'Export failed.', true, true);
     } finally {
       this.busy = false;
       this.download.disabled = false;

@@ -107,6 +107,14 @@ textarea, select {
 
 .status { margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .status.error { border-color: #e03131; color: #e03131; }
+.panel .status { margin: 12px 0 4px; font-size: 0.92rem; }
+.status.busy { display: flex; align-items: center; gap: 10px; border: 2px solid var(--accent); font-weight: 600; }
+.status.busy::before {
+  content: ''; flex: none; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .status.busy::before { animation-duration: 2.4s; } }
 .warn { margin-bottom: 0; }
 .consent { margin: 12px 0 4px; padding: 12px; border: 2px solid var(--accent); border-radius: 10px; display: grid; gap: 8px; }
 .consent p { margin: 0; font-size: 0.92rem; }
