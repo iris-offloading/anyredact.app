@@ -83,6 +83,7 @@ class App {
   private aiEntities: AiEntity[] | null = null;
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
+  private focused: string | null = null;
   private aiError: string | null = null;
   // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
@@ -475,7 +476,9 @@ class App {
         const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (this.doc?.kind === 'docx' ? `picture ${f.page + 1}` : `p${f.page + 1}`) : '';
         const tag = [f.publicHint ? 'public?' : '', where].filter(Boolean).join(', ');
         const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, tag));
-        row.addEventListener('mouseenter', () => this.focus(f));
+        // Only a moving mouse: mouseenter also fires when the list scrolls under a still pointer, and a tap fires it too, so the page jumped.
+        row.addEventListener('pointermove', (e) => e.pointerType === 'mouse' && this.focus(f));
+        row.addEventListener('pointerleave', () => (this.focused = null));
         return row;
       });
       out.push(h('details', { className: 'group', open: items.length <= 12 }, h('summary', {}, all, ` ${ENTITY_LABELS[type]} `, h('span', { className: 'count' }, `${on}/${items.length}`)), ...rows));
@@ -502,6 +505,8 @@ class App {
   }
 
   private focus(f: Finding) {
+    if (this.focused === f.key) return;
+    this.focused = f.key;
     const el = this.preview.querySelector<HTMLElement>(`[data-key="${CSS.escape(f.key)}"]`) ?? (f.page !== undefined ? this.editors[f.page]?.el : null);
     if (!el) return;
     const r = el.getBoundingClientRect();
