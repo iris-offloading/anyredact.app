@@ -168,10 +168,10 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
     units,
     pages,
     notes,
-    async exportFile(findings, boxes) {
+    async exportFile(findings, boxes, _style, say = progress) {
       const out = await PDFDocument.create();
       for (const p of pages) {
-        progress(`Writing page ${p.index + 1} of ${pages.length}…`);
+        say(`Writing page ${p.index + 1} of ${pages.length}…`);
         const burned = burnBoxes(p.canvas, rectsForPage(p.index, findings, boxes));
         const jpg = await out.embedJpg(await (await canvasToBlob(burned, 'image/jpeg', 0.9)).arrayBuffer());
         const { w, h } = sizes[p.index];

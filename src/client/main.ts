@@ -385,7 +385,7 @@ class App {
       if (this.doc !== null) await this.analyze();
     } catch (err) {
       console.error(err);
-      this.doc = null;
+      this.reset(false);
       this.say(err instanceof Error ? err.message : 'Could not open that file.', true);
     } finally {
       this.busy = false;
@@ -523,8 +523,8 @@ class App {
     const kinds = new Set(this.visualKinds);
     // A queued pass for a file that has since been replaced must not fill the new file's caches.
     if (this.doc !== doc) return [];
-    if (!kinds.size || !doc.pages.length) return [];
     this.visualError = null;
+    if (!kinds.size || !doc.pages.length) return [];
     const local = missingKinds(this.visualLocal, kinds);
     if (local.size) {
       this.say('Looking for faces and screens on this device…');
@@ -675,8 +675,11 @@ class App {
     this.sheet = sheet;
     // Highlights sit inside links; clicking one toggles it rather than leaving the page.
     sheet.addEventListener('click', (e) => (e.target as Element).closest('a') && e.preventDefault());
-    new ResizeObserver(() => this.fitSheet()).observe(this.preview);
+    this.sheetResize ??= new ResizeObserver(() => this.fitSheet());
+    this.sheetResize.observe(this.preview);
   }
+
+  private sheetResize?: ResizeObserver;
 
   /** Scales the pages down to the preview width, as on a phone. */
   private fitSheet() {

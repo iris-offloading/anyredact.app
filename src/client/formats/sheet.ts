@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
 import { outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
-import { scrubProperties, scrubRelationships } from './office.ts';
+import { linkHidesText, scrubProperties, scrubRelationships } from './office.ts';
 import type { GridCell, SheetMeta } from './sheet-view.ts';
 
 // Spreadsheets are edited in place, like DOCX: only the text of redacted cells
@@ -522,8 +522,7 @@ async function readOds(zip: JSZip): Promise<Workbook> {
     sheets,
     async finish(changed, redacted) {
       for (const a of Array.from(content.getElementsByTagNameNS(TEXT, 'a'))) {
-        const href = decodeURIComponent(a.getAttributeNS(XLINK, 'href') ?? '');
-        if (/^mailto:/i.test(href) || [...redacted].some((t) => href.includes(t))) a.setAttributeNS(XLINK, 'xlink:href', 'about:blank');
+        if (linkHidesText(a.getAttributeNS(XLINK, 'href') ?? '', redacted)) a.setAttributeNS(XLINK, 'xlink:href', 'about:blank');
       }
       save(zip, 'content.xml', content);
       if (styles) save(zip, 'styles.xml', styles);

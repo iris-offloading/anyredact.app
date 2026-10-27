@@ -1,8 +1,8 @@
 import { plausibleEntity } from '../shared/detect.ts';
 import { pool } from '../shared/pool.ts';
-import { MAX_CHARS, pagesFor } from '../shared/pricing.ts';
+import { MAX_CHARS, PAGE_CHARS, pagesFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
-import { spendPaidPages, type BillingEnv } from './billing.ts';
+import { refundPaidPages, spendPaidPages, type BillingEnv } from './billing.ts';
 import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
 import { json, readAiPost, trialsAllowed } from './http.ts';
 
@@ -277,8 +277,14 @@ async function detectBatch(env: Env, texts: unknown[], model: string, options?: 
   return json({ model, results: out });
 }
 
+export interface Charge {
+  state?: QuotaState;
+  /** Gives the charge back, for a request whose model call failed. */
+  refund: () => Promise<void>;
+}
+
 /** Charges the free daily allowance, then the account's paid pages. Returns a 402 response when neither covers it. */
-export async function chargeUsage(request: Request, env: Env, chars: number): Promise<Response | { state?: QuotaState }> {
+export async function chargeUsage(request: Request, env: Env, chars: number): Promise<Response | Charge> {
   const user = await currentUser(request, env);
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
   if (user && user.pack_pages < 0) {
@@ -286,8 +292,16 @@ export async function chargeUsage(request: Request, env: Env, chars: number): Pr
   }
   const quota = await chargeQuota(request, env, chars);
   if (!quota.exceeded) return quota;
-  const paid = user ? await spendPaidPages(env, user.id, pagesFor(chars)) : false;
-  if (paid) return quota;
+  const paid = user ? await spendPaidPages(env, user.id, pagesFor(chars)) : null;
+  if (paid) {
+    return {
+      state: quota.state,
+      refund: async () => {
+        await Promise.all([quota.refund(), refundPaidPages(env, user!.id, paid)]);
+      },
+    };
+  }
+  await quota.refund();
   return json({ error: "You've used today's free credits.", code: 'quota', signedIn: !!user, quota: quota.state }, 402);
 }
 
@@ -316,10 +330,11 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
       text,
     );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
-    // The scan comes with one free final check (src/worker/check.ts).
-    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env) });
+    // The scan comes with one free final check of about its size (src/worker/check.ts).
+    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env, text.length * 2 + PAGE_CHARS) });
   } catch (err) {
     console.error('detect failed', err);
+    await quota.refund();
     if (trial) return json({ error: String(err), model }, 502);
     return json({ error: 'AI detection is unavailable right now.' }, 502);
   }

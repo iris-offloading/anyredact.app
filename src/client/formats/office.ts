@@ -307,6 +307,24 @@ export async function removeThumbnail(zip: JSZip) {
   });
 }
 
+/** Replaces each redacted string inside `value` with █, keeping spaces. */
+export function maskStrings(value: string, redacted: Set<string>): string {
+  let out = value;
+  for (const t of redacted) if (t.trim()) out = out.split(t).join(t.replace(/\S/gu, '█'));
+  return out;
+}
+
+/** Whether a link target is a mail address or holds redacted text. */
+export function linkHidesText(target: string, redacted: Set<string>): boolean {
+  let decoded = target;
+  try {
+    decoded = decodeURIComponent(target);
+  } catch {
+    // A stray % (a "5%" in a query string): compare the raw target.
+  }
+  return /^mailto:/i.test(decoded) || [...redacted].some((t) => decoded.includes(t) || target.includes(t));
+}
+
 /** Hyperlink targets live in .rels files; blank any that point at redacted text or a mail address. */
 export async function scrubRelationships(zip: JSZip, redacted: Set<string>, parts = /^word\/_rels\/.*\.rels$/) {
   for (const name of Object.keys(zip.files).filter((n) => parts.test(n))) {
@@ -314,8 +332,7 @@ export async function scrubRelationships(zip: JSZip, redacted: Set<string>, part
       let changed = false;
       for (const rel of Array.from(xml.getElementsByTagName('Relationship'))) {
         if (rel.getAttribute('TargetMode') !== 'External') continue;
-        const target = decodeURIComponent(rel.getAttribute('Target') ?? '');
-        if (/^mailto:/i.test(target) || [...redacted].some((t) => target.includes(t))) {
+        if (linkHidesText(rel.getAttribute('Target') ?? '', redacted)) {
           rel.setAttribute('Target', 'about:blank');
           changed = true;
         }

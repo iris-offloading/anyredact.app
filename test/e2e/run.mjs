@@ -157,6 +157,9 @@ async function download(name) {
   check(!rels.includes('mailto'), 'docx hyperlink target removed');
   check(!doc.includes('anyredact-'), 'docx download has no layout bookmarks');
   check(!doc.includes('today') && doc.includes('Call '), 'docx spot picked on the page redacted');
+  check(!doc.includes('jane@example.com') && doc.includes('growth=5%'), 'docx simple field code redacted');
+  const store = await zip.file('customXml/item1.xml').async('string');
+  check(!doc.includes('dataBinding') && !store.includes('123-45'), 'docx bound content control unbound and its data redacted');
 }
 
 // DOCX with pictures
@@ -308,6 +311,12 @@ if (existsSync(fx('sample.ods'))) {
   const pdf = await PDFDocument.load(bytes);
   check(pdf.getPageCount() === 1 && Math.round(pdf.getPage(0).getWidth()) === 612, 'pdf page size kept');
   check(!bytes.toString('latin1').includes('jane') && pdf.getAuthor() === undefined, 'pdf has no original text or author');
+  const [jpg] = [...bytes.toString('latin1').matchAll(/\xFF\xD8[\s\S]*?\xFF\xD9/g)].map((m) => Buffer.from(m[0], 'latin1'));
+  const meta = await sharp(jpg).metadata();
+  const s = meta.width / 612;
+  // The field sits at x 72 to 372, y 520 to 550 in PDF points (from the bottom).
+  const { channels } = await sharp(jpg).extract({ left: Math.round(72 * s), top: Math.round((792 - 550) * s), width: Math.round(300 * s), height: Math.round(30 * s) }).stats();
+  check(channels[0].min < 100, `pdf form field value drawn on the page (min ${channels[0].min})`);
 }
 
 // Image (OCR loads from CDN, so allow time)

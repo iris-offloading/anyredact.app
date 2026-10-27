@@ -86,6 +86,7 @@ export async function handleVision(request: Request, env: Env): Promise<Response
     return json({ regions: parseRegions(responseContent(result), kinds), quota: quota.state });
   } catch (err) {
     console.error('vision failed', err);
+    await quota.refund();
     return json({ error: 'Picture detection is unavailable right now.' }, 502);
   }
 }

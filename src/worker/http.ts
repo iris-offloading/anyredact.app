@@ -34,6 +34,8 @@ export interface Limiter {
 export function clientNetwork(request: Request): string {
   const ip = request.headers.get('cf-connecting-ip') || 'anon';
   if (!ip.includes(':')) return ip;
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return mapped[1];
   const [head, tail = ''] = ip.toLowerCase().split('::');
   const left = head ? head.split(':') : [];
   const right = tail ? tail.split(':') : [];

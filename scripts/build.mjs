@@ -195,7 +195,7 @@ for (const [page, file] of pages) await writeFile(path.join(dist, file), toolPag
 const privacy = {
   slug: 'privacy',
   title: 'Privacy | AnyRedact',
-  description: 'How AnyRedact handles your files: processed only to find personal information, never stored or used for training, no accounts and no tracking.',
+  description: 'How AnyRedact handles your files: processed only to find personal information, never stored or used for training. No tracking.',
   jsonLd: false,
 };
 await writeFile(

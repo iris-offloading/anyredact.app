@@ -11,6 +11,10 @@ const font = await pdf.embedFont(StandardFonts.Helvetica);
 const page = pdf.addPage([612, 792]);
 const lines = ['Invoice for Jane Doe', 'Email: jane.doe@example.com', 'Phone: +1 (415) 555-0132', 'Card: 4111 1111 1111 1111', 'Thank you for your business.'];
 lines.forEach((l, i) => page.drawText(l, { x: 72, y: 700 - i * 30, size: 16, font }));
+// A filled form field: its value lives in the widget, not the page text.
+const field = pdf.getForm().createTextField('reference');
+field.setText('Reference A-77');
+field.addToPage(page, { x: 72, y: 520, width: 300, height: 30, borderWidth: 0 });
 pdf.setAuthor('Jane Doe');
 writeFileSync(`${out}/sample.pdf`, await pdf.save());
 
@@ -26,8 +30,11 @@ zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="
 <w:p><w:r><w:t xml:space="preserve">Prepared by: Maria Gonzalez</w:t></w:r></w:p>
 <w:p><w:r><w:t xml:space="preserve">Phone: 415-555-</w:t><w:br/><w:t>0132</w:t></w:r></w:p>
 <w:p><w:r><w:t xml:space="preserve">Fax: 415-555-</w:t></w:r></w:p><w:p><w:r><w:t>0199 (office)</w:t></w:r></w:p>
+<w:p><w:fldSimple w:instr="HYPERLINK &quot;https://example.com/u/jane@example.com?growth=5%&quot;"><w:r><w:t>jane@example.com</w:t></w:r></w:fldSimple></w:p>
+<w:sdt><w:sdtPr><w:dataBinding w:xpath="/client/ssn" w:storeItemID="{11111111-2222-3333-4444-555555555555}"/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>SSN 123-45-6789</w:t></w:r></w:p></w:sdtContent></w:sdt>
 <w:p><w:del w:id="1" w:author="Bob Author"><w:r><w:delText>old ssn 123-45-6789</w:delText></w:r></w:del></w:p>
 </w:body></w:document>`);
+zip.file('customXml/item1.xml', '<?xml version="1.0" encoding="UTF-8"?><client><ssn>123-45-6789</ssn></client>');
 writeFileSync(`${out}/sample.docx`, await zip.generateAsync({ type: 'nodebuffer' }));
 // A Word file with pictures: text and EXIF in a photo, alt text, a GIF and a first-page thumbnail.
 {
