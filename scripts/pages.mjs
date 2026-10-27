@@ -44,7 +44,7 @@ export const TOOLS = [
       'Redact images and screenshots online. AnyRedact reads the text in PNG, JPG and WebP files, finds personal data and blacks it out. Removes EXIF and GPS metadata too.',
     h1: 'Redact images and screenshots',
     lead: 'Hide emails, phone numbers, card numbers and names in screenshots, scans and photos. Text is read automatically and checked by AI.',
-    hint: 'PNG, JPG or WebP, or paste a screenshot',
+    hint: 'PNG, JPG or WebP',
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
@@ -177,9 +177,9 @@ export const HOME = {
   lead: 'Drop a PDF, image, Word document, spreadsheet, text file or recording. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
   hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
   points: [
-    ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],
+    ['Hidden data removed too', 'Author names, document properties, photo locations and audio tags are left out of the download.'],
   ],
   faq: [
     {

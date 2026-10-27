@@ -165,7 +165,7 @@ class App {
         innerHTML: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
       }),
       h('span', { className: 'drop-title' }, 'Drop a file to start'),
-      h('span', { className: 'drop-or' }, 'or ', h('u', {}, 'choose one'), ' from your device'),
+      h('span', { className: 'drop-or' }, 'or ', h('u', {}, 'choose one'), h('span', { className: 'paste-keys' }, ', or paste with ', h('kbd', {}, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V'))),
       h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
@@ -176,18 +176,15 @@ class App {
       if (f) this.open(f);
     });
 
-    const pasteArea = h('textarea', { rows: 6, placeholder: 'Paste text that contains emails, phone numbers, names…', 'aria-label': 'Text to redact' });
+    // Phones have no paste shortcut, so they get a box to paste into; so does the text page.
+    const pasteArea = h('textarea', { rows: 3, id: 'paste-text' });
+    const pasteText = (text: string) => text.trim() && this.open(new File([text], 'pasted-text.txt', { type: 'text/plain' }));
     const paste = h(
-      'details',
-      { className: 'paste', open: format === 'text' },
-      h('summary', {}, 'Or paste text'),
+      'div',
+      { className: 'paste' + (format === 'text' ? ' always' : '') },
+      h('label', { for: 'paste-text' }, 'Or paste text'),
       pasteArea,
-      h('button', {
-        type: 'button',
-        className: 'btn',
-        textContent: 'Find sensitive info',
-        onclick: () => pasteArea.value.trim() && this.open(new File([pasteArea.value], 'pasted-text.txt', { type: 'text/plain' })),
-      }),
+      h('button', { type: 'button', className: 'btn', textContent: 'Find personal info', onclick: () => pasteText(pasteArea.value) }),
     );
 
     this.intake = h('div', { className: 'intake' }, drop, ...(format === 'text' || format === 'all' ? [paste] : []));
@@ -282,6 +279,7 @@ class App {
       if (this.doc || (e.target as HTMLElement)?.closest?.('textarea,input')) return;
       const f = e.clipboardData?.files[0];
       if (f) this.open(f);
+      else if (format === 'text' || format === 'all') pasteText(e.clipboardData?.getData('text/plain') ?? '');
     });
   }
 
