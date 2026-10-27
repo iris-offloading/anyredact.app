@@ -430,10 +430,26 @@ mark.saying { outline: 2px solid var(--accent); }
 .plan .plan-price { font-size: 1.4rem; font-weight: 700; color: var(--text); }
 .plan .btn { margin-top: auto; min-height: 48px; border-radius: 12px; }
 .pricing { padding-top: 48px; padding-bottom: 48px; }
-.pricing h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.03em; margin: 0 0 8px; }
-.pricing h2 { margin: 40px 0 0; }
+.pricing h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.03em; margin: 0 0 24px; }
+.pricing h2 { margin: 48px 0 0; }
 .pricing h2 + p { margin: 6px 0 0; color: var(--muted); }
-.pricing .plans { margin: 16px 0 0; }
+.pricing .plans { margin: 0; align-items: stretch; }
+.plan small { font-size: 0.95rem; font-weight: 500; color: var(--muted); }
+.plan .plan-covers { color: var(--text); font-size: 1rem; }
+.plan.main { border: 2px solid var(--ink); padding: 19px; position: relative; }
+.plan.main:hover { border-color: var(--ink); }
+.plan-badge { position: absolute; top: -12px; left: 18px; padding: 2px 10px; border-radius: 999px; background: var(--ink); color: var(--ink-text) !important; font-size: 0.8rem !important; font-weight: 600; }
+.packs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.pack { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'name price' 'covers buy'; align-items: center; gap: 4px 12px; padding: 16px 20px; }
+.pack + .pack { border-left: 1px solid var(--line); }
+.pack strong { grid-area: name; }
+.pack span { grid-area: covers; color: var(--muted); font-size: 0.9rem; }
+.pack .pack-price { grid-area: price; justify-self: end; color: var(--text); font-size: 1.15rem; font-weight: 700; }
+.pack .btn { grid-area: buy; min-height: 36px; padding: 6px 18px; }
+@media (max-width: 800px) {
+  .packs { grid-template-columns: minmax(0, 1fr); }
+  .pack + .pack { border-left: 0; border-top: 1px solid var(--line); }
+}
 .credit-table { width: 100%; max-width: 760px; margin-top: 16px; border-collapse: collapse; }
 .credit-table th, .credit-table td { text-align: left; vertical-align: top; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--line); }
 .credit-table th { font-weight: 600; width: 45%; }
