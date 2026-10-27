@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
 import { outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
-import { linkHidesText, scrubProperties, scrubRelationships } from './office.ts';
+import { enabledByUnit, linkHidesText, readRels, readXml, removePart, removeThumbnail, saveXml, scrubProperties, scrubRelationships } from './office.ts';
 import type { GridCell, SheetMeta } from './sheet-view.ts';
 
 // Spreadsheets are edited in place, like DOCX: only the text of redacted cells
@@ -43,13 +43,6 @@ interface Workbook {
   finish(changed: Map<string, string>, redacted: Set<string>): Promise<void>;
 }
 
-const xmlOf = async (zip: JSZip, name: string) => {
-  const f = zip.file(name);
-  if (!f) return null;
-  const xml = new DOMParser().parseFromString(await f.async('string'), 'application/xml');
-  return xml.getElementsByTagName('parsererror').length ? null : xml;
-};
-const save = (zip: JSZip, name: string, xml: Document) => zip.file(name, new XMLSerializer().serializeToString(xml));
 const kids = (el: Element, ns: string, name: string) => Array.from(el.children).filter((c) => c.namespaceURI === ns && c.localName === name);
 const kid = (el: Element, ns: string, name: string) => kids(el, ns, name)[0] as Element | undefined;
 const preserve = (t: Element) => t.setAttributeNS(XML_NS, 'xml:space', 'preserve');
@@ -96,7 +89,6 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
 
   return {
     kind: 'sheet',
-    name: file.name,
     units,
     pages: [],
     notes,
@@ -105,12 +97,12 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
       const { mountSheetView } = await import('./sheet-view.ts');
       return mountSheetView(el, { sheets: book.sheets, units, grid, xlsx: ods ? undefined : await file.arrayBuffer() }, on);
     },
-    async exportFile(findings, _boxes, style) {
+    async exportFile(findings, _boxes, style, say = progress) {
       // Start from the original file each time, since redaction changes cell types.
       const { zip, book } = await open();
       const { changed, redacted } = applyFindings(book.blocks, findings, style);
       await book.finish(changed, redacted);
-      progress('Packing spreadsheet…');
+      say('Packing spreadsheet…');
       if (ods) zip.file('mimetype', 'application/vnd.oasis.opendocument.spreadsheet', { compression: 'STORE' });
       const blob = await zip.generateAsync({
         type: 'blob',
@@ -124,13 +116,8 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
 
 /** Rewrites every block with enabled findings; returns the old to new text of each changed cell. */
 function applyFindings(blocks: Block[], findings: Finding[], style: RedactStyle) {
-  const byUnit = new Map<string, Finding[]>();
-  const redacted = new Set<string>();
-  for (const f of findings) {
-    if (!f.enabled) continue;
-    (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
-    redacted.add(f.text);
-  }
+  const byUnit = enabledByUnit(findings);
+  const redacted = new Set(findings.filter((f) => f.enabled).map((f) => f.text));
   const changed = new Map<string, string>();
   for (const b of blocks) {
     const spans = byUnit.get(b.unit.id);
@@ -152,58 +139,13 @@ function applyFindings(blocks: Block[], findings: Finding[], style: RedactStyle)
 
 // ---------------------------------------------------------------- XLSX
 
-interface Rel {
-  el: Element;
-  type: string;
-  target: string;
-  external: boolean;
-}
-
-function resolvePart(from: string, target: string) {
-  if (target.startsWith('/')) return target.slice(1);
-  const parts = from.split('/').slice(0, -1);
-  for (const seg of target.split('/')) {
-    if (seg === '..') parts.pop();
-    else if (seg !== '.') parts.push(seg);
-  }
-  return parts.join('/');
-}
-
-const relsPath = (part: string) => {
-  const i = part.lastIndexOf('/');
-  return `${part.slice(0, i + 1)}_rels/${part.slice(i + 1)}.rels`;
-};
-
-async function relsOf(zip: JSZip, part: string) {
-  const xml = await xmlOf(zip, relsPath(part));
-  const rels = new Map<string, Rel>();
-  for (const el of Array.from(xml?.getElementsByTagName('Relationship') ?? [])) {
-    const external = el.getAttribute('TargetMode') === 'External';
-    const target = el.getAttribute('Target') ?? '';
-    rels.set(el.getAttribute('Id') ?? '', { el, type: el.getAttribute('Type') ?? '', target: external ? target : resolvePart(part, target), external });
-  }
-  return { xml, rels };
-}
-
-/** Drops a part along with the relationship and content type that point at it. */
-async function removePart(zip: JSZip, owner: string, part: string) {
-  zip.remove(part);
-  const { xml, rels } = await relsOf(zip, owner);
-  for (const r of rels.values()) if (r.target === part) r.el.remove();
-  if (xml) save(zip, relsPath(owner), xml);
-  const types = await xmlOf(zip, '[Content_Types].xml');
-  if (!types) return;
-  for (const o of Array.from(types.getElementsByTagName('Override'))) if (o.getAttribute('PartName') === `/${part}`) o.remove();
-  save(zip, '[Content_Types].xml', types);
-}
-
 async function readXlsx(zip: JSZip): Promise<Workbook> {
-  const root = await relsOf(zip, '');
+  const root = await readRels(zip, '');
   const bookPath = [...root.rels.values()].find((r) => r.type.endsWith('/officeDocument'))?.target ?? 'xl/workbook.xml';
-  const book = await xmlOf(zip, bookPath);
+  const book = await readXml(zip, bookPath);
   if (!book) throw new Error('This does not look like an Excel (.xlsx) workbook.');
   const S = book.documentElement.namespaceURI ?? '';
-  const bookRels = (await relsOf(zip, bookPath)).rels;
+  const bookRels = (await readRels(zip, bookPath)).rels;
   const relTarget = (suffix: string) => [...bookRels.values()].find((r) => r.type.endsWith(suffix))?.target;
   const parts = new Map<string, Document>([[bookPath, book]]);
   const blocks: Block[] = [];
@@ -211,7 +153,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
 
   // Shared strings: each <si> may be used by many cells, so edits are collected and settled in finish().
   const sstPath = relTarget('/sharedStrings');
-  const sst = sstPath ? await xmlOf(zip, sstPath) : null;
+  const sst = sstPath ? await readXml(zip, sstPath) : null;
   if (sst && sstPath) parts.set(sstPath, sst);
   const items = sst ? kids(sst.documentElement, S, 'si') : [];
   const refs = new Array<number>(items.length).fill(0);
@@ -256,7 +198,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
     const name = sheet.getAttribute('name') ?? '';
     const rel = bookRels.get(sheet.getAttributeNS(REL, 'id') ?? '');
     if (!rel || !rel.type.endsWith('/worksheet')) continue;
-    const xml = await xmlOf(zip, rel.target);
+    const xml = await readXml(zip, rel.target);
     if (!xml) continue;
     parts.set(rel.target, xml);
     sheetList.push({ name, hidden: /hidden/i.test(sheet.getAttribute('state') ?? '') });
@@ -303,11 +245,11 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
     }
 
     // Notes (legacy comments) and threaded comments live in their own parts.
-    const sheetRels = (await relsOf(zip, rel.target)).rels;
+    const sheetRels = (await readRels(zip, rel.target)).rels;
     for (const r of sheetRels.values()) {
       if (r.external) continue;
       if (r.type.endsWith('/comments')) {
-        const cx = await xmlOf(zip, r.target);
+        const cx = await readXml(zip, r.target);
         if (!cx) continue;
         parts.set(r.target, cx);
         for (const a of Array.from(cx.getElementsByTagNameNS(S, 'author'))) a.textContent = 'Redacted';
@@ -317,7 +259,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
           if (text.join('').trim()) blocks.push(block(`${r.target}#${i}`, `${name}: comments`, [nodeCell(nodes.map((n, j) => ({ text: text[j], node: n })))]));
         });
       } else if (r.type.endsWith('/threadedComment')) {
-        const tx = await xmlOf(zip, r.target);
+        const tx = await readXml(zip, r.target);
         if (!tx) continue;
         parts.set(r.target, tx);
         Array.from(tx.getElementsByTagName('*'))
@@ -375,7 +317,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
       // Charts and pivot tables keep their own copies of cell values.
       if (changed.size) {
         for (const name of Object.keys(zip.files).filter((n) => /^xl\/charts\/chart[^/]*\.xml$/.test(n))) {
-          const xml = await xmlOf(zip, name);
+          const xml = await readXml(zip, name);
           if (!xml) continue;
           for (const v of Array.from(xml.getElementsByTagName('*')).filter((e) => e.localName === 'v' && e.parentElement?.localName === 'pt')) {
             const next = changed.get(v.textContent ?? '');
@@ -386,7 +328,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
           parts.set(name, xml);
         }
         for (const name of Object.keys(zip.files).filter((n) => /^xl\/pivotCache\/pivotCache(Definition|Records)[^/]*\.xml$/.test(n))) {
-          const xml = await xmlOf(zip, name);
+          const xml = await readXml(zip, name);
           if (!xml) continue;
           for (const s of Array.from(xml.getElementsByTagName('*')).filter((e) => e.localName === 's' && e.hasAttribute('v'))) {
             const next = changed.get(s.getAttribute('v')!);
@@ -411,7 +353,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
 
       // People and paths: threaded comment authors, shared-workbook user, and the folder the file was saved in.
       const persons = relTarget('/person');
-      const px = persons ? await xmlOf(zip, persons) : null;
+      const px = persons ? await readXml(zip, persons) : null;
       if (px && persons) {
         for (const p of Array.from(px.getElementsByTagName('*')).filter((e) => e.localName === 'person')) {
           p.setAttribute('displayName', 'Redacted');
@@ -426,10 +368,9 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
         (wrapper ?? abs).remove();
       }
 
-      for (const [name, xml] of parts) if (zip.file(name)) save(zip, name, xml);
+      for (const [name, xml] of parts) if (zip.file(name)) saveXml(zip, name, xml);
       await scrubProperties(zip);
-      // The thumbnail is a picture of the first sheet.
-      for (const r of root.rels.values()) if (r.type.endsWith('/thumbnail')) await removePart(zip, '', r.target);
+      await removeThumbnail(zip);
     },
   };
 }
@@ -468,9 +409,9 @@ function odsToString(cell: Element, text: string) {
 }
 
 async function readOds(zip: JSZip): Promise<Workbook> {
-  const content = await xmlOf(zip, 'content.xml');
+  const content = await readXml(zip, 'content.xml');
   if (!content || !content.getElementsByTagNameNS(OFFICE, 'spreadsheet').length) throw new Error('This does not look like an OpenDocument (.ods) spreadsheet.');
-  const styles = await xmlOf(zip, 'styles.xml');
+  const styles = await readXml(zip, 'styles.xml');
   const blocks: Block[] = [];
   const sheets: SheetMeta[] = [];
   const notes: Block[] = [];
@@ -524,13 +465,13 @@ async function readOds(zip: JSZip): Promise<Workbook> {
       for (const a of Array.from(content.getElementsByTagNameNS(TEXT, 'a'))) {
         if (linkHidesText(a.getAttributeNS(XLINK, 'href') ?? '', redacted)) a.setAttributeNS(XLINK, 'xlink:href', 'about:blank');
       }
-      save(zip, 'content.xml', content);
-      if (styles) save(zip, 'styles.xml', styles);
+      saveXml(zip, 'content.xml', content);
+      if (styles) saveXml(zip, 'styles.xml', styles);
 
       // Charts are embedded documents with their own copy of the plotted cells.
       if (changed.size) {
         for (const name of Object.keys(zip.files).filter((n) => /^Object [^/]+\/content\.xml$/.test(n))) {
-          const xml = await xmlOf(zip, name);
+          const xml = await readXml(zip, name);
           if (!xml) continue;
           for (const cell of Array.from(xml.getElementsByTagNameNS(TABLE, 'table-cell'))) {
             const paras = Array.from(cell.getElementsByTagNameNS(TEXT, 'p'));
@@ -540,25 +481,25 @@ async function readOds(zip: JSZip): Promise<Workbook> {
             paras.forEach((p, i) => (i ? p.remove() : (p.textContent = next)));
             odsToString(cell, next);
           }
-          save(zip, name, xml);
+          saveXml(zip, name, xml);
         }
       }
 
-      const meta = await xmlOf(zip, 'meta.xml');
+      const meta = await readXml(zip, 'meta.xml');
       if (meta) {
         const drop = new Set(['creator', 'initial-creator', 'printed-by', 'user-defined', 'title', 'subject', 'description', 'keyword']);
         for (const el of Array.from(meta.getElementsByTagName('*'))) if (drop.has(el.localName) && el.parentElement?.localName === 'meta') el.remove();
-        save(zip, 'meta.xml', meta);
+        saveXml(zip, 'meta.xml', meta);
       }
       // The thumbnail is a picture of the first sheet.
       if (zip.file('Thumbnails/thumbnail.png')) {
         zip.remove('Thumbnails/thumbnail.png');
-        const manifest = await xmlOf(zip, 'META-INF/manifest.xml');
+        const manifest = await readXml(zip, 'META-INF/manifest.xml');
         if (manifest) {
           for (const e of Array.from(manifest.getElementsByTagNameNS(MANIFEST, 'file-entry'))) {
             if (e.getAttributeNS(MANIFEST, 'full-path')?.startsWith('Thumbnails/')) e.remove();
           }
-          save(zip, 'META-INF/manifest.xml', manifest);
+          saveXml(zip, 'META-INF/manifest.xml', manifest);
         }
       }
     },

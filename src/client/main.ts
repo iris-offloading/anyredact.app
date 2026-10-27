@@ -32,11 +32,11 @@ const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
 // Each page is one AI request, so very long PDFs only get the local pass after this.
 const MAX_AI_PICTURE_PAGES = 30;
 
-/** Whether the preview shows text: everything except PDF pages and images. */
 const PLUS_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>';
 const DOWNLOAD_NAMES: Record<LoadedDoc['kind'], string> = { pdf: 'PDF', image: 'image', docx: 'document', pptx: 'presentation', sheet: 'spreadsheet', text: 'file', audio: 'audio' };
 
+/** Whether the preview shows text: everything except PDF pages and images. */
 function hasText(doc: LoadedDoc) {
   return doc.kind === 'text' || isOffice(doc) || doc.kind === 'sheet' || doc.kind === 'audio';
 }
@@ -465,41 +465,21 @@ class App {
 
     const byId = new Map(doc.units.map((u) => [u.id, u]));
     const spans = analyzeUnits(doc.units, { terms, ai: this.aiEntities }).filter((s) => s.type === 'custom' || this.types.has(s.type));
-    const findings: Finding[] = spans.map((s) => {
-      const unit = byId.get(s.unitId)!;
-      const key = `${unit.id}:${s.start}:${s.end}`;
-      return {
-        key,
-        unitId: unit.id,
-        start: s.start,
-        end: s.end,
-        type: s.type,
-        source: s.source,
-        text: unit.text.slice(s.start, s.end),
-        enabled: this.overrides.get(key) ?? startsTicked(s, this.redactPublic),
-        publicHint: s.publicHint,
-        page: unit.page,
-        rects: unit.rectsFor?.(s.start, s.end) ?? [],
-        times: unit.timesFor?.(s.start, s.end) ?? undefined,
-      };
+    const finding = (unit: Unit, key: string, start: number, end: number, type: EntityType, defaultOn: boolean, publicHint?: string): Finding => ({
+      key,
+      unitId: unit.id,
+      start,
+      end,
+      type,
+      text: unit.text.slice(start, end),
+      enabled: this.overrides.get(key) ?? defaultOn,
+      publicHint,
+      page: unit.page,
+      rects: unit.rectsFor?.(start, end) ?? [],
+      times: unit.timesFor?.(start, end) ?? undefined,
     });
-    for (const p of this.picks) {
-      const unit = byId.get(p.unitId)!;
-      const key = `pick:${p.unitId}:${p.start}:${p.end}`;
-      findings.push({
-        key,
-        unitId: p.unitId,
-        start: p.start,
-        end: p.end,
-        type: 'custom',
-        source: 'term',
-        text: unit.text.slice(p.start, p.end),
-        enabled: this.overrides.get(key) ?? true,
-        page: unit.page,
-        rects: unit.rectsFor?.(p.start, p.end) ?? [],
-        times: unit.timesFor?.(p.start, p.end) ?? undefined,
-      });
-    }
+    const findings = spans.map((s) => finding(byId.get(s.unitId)!, `${s.unitId}:${s.start}:${s.end}`, s.start, s.end, s.type, startsTicked(s, this.redactPublic), s.publicHint));
+    for (const p of this.picks) findings.push(finding(byId.get(p.unitId)!, `pick:${p.unitId}:${p.start}:${p.end}`, p.start, p.end, 'custom', true));
     const pictures = await this.pictureFindings(doc);
     if (this.doc !== doc) return;
     this.findings = [...findings, ...pictures];
@@ -568,7 +548,6 @@ class App {
           start: 0,
           end: 0,
           type: hit.kind,
-          source: 'visual',
           text: `${ENTITY_LABELS[hit.kind]} ${n}`,
           enabled: this.overrides.get(key) ?? true,
           page: p.index,

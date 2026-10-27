@@ -4,7 +4,7 @@ import {
   BooleanNumber, CellValueType, createUniver, HorizontalAlign, LocaleType, mergeLocales, VerticalAlign, WrapStrategy,
   type ICellData, type IStyleData, type IWorkbookData, type IWorksheetData,
 } from '@univerjs/presets';
-import ExcelJS from 'exceljs';
+import type ExcelJS from 'exceljs';
 import type { DocView, Finding, Unit, ViewHandlers } from '../types.ts';
 
 // The spreadsheet preview: Univer draws the workbook (sheet tabs, styles, merged
@@ -120,7 +120,9 @@ function value(cell: ExcelJS.Cell): ICellData['v'] {
 const colWidth = (chars?: number) => Math.round((chars ?? 8.43) * 7 + 5);
 
 async function fromXlsx(buffer: ArrayBuffer, sheets: SheetMeta[]): Promise<Record<string, IWorksheetData>> {
-  const book = new ExcelJS.Workbook();
+  // Loaded only for .xlsx files.
+  const { default: Excel } = await import('exceljs');
+  const book = new Excel.Workbook();
   await book.xlsx.load(buffer);
   const out: Record<string, IWorksheetData> = {};
   for (const ws of book.worksheets) {

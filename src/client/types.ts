@@ -1,4 +1,4 @@
-import type { EntityType, Span } from '../shared/detect.ts';
+import type { EntityType } from '../shared/detect.ts';
 
 export interface Rect {
   x: number;
@@ -46,7 +46,6 @@ export interface Finding {
   start: number;
   end: number;
   type: EntityType;
-  source: Span['source'];
   text: string;
   enabled: boolean;
   publicHint?: string;
@@ -98,7 +97,6 @@ export interface DocView {
 
 export interface LoadedDoc {
   kind: 'text' | 'image' | 'pdf' | 'docx' | 'pptx' | 'sheet' | 'audio';
-  name: string;
   units: Unit[];
   pages: Page[];
   /** Shown to the user under the preview, e.g. limitations of the format. */

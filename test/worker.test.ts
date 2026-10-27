@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { chunkText, type Env } from '../src/worker/detect.ts';
+import { chunkText } from '../src/shared/detect.ts';
+import type { Env } from '../src/worker/detect.ts';
 import entry from '../src/worker/index.ts';
 
 const worker = { fetch: (req: Request, e: Env) => entry.fetch(req as Parameters<typeof entry.fetch>[0], e) };

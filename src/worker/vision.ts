@@ -4,7 +4,7 @@
 // turned picture redaction on and agreed to send the file.
 import { PAGE_CHARS } from '../shared/pricing.ts';
 import { chargeUsage, responseContent, runWithRetry, type Env } from './detect.ts';
-import { json, readAiPost } from './http.ts';
+import { json, modelJson, readAiPost } from './http.ts';
 
 // Chosen on sample photos: found small and turned faces that Gemma 4 and
 // Llama 4 Scout missed, and is not limited to 20 requests a minute like the
@@ -36,16 +36,7 @@ Return JSON only: {"items":[{"kind":"${kinds.join('|')}","box":[x0,y0,x1,y1]}]},
 
 /** Validates the model's items; boxes given as 0-1 fractions are scaled up. */
 export function parseRegions(content: unknown, kinds: VisionKind[]): Region[] {
-  let data: unknown = content;
-  if (typeof content === 'string') {
-    const m = content.match(/\{[\s\S]*\}/);
-    try {
-      data = m ? JSON.parse(m[0]) : null;
-    } catch {
-      return [];
-    }
-  }
-  const items = (data as { items?: unknown })?.items;
+  const items = (modelJson(content) as { items?: unknown })?.items;
   if (!Array.isArray(items)) return [];
   const out: Region[] = [];
   for (const it of items as { kind?: unknown; box?: unknown }[]) {

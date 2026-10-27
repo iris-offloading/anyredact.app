@@ -89,3 +89,14 @@ export async function readAiPost(request: Request, env: { AI?: unknown; DETECT_L
     return json({ error: 'Invalid JSON' }, 400);
   }
 }
+
+/** A model's answer as an object: as given, or the first {...} in its text. */
+export function modelJson(content: unknown): unknown {
+  if (typeof content !== 'string') return content;
+  const m = content.match(/\{[\s\S]*\}/);
+  try {
+    return m ? JSON.parse(m[0]) : null;
+  } catch {
+    return null;
+  }
+}
