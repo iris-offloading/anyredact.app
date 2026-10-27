@@ -473,7 +473,7 @@ mark.saying { outline: 2px solid var(--accent); }
 .account-head { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; margin-bottom: 24px; }
 .account-head h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.6rem); letter-spacing: -0.03em; }
 .account-view > .status { margin: 0 0 16px; }
-.account-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; align-items: start; }
+.account-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; }
 .account-side { display: grid; gap: 20px; }
 .panel-card { padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); }
 .panel-card h2 { margin: 0 0 16px; font-size: 1.1rem; letter-spacing: -0.01em; }

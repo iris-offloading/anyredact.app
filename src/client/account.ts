@@ -96,7 +96,7 @@ function meter(label: string, left: number | string, total: number | null, note?
   return h(
     'div',
     { className: 'meter' },
-    h('div', { className: 'meter-head' }, h('span', {}, label), h('strong', {}, total ? `${left.toLocaleString()} of ${total.toLocaleString()}` : left.toLocaleString())),
+    h('div', { className: 'meter-head' }, h('span', {}, label), h('strong', {}, total ? `${left.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}` : left.toLocaleString('en-US'))),
     ...(bar ? [bar] : []),
     ...(note ? [h('p', { className: 'meter-note' }, note)] : []),
   );
@@ -109,7 +109,7 @@ function offer(p: Product, button: string) {
   return h(
     'div',
     { className: 'offer' },
-    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.pages.toLocaleString()} credits`), h('span', {}, p.monthly ? `${p.pages.toLocaleString()} credits a month` : 'Paid once')),
+    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.pages.toLocaleString('en-US')} credits`), h('span', {}, p.monthly ? `${p.pages.toLocaleString('en-US')} credits a month` : 'Paid once')),
     h('span', { className: 'offer-price' }, usd(p.cents), ...(p.monthly ? [h('small', {}, ' / month')] : [])),
     h('button', { type: 'button', className: 'btn', textContent: button, onclick: () => checkout(p) }),
   );
@@ -157,7 +157,7 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
   const meters = [
     ...(free === null ? [] : [meter('Free today', free, FREE_CREDITS)]),
     sub
-      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, `Renews ${new Date(sub.renews * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`)
+      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, `Renews ${new Date(sub.renews * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`)
       : meter('Monthly plan', 'None', null),
     meter('Credits', user.packPages, null, 'Never expire'),
   ];
@@ -165,11 +165,11 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
     'section',
     { className: 'panel-card' },
     h('h2', {}, 'Balance'),
-    h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString()), h('span', { className: 'total-label' }, 'credits left')),
+    h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString('en-US')), h('span', { className: 'total-label' }, 'credits left')),
     h('div', { className: 'meters' }, ...meters),
   );
   const planCard = sub
-    ? h('section', { className: 'panel-card' }, h('h2', {}, 'Plan'), h('p', { className: 'muted' }, plan ? `${plan.name}, ${sub.pages.toLocaleString()} credits a month for ${usd(plan.cents)}.` : `${sub.pages.toLocaleString()} credits a month.`), ...(user.canManage ? [manageButton()] : []))
+    ? h('section', { className: 'panel-card' }, h('h2', {}, 'Plan'), h('p', { className: 'muted' }, plan ? `${plan.name}, ${sub.pages.toLocaleString('en-US')} credits a month for ${usd(plan.cents)}.` : `${sub.pages.toLocaleString('en-US')} credits a month.`), ...(user.canManage ? [manageButton()] : []))
     : h(
         'section',
         { className: 'panel-card' },
