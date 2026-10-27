@@ -623,7 +623,7 @@ class App {
     if (doc.mountView) {
       const host = h('div', { className: 'sheet-view' });
       this.extras = h('div');
-      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlighted cell to redact or keep it. Select a cell to add more.'), host, this.extras);
+      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select a cell to add more.'), host, this.extras);
       // The grid reports its own selection; text selection only applies to the list under it.
       this.extras.addEventListener('mouseup', this.onSelect);
       this.extras.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
