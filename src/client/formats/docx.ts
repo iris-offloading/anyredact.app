@@ -2,7 +2,7 @@ import { parseAsync, renderDocument } from 'docx-preview';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
 import { outputName, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
-import { collectAlts, enabledByUnit, loadPictures, removeThumbnail, renamePictures, scrubProperties, scrubRelationships, writeAlts, writePictures, type Alt, type Picture } from './office.ts';
+import { collectAlts, drawingText, dropEmbeddings, enabledByUnit, loadPictures, readXml, removeThumbnail, renamePictures, scrubProperties, scrubRelationships, writeAlts, writePictures, writeRun, type Alt, type Picture, type TextRun } from './office.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const TEXT_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
@@ -10,6 +10,7 @@ const TEXT_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comm
 const TEXT_TAGS = new Set(['t', 'delText', 'instrText']);
 // Run-level breaks become whitespace in the detection text so words and numbers don't run together.
 const BREAKS: Record<string, string> = { br: '\n', cr: '\n', tab: '\t' };
+const CHART_PARTS = /^word\/charts\/chart(Ex)?\d*\.xml$/;
 
 function textOf(el: Element): string {
   return TEXT_TAGS.has(el.localName) ? (el.textContent ?? '') : BREAKS[el.localName];
@@ -62,17 +63,26 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
     collectAlts(xml, alts);
   }
   if (!parts.has('word/document.xml')) throw new Error('This does not look like a Word (.docx) document.');
+  // Chart titles, labels and series names.
+  const charts: TextRun[] = [];
+  for (const name of Object.keys(zip.files).filter((n) => CHART_PARTS.test(n))) {
+    const xml = await readXml(zip, name);
+    if (!xml) continue;
+    parts.set(name, xml);
+    charts.push(...drawingText(xml, name).map((r) => ({ ...r, unit: { ...r.unit, section: 'Charts' } })));
+  }
 
   const { pictures, pages, units: pictureUnits, unreadable } = await loadPictures(zip, 'word/media/', progress);
 
   const notes = ['Author names and document properties are removed on download.'];
   if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} in EMF, WMF or TIFF format could not be opened and stay as they are.`);
+  if (Object.keys(zip.files).some((n) => /^word\/embeddings\/[^/]+$/.test(n))) notes.push('Embedded files and chart data are removed on download.');
 
   return {
     kind: 'docx',
     styles: TEXT_STYLES,
     name: file.name,
-    units: [...paras.map((p) => p.unit), ...[...alts.values()].map((a) => a.unit), ...pictureUnits],
+    units: [...paras.map((p) => p.unit), ...charts.map((c) => c.unit), ...[...alts.values()].map((a) => a.unit), ...pictureUnits],
     pages,
     notes,
     render: (container) => render(file, parts, paras, pictures, container),
@@ -89,6 +99,11 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
           if (n.localName !== 'instrText') n.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
         });
       }
+      for (const c of charts) {
+        const spans = byUnit.get(c.unit.id) ?? [];
+        for (const f of spans) redacted.add(f.text);
+        writeRun(c, spans, style);
+      }
       writeAlts(alts, byUnit, style, redacted);
       const ser = new XMLSerializer();
       for (const [name, xml] of parts) {
@@ -100,6 +115,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
         renamePictures(xml);
         zip.file(name, ser.serializeToString(xml));
       }
+      await dropEmbeddings(zip, parts, 'word');
       progress('Redacting pictures…');
       await writePictures(zip, pictures, findings, boxes);
       await scrubRelationships(zip, redacted);

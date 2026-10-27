@@ -80,6 +80,9 @@ ${pic('rId8', 2, 'Logo')}
   slide.addImage({ data: `image/jpeg;base64,${photo.toString('base64')}`, x: 0.6, y: 1.4, w: 9, h: 3, altText: 'ID card, call 415-555-0199' });
   slide.addTable([[{ text: 'Name' }, { text: 'Card' }], [{ text: 'Maria Gonzalez' }, { text: '4111 1111 1111 1111' }]], { x: 0.6, y: 5, w: 9, fontSize: 16, border: { type: 'solid', pt: 1, color: '999999' } });
   slide = deck.addSlide();
+  slide.addText('Hours', { x: 0.6, y: 0.4, w: 12, h: 0.8, fontSize: 32, bold: true });
+  slide.addChart(deck.ChartType.bar, [{ name: 'Hours', labels: ['Maria Gonzalez', 'Team B'], values: [12, 30] }], { x: 0.6, y: 1.4, w: 8, h: 4, showTitle: true, title: 'Overtime for Jane Doe' });
+  slide = deck.addSlide();
   slide.hidden = true;
   slide.addText('Old ssn 123-45-6789', { x: 0.6, y: 0.6, w: 8, h: 1, fontSize: 28 });
   const z = await JSZip.loadAsync(await deck.write({ outputType: 'nodebuffer' }));
@@ -97,6 +100,25 @@ ${pic('rId8', 2, 'Logo')}
   const types = await z.file('[Content_Types].xml').async('string');
   z.file('[Content_Types].xml', types.replace('</Types>', '<Override PartName="/ppt/comments/comment1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.comments+xml"/><Override PartName="/ppt/commentAuthors.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml"/></Types>'));
   writeFileSync(`${out}/sample.pptx`, await z.generateAsync({ type: 'nodebuffer' }));
+
+  // The same chart, with the workbook behind it, in a Word file.
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const chart = Object.keys(z.files).find((n) => /^ppt\/charts\/chart\d+\.xml$/.test(n));
+  const chartRels = await z.file(chart.replace(/charts\/(chart\d+\.xml)$/, 'charts/_rels/$1.rels')).async('string');
+  const book = Object.keys(z.files).find((n) => /^ppt\/embeddings\/.+\.xlsx$/.test(n));
+  const d = new JSZip();
+  d.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/></Types>`);
+  d.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/></Relationships>`);
+  d.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="${R}/chart" Target="charts/chart1.xml"/></Relationships>`);
+  d.file('word/charts/chart1.xml', await z.file(chart).async('string'));
+  d.file('word/charts/_rels/chart1.xml.rels', chartRels.replace(/Target="[^"]*embeddings\//, 'Target="../embeddings/'));
+  d.file(`word/embeddings/${book.split('/').pop()}`, await z.file(book).async('nodebuffer'));
+  d.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W} xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><w:body>
+<w:p><w:r><w:t>Overtime report.</w:t></w:r></w:p>
+<w:p><w:r><w:drawing><wp:inline><wp:extent cx="5486400" cy="3200400"/><wp:docPr id="1" name="Chart 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rId9"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+</w:body></w:document>`);
+  writeFileSync(`${out}/chart.docx`, await d.generateAsync({ type: 'nodebuffer' }));
 }
 
 // A deck whose chart color closes the drawing early and adds a frame that loads a script.

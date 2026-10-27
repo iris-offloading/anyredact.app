@@ -5,6 +5,18 @@ import { ocrUnit } from './ocr.ts';
 
 // Helpers shared by the Word, Excel and PowerPoint formats, which are all zipped XML parts.
 
+const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/** Text stored across several nodes. */
+export interface TextRun {
+  unit: Unit;
+  /** Text nodes, with null for the line and paragraph breaks between them. */
+  nodes: (Element | null)[];
+  /** Original piece texts, so repeated exports always start from the source. */
+  original: string[];
+}
+
 // Pictures the browser can decode; EMF, WMF and TIFF are left as they are.
 const PICTURE = /\.(png|jpe?g|gif|bmp|webp)$/i;
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' };
@@ -84,6 +96,97 @@ export async function writePictures(zip: JSZip, pictures: Picture[], findings: F
   }
 }
 
+/**
+ * DrawingML text in a part: each element holding paragraphs (shapes, table
+ * cells, SmartArt, chart titles, PowerPoint comments) is one unit, and so is
+ * each list of chart labels.
+ */
+export function drawingText(xml: Document, name: string, skip: (el: Element) => boolean = () => false): TextRun[] {
+  const out: TextRun[] = [];
+  const holders = new Set<Element>();
+  for (const p of Array.from(xml.getElementsByTagNameNS(A, 'p'))) if (p.parentElement) holders.add(p.parentElement);
+  for (const holder of holders) {
+    if (skip(holder)) continue;
+    const nodes: (Element | null)[] = [];
+    const original: string[] = [];
+    for (const p of Array.from(holder.children).filter((c) => c.localName === 'p' && c.namespaceURI === A)) {
+      if (nodes.length) nodes.push(null), original.push('\n');
+      for (const el of Array.from(p.getElementsByTagNameNS(A, '*'))) {
+        if (el.localName === 't') nodes.push(el), original.push(el.textContent ?? '');
+        else if (el.localName === 'br') nodes.push(null), original.push('\n');
+      }
+    }
+    const text = original.join('');
+    if (text.trim()) out.push({ unit: { id: `${name}#${out.length}`, text }, nodes, original });
+  }
+  // Charts keep their labels and series names as plain values, one list per series or axis.
+  const lists = new Map<Element, Element[]>();
+  for (const pt of Array.from(xml.getElementsByTagName('*')).filter((e) => e.localName === 'pt')) {
+    const list = pt.parentElement;
+    if (!list || !['strCache', 'lvl'].includes(list.localName)) continue;
+    const v = Array.from(pt.children).find((c) => c.localName === 'v') ?? (pt.children.length ? null : pt);
+    if (v) (lists.get(list) ?? lists.set(list, []).get(list)!).push(v);
+  }
+  for (const values of lists.values()) {
+    const nodes = values.flatMap((v, i) => (i ? [null, v] : [v]));
+    const original = nodes.map((n) => (n ? (n.textContent ?? '') : '\n'));
+    const text = original.join('');
+    if (text.trim()) out.push({ unit: { id: `${name}#${out.length}`, text }, nodes, original });
+  }
+  return out;
+}
+
+export function writeRun(run: TextRun, spans: Finding[], style: RedactStyle) {
+  const next = spans.length ? rewriteSegments(run.original, spans, style) : run.original;
+  run.nodes.forEach((n, i) => {
+    if (n && n.textContent !== next[i]) n.textContent = next[i];
+  });
+}
+
+/**
+ * Embedded files (attached documents, the workbook behind each chart) are not
+ * read for review, so they are left out. Charts keep the values they show and
+ * an object keeps its picture, but neither can be opened for editing.
+ */
+export async function dropEmbeddings(zip: JSZip, parts: Map<string, Document>, root: 'word' | 'ppt') {
+  const embedded = new Set(Object.keys(zip.files).filter((n) => n.startsWith(`${root}/embeddings/`) && !zip.files[n].dir));
+  embedded.forEach((n) => zip.remove(n));
+  for (const rels of Object.keys(zip.files).filter((n) => n.startsWith(`${root}/`) && /_rels\/[^/]+\.rels$/.test(n))) {
+    const gone = new Set<string>();
+    await editXml(zip, rels, (xml) => {
+      for (const rel of Array.from(xml.getElementsByTagName('Relationship'))) {
+        const external = rel.getAttribute('TargetMode') === 'External';
+        // A linked object or chart workbook points at a path such as C:\Users\jane\Documents.
+        const linked = external && /\/(oleObject|package)$/.test(rel.getAttribute('Type') ?? '');
+        if (!linked && (external || !embedded.has(resolveTarget(rels, rel.getAttribute('Target') ?? '')))) continue;
+        gone.add(rel.getAttribute('Id') ?? '');
+        rel.remove();
+      }
+      return gone.size > 0;
+    });
+    if (!gone.size) continue;
+    const unlink = (xml: Document) => {
+      for (const el of Array.from(xml.getElementsByTagName('*'))) {
+        if (!gone.has(el.getAttributeNS(R, 'id') ?? '')) continue;
+        if (el.localName === 'externalData') el.remove();
+        else el.removeAttributeNS(R, 'id');
+        // An object's name is often the file it came from.
+        if (el.localName === 'oleObj') el.setAttribute('name', 'Object');
+      }
+      return true;
+    };
+    // Parts read for review are written again on every download, so they change in memory too.
+    const source = rels.replace(/_rels\/([^/]+)\.rels$/, '$1');
+    const held = parts.get(source);
+    if (held) unlink(held), zip.file(source, new XMLSerializer().serializeToString(held));
+    else await editXml(zip, source, unlink);
+  }
+  await editXml(zip, '[Content_Types].xml', (xml) => {
+    for (const o of Array.from(xml.getElementsByTagName('Override'))) if (embedded.has((o.getAttribute('PartName') ?? '').slice(1))) o.remove();
+    return true;
+  });
+}
+
 export interface Alt {
   unit: Unit;
   attrs: Attr[];
@@ -155,7 +258,7 @@ export async function readXml(zip: JSZip, name: string): Promise<Document | null
   return xml.getElementsByTagName('parsererror').length ? null : xml;
 }
 
-async function editXml(zip: JSZip, name: string, edit: (xml: Document) => boolean) {
+export async function editXml(zip: JSZip, name: string, edit: (xml: Document) => boolean) {
   const xml = await readXml(zip, name);
   if (xml && edit(xml)) zip.file(name, new XMLSerializer().serializeToString(xml));
 }

@@ -1,19 +1,13 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
 import { outputName, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
-import { collectAlts, enabledByUnit, loadPictures, readXml, relsOf, removeThumbnail, renamePictures, resolveTarget, scrubProperties, scrubRelationships, writeAlts, writePictures, type Alt, type Picture } from './office.ts';
+import { collectAlts, drawingText, dropEmbeddings, enabledByUnit, loadPictures, readXml, relsOf, removeThumbnail, renamePictures, resolveTarget, scrubProperties, scrubRelationships, writeAlts, writePictures, writeRun, type Alt, type Picture, type TextRun } from './office.ts';
 
-const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const EMU_PER_PX = 9525;
 
-interface Body {
-  unit: Unit;
-  /** Text nodes, with null for the line and paragraph breaks between them. */
-  nodes: (Element | null)[];
-  /** Original piece texts, so repeated exports always start from the source. */
-  original: string[];
+interface Body extends TextRun {
   /** Slides this text shows on, as indexes into the deck. */
   slides: number[];
 }
@@ -46,29 +40,9 @@ const inPlaceholder = (el: Element) => !!placeholderOf(el);
 /** Slide numbers change with the deck and say nothing about anyone. */
 const isSlideNumber = (el: Element) => placeholderOf(el)?.getAttribute('type') === 'sldNum';
 
-/**
- * Every run of text in a part: each element holding DrawingML paragraphs
- * (shapes, table cells, SmartArt, modern comments) is one unit, and so is
- * each legacy comment.
- */
-function bodiesOf(xml: Document, name: string, skip: (el: Element) => boolean): Omit<Body, 'slides'>[] {
-  const out: Omit<Body, 'slides'>[] = [];
-  const holders = new Set<Element>();
-  for (const p of Array.from(xml.getElementsByTagNameNS(A, 'p'))) if (p.parentElement) holders.add(p.parentElement);
-  for (const holder of holders) {
-    if (skip(holder)) continue;
-    const nodes: (Element | null)[] = [];
-    const original: string[] = [];
-    for (const p of Array.from(holder.children).filter((c) => c.localName === 'p' && c.namespaceURI === A)) {
-      if (nodes.length) nodes.push(null), original.push('\n');
-      for (const el of Array.from(p.getElementsByTagNameNS(A, '*'))) {
-        if (el.localName === 't') nodes.push(el), original.push(el.textContent ?? '');
-        else if (el.localName === 'br') nodes.push(null), original.push('\n');
-      }
-    }
-    const text = original.join('');
-    if (text.trim()) out.push({ unit: { id: `${name}#${out.length}`, text }, nodes, original });
-  }
+/** Every run of text in a part, as drawingText finds it, and each legacy comment. */
+function bodiesOf(xml: Document, name: string, skip: (el: Element) => boolean): TextRun[] {
+  const out = drawingText(xml, name, skip);
   for (const t of Array.from(xml.getElementsByTagNameNS(P, 'text'))) {
     const text = t.textContent ?? '';
     if (text.trim()) out.push({ unit: { id: `${name}#${out.length}`, text }, nodes: [t], original: [text] });
@@ -117,6 +91,10 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
       // The drawing repeats the data's text as laid out, so it is listed only when something is found in it.
       off.push(...(await read(diagram, () => false, { section: `Slide ${n} SmartArt`, quiet: /drawing\d*\.xml$/.test(diagram) })));
     }
+    for (const chart of relsOfType(rels, /\/chart(Ex)?$/)) {
+      const shapes = relsOfType(await relsFor(zip, chart), /\/chartUserShapes$/);
+      for (const part of [chart, ...shapes]) off.push(...(await read(part, () => false, { section: `Slide ${n} chart` })));
+    }
     for (const layout of relsOfType(rels, /\/slideLayout$/)) {
       const masters = relsOfType(await relsFor(zip, layout), /\/slideMaster$/);
       for (const part of [layout, ...masters]) {
@@ -136,7 +114,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
   const notes = ['Author names and document properties are removed on download.'];
   if (hidden.length) notes.push(`Includes hidden slides: ${hidden.join(', ')}`);
   if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} in EMF, WMF or TIFF format could not be opened and stay as they are.`);
-  if (Object.keys(zip.files).some((n) => /^ppt\/(charts|embeddings)\/[^/]+$/.test(n))) notes.push('Charts and embedded files stay as they are.');
+  if (Object.keys(zip.files).some((n) => /^ppt\/embeddings\/[^/]+$/.test(n))) notes.push('Embedded files and chart data are removed on download.');
 
   const size = presentation.getElementsByTagNameNS(P, 'sldSz')[0];
   const width = Math.round(Number(size?.getAttribute('cx') ?? 12192000) / EMU_PER_PX);
@@ -156,10 +134,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
       for (const b of bodies.values()) {
         const spans = byUnit.get(b.unit.id) ?? [];
         for (const f of spans) redacted.add(f.text);
-        const next = spans.length ? rewriteSegments(b.original, spans, style) : b.original;
-        b.nodes.forEach((n, i) => {
-          if (n && n.textContent !== next[i]) n.textContent = next[i];
-        });
+        writeRun(b, spans, style);
       }
       writeAlts(alts, byUnit, style, redacted);
       const ser = new XMLSerializer();
@@ -178,6 +153,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
         }
         zip.file('docProps/app.xml', ser.serializeToString(app));
       }
+      await dropEmbeddings(zip, parts, 'ppt');
       progress('Redacting pictures…');
       await writePictures(zip, pictures, findings, boxes);
       await scrubRelationships(zip, redacted, /^ppt\/.*_rels\/.*\.rels$/);

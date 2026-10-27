@@ -190,14 +190,14 @@ async function download(name) {
 {
   const found = await run('redact-powerpoint', fx('sample.pptx'));
   check(['jane.doe@example.com', 'bob@corp.io', '+1 (415) 555-0132', 'Maria Gonzalez', '123-45-6789', '4111 1111 1111 1111', '415-555-0177', '415-555-0199'].every((f) => found.includes(f)), `pptx findings: ${found.join(', ')}`);
-  check((await page.$$('.sheet .slide-page')).length === 3, 'pptx shows every slide');
+  check((await page.$$('.sheet .slide-page')).length === 4, 'pptx shows every slide');
   const email = await page.$$eval('.sheet .slide-page mark.on', (m) => m.map((e) => e.textContent));
   check(email.includes('jane.doe@example.com') && email.includes('4111 1111 1111 1111'), `pptx highlights sit on the slides: ${email.join(', ')}`);
   check((await page.$$('.sheet .page.placed')).length === 1, 'pptx shows the picture in place');
   const notes = await page.textContent('.notes');
-  check(notes.includes('Includes hidden slides: 3'), `pptx hidden slide flagged: ${notes}`);
+  check(notes.includes('Includes hidden slides: 4') && notes.includes('Embedded files and chart data are removed'), `pptx hidden slide flagged: ${notes}`);
   const rest = await page.textContent('.text-preview');
-  check(rest.includes('Slide 1 notes') && rest.includes('Slide 1 comments') && rest.includes('Alt text'), 'pptx lists notes, comments and alt text below the slides');
+  check(rest.includes('Slide 1 notes') && rest.includes('Slide 1 comments') && rest.includes('Slide 3 chart') && rest.includes('Alt text'), 'pptx lists notes, comments, chart text and alt text below the slides');
   await page.screenshot({ path: fx('pptx.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: fx('pptx-phone.png'), fullPage: true });
@@ -210,11 +210,25 @@ async function download(name) {
   const slide = await zip.file('ppt/slides/slide1.xml').async('string');
   check(slide.includes('Onboarding: ') && slide.includes('srgbClr val="1F3A5F"'), 'pptx formatting kept');
   check(!zip.file('docProps/thumbnail.jpeg'), 'pptx thumbnail removed');
+  const chart = await zip.file('ppt/charts/chart1.xml').async('string');
+  check(!Object.keys(zip.files).some((n) => n.startsWith('ppt/embeddings/') && !zip.files[n].dir) && !chart.includes('externalData') && chart.includes('Team B'), 'pptx chart labels redacted, workbook removed');
   const photo = await zip.file(Object.keys(zip.files).find((n) => n.startsWith('ppt/media/') && !zip.files[n].dir)).async('nodebuffer');
   const tags = await exifr.parse(photo, { gps: true }).catch(() => null);
   check(!tags?.latitude && !tags?.Make, `pptx picture metadata stripped: ${JSON.stringify(tags)}`);
   const { channels } = await sharp(await sharp(photo).extract({ left: 160, top: 178, width: 250, height: 30 }).toBuffer()).stats();
   check(channels[0].mean < 60, `pptx picture SSN covered (mean ${channels[0].mean.toFixed(0)})`);
+}
+
+// DOCX with a chart: labels found and redacted, the workbook behind it removed
+{
+  const found = await run('redact-word', fx('chart.docx'));
+  check(found.includes('Maria Gonzalez') && found.includes('Jane Doe'), `docx chart findings: ${found.join(', ')}`);
+  const { path: p } = await download('out-chart.docx');
+  const zip = await JSZip.loadAsync(readFileSync(p));
+  const chart = await zip.file('word/charts/chart1.xml').async('string');
+  const rels = await zip.file('word/charts/_rels/chart1.xml.rels').async('string');
+  check(!/Gonzalez|Jane/.test(chart) && chart.includes('Team B') && !chart.includes('externalData'), 'docx chart text redacted');
+  check(!Object.keys(zip.files).some((n) => n.startsWith('word/embeddings/') && !zip.files[n].dir) && !rels.includes('embeddings'), 'docx chart workbook removed');
 }
 
 // PowerPoint: markup smuggled in through a chart stays out of the page

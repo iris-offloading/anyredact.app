@@ -81,7 +81,7 @@ export const TOOLS = [
     hint: 'Word .docx files',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
-      ['Hidden places too', 'Tracked changes, comments, headers, footers, hyperlink targets, pictures and their alt text are redacted along with the body.'],
+      ['Hidden places too', 'Tracked changes, comments, headers, footers, hyperlink targets, charts, pictures and their alt text are redacted along with the body.'],
       ['Author names removed', 'Document properties and the names on comments and revisions are cleared.'],
     ],
     faq: [
@@ -108,7 +108,7 @@ export const TOOLS = [
     hint: 'PowerPoint .pptx files',
     points: [
       ['Design kept', 'Themes, fonts, shapes and animations are untouched.'],
-      ['Notes and comments too', 'Speaker notes, comments, hidden slides, tables, SmartArt and alt text are redacted along with the slides.'],
+      ['Notes and comments too', 'Speaker notes, comments, hidden slides, tables, charts, SmartArt and alt text are redacted along with the slides.'],
       ['Pictures checked', 'Text in photos and scans is read and boxed out, and the first-slide thumbnail is removed.'],
     ],
     faq: [
@@ -117,8 +117,8 @@ export const TOOLS = [
         a: 'Not yet. Save it as .pptx in PowerPoint, Keynote, LibreOffice or Google Slides first.',
       },
       {
-        q: 'Are charts redacted?',
-        a: 'Not yet. Charts and embedded files are kept as they are, so check them before sharing.',
+        q: 'What happens to charts and embedded files?',
+        a: 'Chart titles and labels are redacted like any other text. The spreadsheet behind each chart and any embedded files are removed, so charts still show but their data can no longer be edited.',
       },
     ],
   },
