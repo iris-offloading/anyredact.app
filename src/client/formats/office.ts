@@ -240,6 +240,11 @@ export async function scrubProperties(zip: JSZip) {
       return true;
     });
   }
+  // Custom properties hold whatever the author or their systems added, such as a client name or case number.
+  await editXml(zip, 'docProps/custom.xml', (xml) => {
+    for (const p of Array.from(xml.getElementsByTagName('*')).filter((e) => e.localName === 'property')) p.remove();
+    return true;
+  });
   for (const [name, attrs] of Object.entries(PEOPLE)) {
     await editXml(zip, name, (xml) => {
       for (const el of Array.from(xml.getElementsByTagName('*'))) {

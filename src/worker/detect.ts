@@ -3,8 +3,8 @@ import { pool } from '../shared/pool.ts';
 import { MAX_CHARS, pagesFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
 import { spendPaidPages, type BillingEnv } from './billing.ts';
-import { chargeQuota, type QuotaEnv, type QuotaState } from './quota.ts';
-import { json, readAiPost } from './http.ts';
+import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
+import { json, readAiPost, trialsAllowed } from './http.ts';
 
 // AI detection endpoint. The browser sends the text it extracted from a file
 // and gets back the sensitive substrings; nothing is stored.
@@ -18,6 +18,8 @@ export interface Env extends QuotaEnv, BillingEnv {
   VISION_MODEL?: string;
   // Set only on preview deployments: lets a request pick the model, for benchmarking.
   MODEL_TRIALS?: string;
+  // Secret that benchmark requests to a preview must send (see trialsAllowed).
+  TRIAL_KEY?: string;
 }
 
 // Chosen by scripts/bench-models.mjs: found 83 of 84 expected values over two
@@ -288,7 +290,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const body = await readAiPost(request, env, 'AI detection is not configured on this server.');
   if (body instanceof Response) return body;
   const { text, texts, model: requested, options } = body;
-  const trials = env.MODEL_TRIALS === '1';
+  const trials = trialsAllowed(request, env);
   const trial = trials && typeof requested === 'string' && /^(@cf\/)?[\w.-]+\/[\w.-]+$/.test(requested);
   const model = trial ? (requested as string) : env.AI_MODEL || DEFAULT_MODEL;
   const { chunkChars, ...extra } = trials && options && typeof options === 'object' ? (options as { chunkChars?: number }) : {};
@@ -309,7 +311,8 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
       text,
     );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
-    return json({ entities, quota: quota.state });
+    // The scan comes with one free final check (src/worker/check.ts).
+    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env) });
   } catch (err) {
     console.error('detect failed', err);
     if (trial) return json({ error: String(err), model }, 502);

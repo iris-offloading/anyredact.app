@@ -136,7 +136,8 @@ async function render(file: File, parts: Map<string, Document>, paras: Para[], p
   for (const b of marks) b.remove();
 
   // Tracked deletions stay in the file until redacted, so show them as Word does.
-  const options = { renderChanges: true };
+  // Alt chunks are HTML pages inside the file; docx-preview would load them, scripts included, in a same-origin frame.
+  const options = { renderChanges: true, renderAltChunks: false };
   const doc = await parseAsync(await copy.generateAsync({ type: 'blob', compression: 'STORE' }), options);
   // Note which part each picture came from, so the editor can take its place.
   const sources = new Map<string, string>();

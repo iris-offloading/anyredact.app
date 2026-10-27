@@ -428,11 +428,6 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
 
       for (const [name, xml] of parts) if (zip.file(name)) save(zip, name, xml);
       await scrubProperties(zip);
-      const custom = await xmlOf(zip, 'docProps/custom.xml');
-      if (custom) {
-        for (const p of Array.from(custom.getElementsByTagName('*')).filter((e) => e.localName === 'property')) p.remove();
-        save(zip, 'docProps/custom.xml', custom);
-      }
       // The thumbnail is a picture of the first sheet.
       for (const r of root.rels.values()) if (r.type.endsWith('/thumbnail')) await removePart(zip, '', r.target);
     },

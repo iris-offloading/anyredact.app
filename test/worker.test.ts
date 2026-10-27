@@ -74,7 +74,7 @@ test('check returns per-category risks', async () => {
     AI: { run: async () => ({ answers: { name: { type: 'noul', noul: 0.9 }, contact: { type: 'noul', noul: 0.1 } } }) } as unknown as Ai,
   };
   const req = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: 'Hi Jane, ████' }), headers: { origin: 'https://anyredact.app' } });
-  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 } });
+  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 }, free: false });
   const empty = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: '████ \n ██' }), headers: { origin: 'https://anyredact.app' } });
   assert.deepEqual(await (await worker.fetch(empty, e)).json(), { risks: {} });
 });
@@ -129,7 +129,7 @@ async function quotaNamespace() {
     get: (name: string) => {
       if (!objects.has(name)) {
         const data = new Map<string, unknown>();
-        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v) };
+        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v), delete: async (k: string) => data.delete(k) };
         objects.set(name, new Quota({ storage } as unknown as DurableObjectState));
       }
       const obj = objects.get(name)!;
@@ -159,6 +159,26 @@ test('free allowance is enforced per browser, with a larger shared IP allowance'
   assert.equal(((await res.json()) as { code: string }).code, 'quota');
 });
 
+test('each scan comes with one free final check, later ones use the allowance', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '5000' };
+  const post = (path: string, body: object) =>
+    worker.fetch(
+      new Request(`https://anyredact.app${path}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' },
+      }),
+      e,
+    );
+  const { checkToken } = (await (await post('/api/detect', { text: 'Jane' })).json()) as { checkToken: string };
+  const first = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean };
+  assert.equal(first.free, true);
+  const second = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean; quota: { used: number } };
+  // 4 characters for the scan, then 3,000 for the paid check.
+  assert.deepEqual([second.free, second.quota.used], [false, 3004]);
+  assert.equal(((await (await post('/api/check', { text: 'Jane Doe', checkToken: crypto.randomUUID() })).json()) as { free?: boolean }).free, undefined);
+});
+
 test('vision regions are validated and scaled to thousandths', async () => {
   const { parseRegions } = await import('../src/worker/vision.ts');
   const out = parseRegions(
@@ -171,4 +191,32 @@ test('vision regions are validated and scaled to thousandths', async () => {
     { kind: 'face', box: [900, 900, 1000, 950] },
   ]);
   assert.deepEqual(parseRegions('not json', ['face']), []);
+});
+
+test('limits IPv6 visitors by their /64 network', async () => {
+  const { clientNetwork } = await import('../src/worker/http.ts');
+  const net = (ip: string) => clientNetwork(new Request('https://anyredact.app/', { headers: { 'cf-connecting-ip': ip } }));
+  assert.equal(net('203.0.113.7'), '203.0.113.7');
+  assert.equal(net('2001:db8:aa:1::1'), '2001:db8:aa:1::/64');
+  assert.equal(net('2001:0db8:00aa:0001:ffff:1:2:3'), '2001:db8:aa:1::/64');
+  assert.equal(net('2001:db8::5'), '2001:db8:0:0::/64');
+});
+
+test('preview benchmark features need the trial key', async () => {
+  const calls: unknown[] = [];
+  const e = {
+    ASSETS: { fetch: async () => new Response('asset') },
+    AI: { run: async (model: string) => (calls.push(model), { response: { entities: [] } }) },
+    MODEL_TRIALS: '1',
+    TRIAL_KEY: 'k1',
+  } as unknown as Env;
+  const detect = (key?: string) =>
+    entry.fetch(
+      new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane Doe', model: '@cf/meta/other' }), headers: key ? { 'x-trial-key': key } : {} }) as never,
+      e as never,
+    );
+  await detect();
+  await detect('wrong');
+  await detect('k1');
+  assert.deepEqual(calls, ['@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/meta/other']);
 });

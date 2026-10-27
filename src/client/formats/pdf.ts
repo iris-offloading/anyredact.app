@@ -15,6 +15,14 @@ interface Glyphs {
   rect: Rect;
   str: string;
   font: string;
+  /** A form field value: any part of it covers the whole field. */
+  field?: boolean;
+}
+
+/** A filled form field, with its box on the page bitmap. */
+interface Field {
+  str: string;
+  rect: Rect;
 }
 
 const measureCtx = document.createElement('canvas').getContext('2d')!;
@@ -35,6 +43,7 @@ function textUnit(
   items: TextItem[],
   styles: Record<string, { fontFamily: string }>,
   viewport: pdfjs.PageViewport,
+  fields: Field[] = [],
 ): Unit {
   let text = '';
   const runs: Glyphs[] = [];
@@ -62,6 +71,13 @@ function textUnit(
     if (item.hasEOL) text += '\n';
     prev = { right: x + width, baseline, height };
   }
+  // Field values are drawn on the page but are not part of its text content.
+  for (const f of fields) {
+    if (text && !text.endsWith('\n')) text += '\n';
+    const start = text.length;
+    text += f.str;
+    runs.push({ start, end: text.length, str: f.str, font: '', rect: f.rect, field: true });
+  }
   return {
     id,
     page,
@@ -70,6 +86,10 @@ function textUnit(
       const rects: Rect[] = [];
       for (const r of runs) {
         if (r.end <= start || r.start >= end) continue;
+        if (r.field) {
+          rects.push(pad(r.rect, 2));
+          continue;
+        }
         const a = offsetRatio(r, Math.max(start, r.start) - r.start) * r.rect.w;
         const b = offsetRatio(r, Math.min(end, r.end) - r.start) * r.rect.w;
         rects.push(pad({ x: r.rect.x + a, y: r.rect.y, w: b - a, h: r.rect.h }, Math.max(2, r.rect.h * 0.15)));
@@ -77,6 +97,20 @@ function textUnit(
       return rects;
     },
   };
+}
+
+/** Text and choice field values, which the page bitmap shows but its text content leaves out. */
+async function formFields(page: pdfjs.PDFPageProxy, viewport: pdfjs.PageViewport): Promise<Field[]> {
+  const annotations = (await page.getAnnotations().catch(() => [])) as { subtype?: string; fieldType?: string; fieldValue?: unknown; rect?: number[]; hidden?: boolean }[];
+  const fields: Field[] = [];
+  for (const a of annotations) {
+    if (a.subtype !== 'Widget' || (a.fieldType !== 'Tx' && a.fieldType !== 'Ch') || a.hidden || !a.rect) continue;
+    const str = (Array.isArray(a.fieldValue) ? a.fieldValue.join(', ') : typeof a.fieldValue === 'string' ? a.fieldValue : '').trim();
+    if (!str) continue;
+    const [x0, y0, x1, y1] = viewport.convertToViewportRectangle(a.rect);
+    fields.push({ str, rect: { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) } });
+  }
+  return fields;
 }
 
 export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc> {
@@ -108,8 +142,10 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
     await page.render({ canvasContext: ctx, viewport }).promise;
 
     const content = await page.getTextContent();
-    let unit = textUnit(`p${i}`, i - 1, content.items.filter((it): it is TextItem => 'str' in it), content.styles, viewport);
-    if (unit.text.replace(/\s/g, '').length < 8) {
+    const items = content.items.filter((it): it is TextItem => 'str' in it);
+    const scanned = items.map((it) => it.str).join('').replace(/\s/g, '').length < 8;
+    let unit = textUnit(`p${i}`, i - 1, items, content.styles, viewport, await formFields(page, viewport));
+    if (scanned) {
       // Probably a scanned page: fall back to OCR.
       try {
         unit = await ocrUnit(`p${i}`, i - 1, canvas, (m) => progress(`Page ${i}: ${m}`));

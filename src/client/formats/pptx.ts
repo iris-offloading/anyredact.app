@@ -182,11 +182,6 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
       await writePictures(zip, pictures, findings, boxes);
       await scrubRelationships(zip, redacted, /^ppt\/.*_rels\/.*\.rels$/);
       await scrubProperties(zip);
-      const custom = await readXml(zip, 'docProps/custom.xml');
-      if (custom) {
-        for (const p of Array.from(custom.getElementsByTagName('*')).filter((e) => e.localName === 'property')) p.remove();
-        zip.file('docProps/custom.xml', ser.serializeToString(custom));
-      }
       await removeThumbnail(zip);
       progress('Packing presentation…');
       const blob = await zip.generateAsync({
