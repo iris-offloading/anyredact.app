@@ -3,11 +3,28 @@ import { readMetadata } from './metadata.ts';
 import { ocrUnit } from './ocr.ts';
 
 const MAX_SIDE = 6000;
+const HEIC = /^image\/hei[cf]/;
+
+function isHeic(file: File) {
+  return HEIC.test(file.type) || /\.hei[cf]$/i.test(file.name);
+}
+
+/** Decodes with the browser where it can (Safari reads HEIC), else with libheif for iPhone photos. */
+async function decode(file: File, progress: Progress): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (err) {
+    if (!isHeic(file)) throw err;
+  }
+  progress('Opening HEIC photo…');
+  const { heicTo } = await import('heic-to/csp');
+  return heicTo({ blob: file, type: 'bitmap' });
+}
 
 export async function loadImage(file: File, progress: Progress): Promise<LoadedDoc> {
   progress('Opening image…');
   const metadata = readMetadata(file);
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const bitmap = await decode(file, progress);
   const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
@@ -25,7 +42,8 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
     notes.push('Automatic text reading failed, so nothing was detected. Drag on the image to draw redaction boxes.');
   }
 
-  const type = ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ? file.type : 'image/png';
+  // Browsers cannot write HEIC, so photos come back as JPG.
+  const type = isHeic(file) ? 'image/jpeg' : ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ? file.type : 'image/png';
   const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[type]!;
   return {
     kind: 'image',

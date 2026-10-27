@@ -1,7 +1,7 @@
 // Compares Workers AI models on a fixed set of documents with known answers.
 // Runs against a preview deployment, where MODEL_TRIALS lets a request pick the model.
 //
-//   node scripts/bench-models.mjs https://<preview>.workers.dev @cf/meta/llama-3.3-70b-instruct-fp8-fast @cf/openai/gpt-oss-120b
+//   TRIAL_KEY=… node scripts/bench-models.mjs https://<preview>.workers.dev @cf/meta/llama-3.3-70b-instruct-fp8-fast @cf/openai/gpt-oss-120b
 //
 // For each model it reports recall (expected values found), false positives
 // (values that must not be redacted), speed and token usage.
@@ -127,7 +127,7 @@ async function run(spec, c) {
   const started = Date.now();
   const res = await fetch(new URL('/api/detect', base), {
     method: 'POST',
-    headers: { 'content-type': 'application/json', origin: new URL(base).origin },
+    headers: { 'content-type': 'application/json', origin: new URL(base).origin, 'x-trial-key': process.env.TRIAL_KEY ?? '' },
     body: JSON.stringify({ text: c.text, model, options }),
   });
   const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));

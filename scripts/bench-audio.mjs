@@ -54,7 +54,7 @@ async function post(base, route, body) {
   for (let t = 0; t < 6; t++) {
     const res = await fetch(new URL(route, base), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: new URL(base).origin },
+      headers: { 'content-type': 'application/json', origin: new URL(base).origin, 'x-trial-key': process.env.TRIAL_KEY ?? '' },
       body: JSON.stringify(body),
     }).catch((err) => ({ status: 0, err }));
     if (res.status === 200) return res.json();

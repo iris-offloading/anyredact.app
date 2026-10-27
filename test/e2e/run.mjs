@@ -46,7 +46,7 @@ async function fakeDetect(route) {
     const m = text.match(re);
     if (m) entities.push({ text: m[0], type, owner: owner ?? 'person' });
   }
-  route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities }) });
+  route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entities, checkToken: 'scan-token' }) });
 }
 await page.route('**/api/detect', fakeDetect);
 
@@ -192,7 +192,7 @@ async function download(name) {
   check(['jane.doe@example.com', 'bob@corp.io', '415-555-0199', '415-555-0177', '4155550132', '123-45-6789'].every((f) => found.includes(f)), `xlsx findings: ${found.join(', ')}`);
   const notes = await page.textContent('.notes');
   check(notes.includes('Includes hidden sheets: Old'), `xlsx hidden sheet flagged: ${notes}`);
-  // The grid: one tab per sheet, hidden ones included, and a click on a highlighted cell keeps it.
+  // The grid: one tab per sheet, hidden ones included, and a click on a highlight keeps it.
   await page.waitForSelector('.sheet-view >> text=Old (hidden)');
   check((await page.locator('.sheet-view >> text=Orders').count()) === 1, 'xlsx grid shows every sheet tab');
   await page.evaluate(() => document.querySelector('.preview').scrollIntoView());
@@ -201,7 +201,8 @@ async function download(name) {
   await page.waitForTimeout(1000); // the grid takes a moment to start listening after it draws
   await page.mouse.click(grid.x + 260, grid.y + 71); // cell B3
   await page.waitForFunction(() => ![...document.querySelectorAll('label.finding')].find((l) => l.textContent.includes('bob@corp.io'))?.querySelector('input').checked);
-  check(!(await bob.isChecked()), 'xlsx clicking a highlighted cell keeps it');
+  check(!(await bob.isChecked()), 'xlsx clicking a highlight keeps it');
+  check((await page.textContent('.cell-bar .cell-ref')) === 'B3' && (await page.locator('.cell-bar mark', { hasText: 'bob@corp.io' }).count()) === 1, 'xlsx cell bar shows the clicked cell with its highlights');
   await bob.check();
   await page.evaluate(() => document.querySelector('.preview').scrollIntoView());
   await page.screenshot({ path: fx('xlsx.png') });
@@ -285,21 +286,79 @@ if (existsSync(fx('sample.ods'))) {
   check(filename === 'photo-redacted.jpg' && !left, `metadata stripped from ${filename}: ${JSON.stringify(left)}`);
 }
 
+// iPhone photo (HEIC): decoded in the browser, metadata listed, saved as JPG
+{
+  await run('redact-image', path.join(import.meta.dirname, 'photo.heic'));
+  const found = await page.$$eval('label.finding .ftext', (els) => els.map((e) => e.textContent));
+  check(found.some((f) => f.includes('jane.doe@example.com')), `heic findings: ${found.join(', ')}`);
+  const meta = await page.$$eval('.meta > dl dt, .meta > dl dd', (els) => els.map((e) => e.textContent));
+  check(meta[meta.indexOf('Camera') + 1] === 'Apple iPhone 17 Pro' && meta.includes('Location'), `heic metadata listed: ${meta.join(' | ')}`);
+  await page.screenshot({ path: fx('heic.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('heic-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { path: p, filename } = await download('photo-heic-out.jpg');
+  const info = await sharp(readFileSync(p)).metadata();
+  const left = await exifr.parse(readFileSync(p)).catch(() => undefined);
+  check(filename === 'photo-redacted.jpg' && info.format === 'jpeg' && info.width === 760 && !left, `heic saved as ${filename} (${info.format} ${info.width}px)`);
+}
+
+// JSON and XML stay valid after redaction
+{
+  writeFileSync(fx('users.json'), JSON.stringify({ users: [{ name: 'Jane Doe', email: 'jane@example.com', phone: 4155550132, ip: '10.0.0.12' }] }, null, 2));
+  const found = await run('redact-text', fx('users.json'));
+  check(found.includes('jane@example.com') && found.includes('4155550132'), `json findings: ${found.join(', ')}`);
+  await page.screenshot({ path: fx('json.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: fx('json-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  let { path: p, filename } = await download('users-out.json');
+  let data;
+  try {
+    data = JSON.parse(readFileSync(p, 'utf8'));
+  } catch {}
+  const user = data?.users?.[0];
+  check(filename === 'users-redacted.json' && user && /^█+$/.test(user.email) && typeof user.phone === 'string' && !user.phone.includes('415'), `json output: ${readFileSync(p, 'utf8')}`);
+
+  await page.selectOption('select[aria-label="Redaction style"]', 'label');
+  ({ path: p } = await download('users-label.json'));
+  try {
+    data = JSON.parse(readFileSync(p, 'utf8'));
+  } catch {
+    data = undefined;
+  }
+  check(data?.users?.[0]?.email === '[EMAIL]' && data.users[0].phone === '[PHONE]', `json labels: ${readFileSync(p, 'utf8')}`);
+
+  writeFileSync(fx('contact.xml'), '<?xml version="1.0"?>\n<contact email="jane@example.com">\n  <name>Jane Doe</name>\n  <phone>415-555-0132</phone>\n</contact>\n');
+  await run('redact-text', fx('contact.xml'));
+  ({ path: p, filename } = await download('contact-out.xml'));
+  const xml = readFileSync(p, 'utf8');
+  const ok = await page.evaluate((x) => !new DOMParser().parseFromString(x, 'application/xml').querySelector('parsererror'), xml);
+  check(filename === 'contact-redacted.xml' && ok && xml.includes('<name>') && !/jane|415/i.test(xml), `xml output: ${JSON.stringify(xml)}`);
+}
+
 // Final check: a warning stops the download until the user chooses
 {
   let sent = '';
+  let sentToken = '';
   await page.route('**/api/check', (route) => {
-    sent = JSON.parse(route.request().postData() || '{}').text;
-    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 } }) });
+    ({ text: sent, checkToken: sentToken } = JSON.parse(route.request().postData() || '{}'));
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ risks: { name: 0.93, contact: 0.1 }, free: true }) });
   });
   apiCalls.length = 0;
   await run('redact-text', fx('sample.txt'), '.consent');
   check((await page.isVisible('.consent')) && apiCalls.length === 0, `nothing sent before consent ${JSON.stringify(apiCalls)}`);
   await page.click('.consent button.primary');
   await page.waitForSelector('.consent', { state: 'hidden' });
+  await page.waitForSelector('.check-row:has-text("free")');
+  check(await page.isChecked('.check-row input'), "the scan's free final check is ticked");
   await page.click('.panel > button.primary');
   await page.waitForSelector('.warn-text');
   const warning = await page.textContent('.warn-text');
+  const notes = await page.$$eval('.warn-text', (els) => els.map((e) => e.textContent).join(' '));
+  check(/This check was free/.test(notes), `free check explained: ${notes}`);
+  check(sentToken === 'scan-token', 'check sends the scan token');
+  check(!(await page.isChecked('.check-row input')) && /1 credit/.test(await page.textContent('.check-row')), 'later checks start unticked and cost a credit');
   check(/names may still be readable/.test(warning) && !/phone/.test(warning), `check warning: ${warning}`);
   check(sent.includes('████') && !sent.includes('jane@example.com'), 'check gets masked text only');
   await page.screenshot({ path: fx('check.png') });

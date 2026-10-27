@@ -25,6 +25,9 @@ export const PRODUCTS: Product[] = [
   { id: 'pack-2000', name: '2,000 credits', pages: 2_000, cents: 5_900 },
 ];
 
+/** Credits for a final check after the free first one. */
+export const CHECK_CREDITS = 1;
+
 export const pagesFor = (chars: number) => Math.max(1, Math.ceil(chars / PAGE_CHARS));
 
 export const AUDIO_CREDITS_PER_MINUTE = 3;

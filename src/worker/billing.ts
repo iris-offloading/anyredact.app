@@ -83,6 +83,10 @@ interface StripeEvent {
   data: { object: Record<string, any> };
 }
 
+// Newer Stripe API versions moved the invoice's subscription under parent.subscription_details.
+const invoiceSubscription = (invoice: Record<string, any>): string | undefined =>
+  invoice.subscription ?? invoice.parent?.subscription_details?.subscription ?? undefined;
+
 async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
   const db = env.DB!;
   const obj = event.data.object;
@@ -99,9 +103,9 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
         .bind(obj.subscription, product.pages, now() + 31 * 86400, obj.customer, userId)
         .run();
     }
-  } else if (event.type === 'invoice.paid' && obj.subscription) {
+  } else if (event.type === 'invoice.paid' && invoiceSubscription(obj)) {
     const periodEnd = obj.lines?.data?.[0]?.period?.end ?? now() + 31 * 86400;
-    await db.prepare('UPDATE users SET sub_id = ?, sub_used = 0, sub_period_end = ? WHERE stripe_customer = ?').bind(obj.subscription, periodEnd, obj.customer).run();
+    await db.prepare('UPDATE users SET sub_id = ?, sub_used = 0, sub_period_end = ? WHERE stripe_customer = ?').bind(invoiceSubscription(obj), periodEnd, obj.customer).run();
   } else if (event.type === 'customer.subscription.deleted') {
     await db.prepare('UPDATE users SET sub_id = NULL, sub_pages = 0, sub_used = 0, sub_period_end = 0 WHERE sub_id = ?').bind(obj.id).run();
   }
@@ -121,7 +125,16 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
     }
     const event = JSON.parse(body) as StripeEvent;
     const fresh = await env.DB.prepare('INSERT OR IGNORE INTO stripe_events (id, created_at) VALUES (?, ?)').bind(event.id, now()).run();
-    if (fresh.meta.changes) await applyEvent(env, event);
+    if (fresh.meta.changes) {
+      try {
+        await applyEvent(env, event);
+      } catch (err) {
+        // Forget the event so Stripe's retry applies it, rather than losing the credits.
+        console.error('stripe event failed', event.id, err);
+        await env.DB.prepare('DELETE FROM stripe_events WHERE id = ?').bind(event.id).run();
+        return json({ error: 'Could not apply the event.' }, 500);
+      }
+    }
     return json({ received: true });
   }
 
@@ -138,6 +151,7 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   const { product: id } = (await request.json().catch(() => ({}))) as { product?: string };
   const product: Product | undefined = PRODUCTS.find((p) => p.id === id);
   if (!product) return json({ error: 'Unknown product.' }, 400);
+  // A second plan would charge twice while the account tracks only one.
   if (product.monthly && user.sub_id && user.sub_period_end > now()) return json({ error: 'You already have a plan. Cancel it under Manage plan first.' }, 409);
   const customer = await customerFor(env, user);
   const priceData = {

@@ -87,8 +87,14 @@ export async function upsertUser(env: AccountsEnv, email: string, googleSub?: st
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
+// Unused links per address, so nobody can flood someone's inbox from many IPs.
+const MAX_OPEN_LINKS = 3;
+
 async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): Promise<Response> {
   if (!env.EMAIL) return json({ error: 'Email sign-in is not set up yet.' }, 503);
+  await env.DB!.prepare('DELETE FROM login_tokens WHERE expires_at < ?').bind(now()).run();
+  const open = await env.DB!.prepare('SELECT COUNT(*) AS n FROM login_tokens WHERE email = ?').bind(email).first<{ n: number }>();
+  if ((open?.n ?? 0) >= MAX_OPEN_LINKS) return json({ error: 'Too many sign-in links for this address. Use the latest one or try again in 15 minutes.' }, 429);
   const token = randomToken();
   await env.DB!.prepare('INSERT INTO login_tokens (token_hash, email, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), email, now() + LOGIN_MINUTES * 60)
