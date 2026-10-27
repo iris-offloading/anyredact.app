@@ -94,7 +94,7 @@ export class PageEditor {
     for (const o of this.opts.overlays()) {
       const { x, y, w, h } = o.rect;
       if (o.enabled) {
-        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(x, y, w, h);
       } else {
         ctx.setLineDash([lw * 3, lw * 2]);
@@ -106,7 +106,7 @@ export class PageEditor {
     }
     const cur = this.drag?.cur;
     if (cur) {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(cur.x, cur.y, cur.w, cur.h);
     }
   }

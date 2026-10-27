@@ -6,7 +6,8 @@
   --line: #e2e3e0;
   --accent: #d6336c;
   --accent-ink: #ffffff;
-  --mark-on: #16181d;
+  --mark-on: rgba(0, 0, 0, 0.45);
+  --mark-on-edge: transparent;
   --mark-off: #ffe8cc;
   --radius: 12px;
   color-scheme: light;
@@ -21,7 +22,8 @@
     --line: #2c303a;
     --accent: #f06595;
     --accent-ink: #111318;
-    --mark-on: #000000;
+    --mark-on: rgba(0, 0, 0, 0.6);
+    --mark-on-edge: rgba(255, 255, 255, 0.3);
     --mark-off: #5c3d1e;
     color-scheme: dark;
   }
@@ -34,7 +36,8 @@
   --line: #2c303a;
   --accent: #f06595;
   --accent-ink: #111318;
-  --mark-on: #000000;
+  --mark-on: rgba(0, 0, 0, 0.6);
+  --mark-on-edge: rgba(255, 255, 255, 0.3);
   --mark-off: #5c3d1e;
   color-scheme: dark;
 }
@@ -162,8 +165,7 @@ textarea, select {
 .text-preview.docx { font-family: inherit; font-size: 1rem; }
 .text-preview.docx .unit { margin-bottom: 0.6em; }
 mark { cursor: pointer; border-radius: 3px; padding: 0 1px; }
-mark.on { background: var(--mark-on); color: transparent; text-shadow: none; }
-mark.on::selection { color: transparent; }
+mark.on { background: var(--mark-on); color: inherit; box-shadow: inset 0 0 0 1px var(--mark-on-edge); }
 mark.off { background: var(--mark-off); color: inherit; outline: 1px dashed #e8590c; }
 .sel-add {
   position: fixed; bottom: 16px; left: 0; right: 0; margin: 0 auto; z-index: 10;
