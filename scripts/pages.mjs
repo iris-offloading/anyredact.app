@@ -12,12 +12,13 @@ export const TOOLS = [
   {
     slug: 'redact-pdf',
     format: 'pdf',
+    name: 'Redact PDF',
     nav: 'PDF',
-    title: 'Redact PDF Online Free: Permanently Remove Text | AnyRedact',
+    title: 'Auto Redact PDF Online with AI | AnyRedact',
     description:
-      'Redact PDF files online for free. Automatically find emails, phone numbers, account numbers and names, black them out and download a clean PDF. Free to start.',
-    h1: 'Redact PDF online',
-    lead: 'Black out sensitive text in any PDF, including scanned pages, and download a flattened copy that cannot be un-redacted.',
+      'Auto redact PDF files online with AI. Names, addresses and account numbers are marked on every page, including scans, and the download is flattened so the text is gone.',
+    h1: 'Auto redact PDF online with AI',
+    lead: 'Drop a PDF and our AI will find and permanently remove names, numbers, signatures, and other sensitive details, including on scanned pages.',
     hint: 'PDF up to 60 pages',
     points: [
       ['True redaction', 'Pages are flattened to images on export, so the original text, links, form fields and metadata are gone, not just covered.'],
@@ -38,12 +39,14 @@ export const TOOLS = [
   {
     slug: 'redact-image',
     format: 'image',
+    name: 'Redact images',
     nav: 'Image',
-    title: 'Redact Image Online Free: Black Out Text in Screenshots & Photos | AnyRedact',
+    title: 'Auto Redact Images Online with AI: JPG, PNG, WebP | AnyRedact',
     description:
-      'Redact images and screenshots online. AnyRedact reads the text in PNG, JPG and WebP files, finds personal data and blacks it out. Removes EXIF and GPS metadata too.',
-    h1: 'Redact images and screenshots',
-    lead: 'Hide emails, phone numbers, card numbers and names in screenshots, scans and photos. Text is read automatically and checked by AI.',
+      'Auto redact images online with AI. Text in the picture is read, personal details get solid black boxes, and EXIF and GPS data are stripped. Works with JPG, PNG, WebP and screenshots.',
+    h1: 'Auto redact images online with AI',
+    lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
+    also: 'Works with JPG, PNG and WebP.',
     hint: 'PNG, JPG or WebP, or paste a screenshot',
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
@@ -64,12 +67,13 @@ export const TOOLS = [
   {
     slug: 'redact-word',
     format: 'docx',
+    name: 'Redact Word',
     nav: 'Word',
-    title: 'Redact Word Document Online Free: DOCX Redaction Tool | AnyRedact',
+    title: 'Auto Redact Word Online with AI: DOCX | AnyRedact',
     description:
-      'Redact Word documents (DOCX) online for free. Find and remove personal information from text, headers, footers, comments and tracked changes, and strip author metadata.',
-    h1: 'Redact Word documents (DOCX)',
-    lead: 'Remove personal information from .docx files while keeping the formatting. Headers, footers, footnotes, comments and tracked changes are covered.',
+      'Auto redact Word (DOCX) files online with AI. Personal details are removed from the body, headers, footers, comments and tracked changes, and author names are cleared.',
+    h1: 'Auto redact Word online with AI',
+    lead: 'Upload a .docx to redact sensitive text, comments, tracked changes, and metadata while keeping your formatting intact.',
     hint: 'Word .docx files',
     points: [
       ['Formatting kept', 'Only the sensitive characters change. Fonts, tables and layout stay as they were.'],
@@ -90,12 +94,14 @@ export const TOOLS = [
   {
     slug: 'redact-excel',
     format: 'sheet',
+    name: 'Redact Excel',
     nav: 'Excel',
-    title: 'Redact Excel Spreadsheet Online Free: XLSX, ODS & CSV | AnyRedact',
+    title: 'Auto Redact Excel Online with AI: XLSX, ODS, CSV | AnyRedact',
     description:
-      'Redact Excel (XLSX), OpenDocument (ODS) and CSV spreadsheets online for free. Find names, emails, phone and account numbers in every sheet and remove them while the formatting stays.',
-    h1: 'Redact Excel and other spreadsheets',
-    lead: 'Remove personal data from XLSX, ODS and CSV files, across every sheet, comment and header.',
+      'Auto redact Excel (XLSX) workbooks online with AI. Names, emails and account numbers are found on every sheet, hidden sheets included. Accepts ODS and CSV as well.',
+    h1: 'Auto redact Excel online with AI',
+    lead: 'Upload a spreadsheet to redact personal data in columns, cells, hidden sheets, and comments without breaking your layout.',
+    also: 'Works with ODS and CSV.',
     hint: 'Excel .xlsx, OpenDocument .ods or CSV',
     points: [
       ['Cells keep their styles', 'Only redacted cells change. Number formats, colours, column widths and charts stay put.'],
@@ -120,12 +126,14 @@ export const TOOLS = [
   {
     slug: 'redact-text',
     format: 'text',
+    name: 'Redact text',
     nav: 'Text',
-    title: 'Redact Text Online: Remove PII from Text, Logs & CSV | AnyRedact',
+    title: 'Auto Redact Text Online with AI: CSV, JSON, Logs | AnyRedact',
     description:
-      'Paste text or upload a TXT, CSV, JSON or log file and remove personal data in seconds. Mask emails, phone numbers, IPs, card numbers and more. Free and private.',
-    h1: 'Redact text, logs and CSV files',
-    lead: 'Paste text or drop a file to mask emails, phone numbers, IP addresses, card numbers and other personal data before you share it.',
+      'Auto redact text online with AI. Paste text or upload a CSV, JSON or log file to mask emails, phone numbers, IP addresses and card numbers before sharing.',
+    h1: 'Auto redact text online with AI',
+    lead: 'Paste text or upload a file to mask personal info, passwords, API keys, and other secrets in seconds.',
+    also: 'Works with CSV, JSON, Markdown and log files.',
     hint: 'TXT, CSV, JSON, Markdown or logs',
     points: [
       ['Great for logs and support tickets', 'Strip customer details before sharing logs, transcripts or datasets.'],
@@ -142,12 +150,14 @@ export const TOOLS = [
   {
     slug: 'redact-audio',
     format: 'audio',
+    name: 'Redact audio',
     nav: 'Audio',
-    title: 'Redact Audio Online Free: Bleep Names and Numbers | AnyRedact',
+    title: 'Auto Redact Audio Online with AI: MP3, M4A, WAV | AnyRedact',
     description:
-      'Redact audio recordings online for free. AI writes out the speech, finds names, phone numbers and card numbers, and bleeps them in a new MP3, M4A or WAV file.',
-    h1: 'Redact audio online',
-    lead: 'Bleep names, numbers and addresses in calls, interviews and voice notes, then download a new file.',
+      'Auto redact audio online with AI. The speech is transcribed, and names, phone numbers and card numbers are bleeped in a new file. Handles MP3, M4A, WAV, FLAC, OGG and Opus.',
+    h1: 'Auto redact audio online with AI',
+    lead: 'Upload a recording and we’ll bleep spoken sensitive details, then give you the redacted audio and a redacted transcript.',
+    also: 'Works with MP3, M4A, WAV, FLAC, OGG and Opus.',
     hint: 'MP3, M4A, WAV, FLAC, OGG or Opus, up to 2 hours',
     points: [
       ['Found in the transcript', 'Speech is written out with a time for every word, so each finding is bleeped where it was said.'],
@@ -174,7 +184,7 @@ export const HOME = {
   description:
     'Redact PDFs, images, Word documents, spreadsheets, text and audio online for free. AI finds the personal information, you review it, and nothing is stored.',
   h1: 'Redact anything, with AI that finds it for you',
-  lead: 'Drop a PDF, image, Word document, spreadsheet, text file or recording. AnyRedact finds personal information, lets you review it, and gives you back a clean copy.',
+  lead: 'Upload PDFs, images, Word, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
   hint: 'PDF, Word (DOCX), Excel (XLSX), ODS, PNG, JPG, WebP, text or audio',
   points: [
     ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],

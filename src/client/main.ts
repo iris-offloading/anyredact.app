@@ -143,6 +143,7 @@ class App {
   private metaBox: HTMLElement;
   private docName: HTMLElement;
   private download: HTMLButtonElement;
+  private transcriptBtn: HTMLButtonElement;
   private warn: HTMLElement;
   private styleRow: HTMLElement;
   private styleSel: HTMLSelectElement;
@@ -241,6 +242,7 @@ class App {
     this.styleRow = h('label', { className: 'row' }, 'Style ', this.styleSel);
 
     this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
+    this.transcriptBtn = h('button', { type: 'button', className: 'btn transcript', textContent: 'Download redacted transcript', hidden: true, onclick: () => this.export(false, true) });
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
@@ -263,6 +265,7 @@ class App {
       this.metaBox,
       this.styleRow,
       this.download,
+      this.transcriptBtn,
       this.warn,
       this.notes,
     );
@@ -303,6 +306,8 @@ class App {
       this.docName.textContent = file.name;
       const styles = this.doc.styles ?? [];
       this.styleRow.hidden = !styles.length;
+      this.transcriptBtn.hidden = !this.doc.exportTranscript;
+      this.download.textContent = this.doc.kind === 'audio' ? 'Download redacted audio' : 'Download redacted file';
       this.styleSel.replaceChildren(...styles.map(([value, textContent]) => h('option', { value, textContent })));
       this.style = styles[0]?.[0] ?? 'block';
       this.pictureBox.hidden = !this.doc.pages.length;
@@ -929,11 +934,11 @@ class App {
     if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - b.height / 3;
   }
 
-  private async export(skipCheck = false) {
+  private async export(skipCheck = false, transcript = false) {
     const doc = this.doc;
     if (!doc || this.busy) return;
     this.busy = true;
-    this.download.disabled = true;
+    this.download.disabled = this.transcriptBtn.disabled = true;
     this.warn.hidden = true;
     let checkNote = '';
     try {
@@ -943,14 +948,17 @@ class App {
         try {
           const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
           if (this.doc !== doc) return;
-          if (left.length) return this.warnLeft(left);
+          if (left.length) return this.warnLeft(left, transcript);
         } catch (err) {
           console.warn(err);
           checkNote = ' The final check could not run, so review the file carefully.';
         }
       }
       this.say('Preparing your redacted file…', false, true);
-      const { blob, filename } = await doc.exportFile(this.findings, this.boxes, this.style, (m) => this.say(m, false, true));
+      const { blob, filename } =
+        transcript && doc.exportTranscript
+          ? await doc.exportTranscript(this.findings, this.boxes)
+          : await doc.exportFile(this.findings, this.boxes, this.style, (m) => this.say(m, false, true));
       const url = URL.createObjectURL(blob);
       const a = h('a', { href: url, download: filename });
       document.body.append(a);
@@ -965,7 +973,7 @@ class App {
       this.say(err instanceof Error ? err.message : 'Export failed.', true, true);
     } finally {
       this.busy = false;
-      this.download.disabled = false;
+      this.download.disabled = this.transcriptBtn.disabled = false;
     }
   }
 
@@ -1002,7 +1010,7 @@ class App {
     });
   }
 
-  private warnLeft(left: string[]) {
+  private warnLeft(left: string[], transcript: boolean) {
     const list = left.map((k) => CHECK_LABELS[k]);
     const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
     this.say('');
@@ -1012,7 +1020,7 @@ class App {
         'div',
         { className: 'warn-actions' },
         h('button', { type: 'button', className: 'btn', textContent: 'Keep reviewing', onclick: () => (this.warn.hidden = true) }),
-        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true) }),
+        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true, transcript) }),
       ),
     );
     this.warn.hidden = false;
