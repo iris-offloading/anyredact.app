@@ -138,7 +138,8 @@ function layout(page, main) {
 <title>${esc(page.title)}</title>
 <meta name="description" content="${esc(page.description)}">
 <link rel="canonical" href="${url(page.slug)}">
-<meta name="theme-color" content="#111318">
+<meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111216" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${SITE.name}">
 <meta property="og:title" content="${esc(page.title)}">
@@ -162,35 +163,21 @@ ${footer()}
 }
 
 function toolPage(page) {
-  const points = page.points
-    .map(([t, d]) => `<div class="point"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`)
-    .join('');
+  const points = page.points.map(([t, d]) => `<div class="point"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join('');
   const faq = page.faq.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
-  const others = TOOLS.filter((t) => t.slug !== page.slug)
-    .map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.name)}</strong><span>${esc(t.lead)}</span></a>`)
-    .join('');
   return layout(
     { ...page, tool: true },
     `<section class="hero wrap">
-  <h1>${esc(page.h1)}</h1>
-  <p class="lead">${esc(page.also ? `${page.lead} ${page.also}` : page.lead)}</p>
-</section>
-<section class="wrap">
+  <div class="hero-copy">
+    <h1>${esc(page.h1)}</h1>
+    <p class="lead">${esc(page.also ? `${page.lead} ${page.also}` : page.lead)}</p>
+  </div>
   <div id="tool" class="tool" data-format="${page.format}" data-hint="${esc(page.hint)}">
     <noscript><p class="status error">AnyRedact runs in your browser and needs JavaScript enabled.</p></noscript>
   </div>
 </section>
-<section class="wrap points">${points}</section>
-<section class="wrap how">
-  <h2>How it works</h2>
-  <ol>
-    <li><strong>Open your file.</strong> Our AI finds the personal information in it.</li>
-    <li><strong>Review what was found.</strong> Untick anything you want to keep, or mark more by hand.</li>
-    <li><strong>Download the redacted copy.</strong> The sensitive content is removed from the file itself.</li>
-  </ol>
-</section>
-<section class="wrap faq"><h2>Frequently asked questions</h2>${faq}</section>
-<section class="wrap more"><h2>${page.slug ? 'More redaction tools' : 'Tools for each format'}</h2><div class="cards">${others}</div></section>`,
+<section class="band"><div class="wrap points">${points}</div></section>
+<section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>`,
   );
 }
 

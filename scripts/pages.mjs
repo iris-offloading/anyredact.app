@@ -47,7 +47,7 @@ export const TOOLS = [
     h1: 'Auto redact images online with AI',
     lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
     also: 'Works with JPG, PNG, WebP and HEIC.',
-    hint: 'PNG, JPG, WebP or HEIC, or paste a screenshot',
+    hint: 'PNG, JPG, WebP or HEIC',
     points: [
       ['Automatic text detection', 'OCR reads the image on your device, then AI marks what to hide.'],
       ['Solid boxes, not blur', 'Blur and pixelation can sometimes be reversed. AnyRedact paints solid black boxes.'],
@@ -222,9 +222,9 @@ export const HOME = {
   lead: 'Upload PDFs, images, Word, PowerPoint, Excel, text, or audio files, and our AI will find and redact sensitive information in all of them.',
   hint: 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio',
   points: [
-    ['Faces and plates too', 'Optionally black out faces, screens, road signs and number plates in pictures.'],
     ['Real redaction', 'Sensitive content is removed from the file, not just hidden under a box.'],
     ['Review before you download', 'Every detection can be switched off, and you can add your own words or draw boxes.'],
+    ['Hidden data removed too', 'Author names, document properties, photo locations and audio tags are left out of the download.'],
   ],
   faq: [
     {

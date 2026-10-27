@@ -179,8 +179,13 @@ class App {
       'label',
       { className: 'drop', for: 'file-input' },
       this.fileInput,
-      h('span', { className: 'drop-icon', 'aria-hidden': 'true' }, '⬆'),
-      h('span', { className: 'drop-title' }, 'Drop a file here or ', h('u', {}, 'choose one')),
+      h('span', {
+        className: 'drop-icon',
+        'aria-hidden': 'true',
+        innerHTML: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
+      }),
+      h('span', { className: 'drop-title' }, h('u', {}, 'Choose a file'), h('span', { className: 'drop-here' }, ' or drop it here')),
+      h('span', { className: 'drop-or' }, 'or paste with ', h('kbd', {}, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V')),
       h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, PNG, JPG, WebP, HEIC, text or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
@@ -191,18 +196,15 @@ class App {
       if (f) this.open(f);
     });
 
-    const pasteArea = h('textarea', { rows: 6, placeholder: 'Paste text that contains emails, phone numbers, names…', 'aria-label': 'Text to redact' });
+    // Phones have no paste shortcut, so they get a box to paste into; so does the text page.
+    const pasteArea = h('textarea', { rows: 3, id: 'paste-text' });
+    const pasteText = (text: string) => text.trim() && this.open(new File([text], 'pasted-text.txt', { type: 'text/plain' }));
     const paste = h(
-      'details',
-      { className: 'paste', open: format === 'text' },
-      h('summary', {}, 'Or paste text'),
+      'div',
+      { className: 'paste' + (format === 'text' ? ' always' : '') },
+      h('label', { for: 'paste-text' }, 'Or paste text'),
       pasteArea,
-      h('button', {
-        type: 'button',
-        className: 'btn',
-        textContent: 'Find sensitive info',
-        onclick: () => pasteArea.value.trim() && this.open(new File([pasteArea.value], 'pasted-text.txt', { type: 'text/plain' })),
-      }),
+      h('button', { type: 'button', className: 'btn', textContent: 'Find personal info', onclick: () => pasteText(pasteArea.value) }),
     );
 
     this.intake = h('div', { className: 'intake' }, drop, ...(format === 'text' || format === 'all' ? [paste] : []));
@@ -258,7 +260,7 @@ class App {
 
     this.styleSel = h('select', { 'aria-label': 'Redaction style' });
     this.styleSel.addEventListener('change', () => (this.style = this.styleSel.value as RedactStyle));
-    this.styleRow = h('label', { className: 'row' }, 'Style ', this.styleSel);
+    this.styleRow = h('label', { className: 'row style-row' }, 'Style ', this.styleSel);
 
     this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
     this.transcriptBtn = h('button', { type: 'button', className: 'btn transcript', textContent: 'Download redacted transcript', hidden: true, onclick: () => this.export(false, true) });
@@ -273,25 +275,26 @@ class App {
     this.consentBox = h('div', { className: 'consent', hidden: true });
 
     this.panelHead = h('div', { className: 'panel-head' }, this.docName, reset);
+    // The body scrolls on its own so the download button stays in view at the foot of the panel.
     const panel = h(
       'aside',
-      { className: 'panel' },
-      this.panelHead,
-      this.consentBox,
-      h('h3', {}, 'Look for'),
-      typeBoxes,
-      this.pictureBox,
-      h('h3', {}, 'Always redact'),
-      termsArea,
-      h('h3', {}, 'Found'),
-      this.list,
-      this.metaBox,
-      this.styleRow,
-      this.checkRow,
-      this.download,
-      this.transcriptBtn,
-      this.warn,
-      this.notes,
+      { className: 'panel', 'aria-label': 'Review' },
+      h(
+        'div',
+        { className: 'panel-body' },
+        this.panelHead,
+        this.consentBox,
+        h('h3', {}, 'Found'),
+        this.list,
+        h('h3', {}, 'Look for'),
+        typeBoxes,
+        this.pictureBox,
+        h('h3', {}, 'Always redact'),
+        termsArea,
+        this.metaBox,
+        this.notes,
+      ),
+      h('div', { className: 'panel-foot' }, this.styleRow, this.checkRow, this.download, this.transcriptBtn, this.warn),
     );
     this.preview = h('div', { className: 'preview' });
     this.workspace = h('div', { className: 'workspace', hidden: true }, panel, this.preview);
@@ -301,6 +304,7 @@ class App {
       if (this.doc || (e.target as HTMLElement)?.closest?.('textarea,input')) return;
       const f = e.clipboardData?.files[0];
       if (f) this.open(f);
+      else if (format === 'text' || format === 'all') pasteText(e.clipboardData?.getData('text/plain') ?? '');
     });
   }
 
@@ -554,7 +558,7 @@ class App {
     if (!groups.size && !manual) {
       const visual = this.doc?.pages.length;
       this.list.replaceChildren(
-        h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw boxes, or add words above.' : this.doc?.audio ? 'Nothing detected. Drag on the timeline to bleep a stretch.' : 'Nothing detected. Add words above, or select text in the preview to redact it.'),
+        h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw boxes, or add words below.' : this.doc?.audio ? 'Nothing detected. Drag on the timeline to bleep a stretch.' : 'Nothing detected. Add words below, or select text in the preview to redact it.'),
       );
       return;
     }
