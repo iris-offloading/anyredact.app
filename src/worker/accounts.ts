@@ -154,6 +154,19 @@ async function deleteAccount(request: Request, env: AccountsEnv): Promise<Respon
   return json({ ok: true }, 200, [setCookie('session', '', 0), signedInHint(false)]);
 }
 
+/** Whether a plan was cancelled and stops at the end of its period. False when Stripe can't say. */
+async function planEnding(env: AccountsEnv, subId: string): Promise<boolean> {
+  if (!env.STRIPE_SECRET_KEY) return false;
+  try {
+    const res = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subId)}`, { headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
+    if (!res.ok) return false;
+    const sub = (await res.json()) as { cancel_at_period_end?: boolean; cancel_at?: number | null };
+    return !!(sub.cancel_at_period_end || sub.cancel_at);
+  } catch {
+    return false;
+  }
+}
+
 /** Handles /api/auth/* and /api/me. Returns null for other paths. */
 export async function handleAccounts(request: Request, env: AccountsEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -170,7 +183,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     return json({
       user: {
         email: user.email,
-        subscription: subActive ? { pages: user.sub_pages, used: user.sub_used, renews: user.sub_period_end } : null,
+        subscription: subActive ? { pages: user.sub_pages, used: user.sub_used, renews: user.sub_period_end, ending: await planEnding(env, user.sub_id!) } : null,
         packPages: user.pack_pages,
         canManage: !!user.stripe_customer,
       },

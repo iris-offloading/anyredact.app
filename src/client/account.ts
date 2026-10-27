@@ -7,7 +7,7 @@ import { h } from './dom.ts';
 interface Me {
   user: {
     email: string | null;
-    subscription: { pages: number; used: number; renews: number } | null;
+    subscription: { pages: number; used: number; renews: number; ending: boolean } | null;
     packPages: number;
     canManage: boolean;
   } | null;
@@ -226,19 +226,41 @@ function balance(user: NonNullable<Me['user']>, free: number | null) {
   const meters = [
     ...(free === null ? [] : [meter('Free today', free, FREE_CREDITS)]),
     sub
-      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, `Renews ${new Date(sub.renews * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`)
+      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft, sub.pages, sub.ending ? 'Lapse when the plan ends' : 'Reset each month')
       : meter('Monthly plan', 'None', null),
     meter('Credits', user.packPages, null, 'Never expire'),
   ];
   const balanceCard = h(
     'section',
-    { className: 'panel-card' },
+    { className: 'panel-card balance-card' },
     h('h2', {}, 'Balance'),
     h('div', { className: 'total' }, h('span', { className: 'total-num' }, total.toLocaleString('en-US')), h('span', { className: 'total-label' }, 'credits left')),
     h('div', { className: 'meters' }, ...meters),
   );
   const planCard = sub
-    ? h('section', { className: 'panel-card' }, h('h2', {}, 'Plan'), h('p', { className: 'muted' }, plan ? `${plan.name}, ${sub.pages.toLocaleString('en-US')} credits a month for ${usd(plan.cents)}.` : `${sub.pages.toLocaleString('en-US')} credits a month.`), ...(user.canManage ? [manageButton()] : []))
+    ? h(
+        'section',
+        { className: 'panel-card plan-card' },
+        h('h2', {}, 'Plan'),
+        h(
+          'div',
+          { className: 'plan-hero' },
+          h(
+            'div',
+            {},
+            h('div', { className: 'plan-name' }, h('strong', {}, plan?.name ?? 'Monthly'), h('span', { className: sub.ending ? 'pill ending' : 'pill' }, sub.ending ? 'Cancelled' : 'Active')),
+            h('span', { className: 'plan-sub' }, `${sub.pages.toLocaleString('en-US')} credits a month`),
+          ),
+          ...(plan ? [h('span', { className: 'plan-price' }, usd(plan.cents), h('small', {}, ' / month'))] : []),
+        ),
+        h(
+          'div',
+          { className: 'plan-date' },
+          h('span', {}, sub.ending ? 'Ends' : 'Renews'),
+          h('strong', {}, new Date(sub.renews * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })),
+        ),
+        ...(user.canManage ? [manageButton()] : []),
+      )
     : h(
         'section',
         { className: 'panel-card' },
