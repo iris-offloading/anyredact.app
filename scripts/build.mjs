@@ -221,7 +221,7 @@ await writeFile(
     {
       slug: 'account',
       title: 'Account | AnyRedact',
-      description: 'Free AI redaction credits every day, plus monthly plans and credits that never expire.',
+      description: 'Sign in to see your balance, manage your plan or buy more credits.',
       jsonLd: false,
       script: accountSrc,
     },
