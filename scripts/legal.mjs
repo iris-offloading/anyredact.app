@@ -127,7 +127,7 @@ export const LEGAL = [
 <p>Within 14 days of buying credits, you can ask for a refund of the ones you have not used. We refund their share of the price, and those credits leave your balance.</p>
 
 <h2>Plans</h2>
-<p>You can cancel a plan at any time under Manage plan on your account page. It stops renewing, and you keep its credits until the end of the month you paid for. Within 14 days of a plan payment, if you have used none of that month's credits, you can ask for the payment back. A refunded plan payment ends that month's credits.</p>
+<p>You can cancel a plan at any time under Manage plan on your account page. It stops renewing, and you keep its credits until the end of the month you paid for. Within 14 days of a plan payment, if you have used none of that month's credits, you can ask for the payment back. A refunded plan payment ends that month's credits, and a full refund also ends the plan.</p>
 
 <h2>Billing errors</h2>
 <p>A double charge, or a charge after you cancelled, is refunded in full.</p>
@@ -136,7 +136,7 @@ export const LEGAL = [
 <p>Email <a href="mailto:support@anyredact.app?subject=Refund">support@anyredact.app</a> from the address on your account and say which payment it is about. Refunds go back to the card you paid with through Stripe and usually arrive within 5 to 10 business days.</p>
 
 <h2>Chargebacks</h2>
-<p>If you dispute a payment with your bank, the credits it bought are removed while the dispute is open. Write to us first and we will try to sort it out.</p>`,
+<p>If you dispute a payment with your bank, the credits it bought are removed while the dispute is open, and a disputed plan payment also ends the plan. Write to us first and we will try to sort it out.</p>`,
   },
   {
     slug: 'contact',
