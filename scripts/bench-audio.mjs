@@ -184,9 +184,6 @@ async function azure(model, wav, options) {
   return { error: 'azure kept failing' };
 }
 
-const wordsFromAzure = (result) =>
-  (result?.phrases ?? []).flatMap((p) => p.words ?? []).map((w) => ({ text: w.text, start: w.offsetMilliseconds / 1000, end: (w.offsetMilliseconds + w.durationMilliseconds) / 1000 }));
-
 function chunksOf(pcm, chunkSec) {
   if (!chunkSec || pcm.length <= chunkSec * RATE) return [{ start: 0, end: pcm.length / RATE, pcm }];
   const out = [];
@@ -259,7 +256,7 @@ async function run(base, dir, spec, chunkSec) {
         const r = body.results[k++];
         if (r.error) console.error(`transcription error: ${r.error}`);
         asrMs += r.ms ?? 0;
-        return { start: ch.start + shift, end: ch.end + shift, words: r.error ? [] : onAzure ? wordsFromAzure(r.result) : deepgram ? t.wordsFromDeepgram(r.result) : t.wordsFromWhisper(r.result) };
+        return { start: ch.start + shift, end: ch.end + shift, words: r.error ? [] : onAzure ? t.wordsFromAzure(r.result) : deepgram ? t.wordsFromDeepgram(r.result) : t.wordsFromWhisper(r.result) };
       });
       transcripts.push(t.buildTranscript(t.mergeChunks(parts)));
     }

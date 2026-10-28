@@ -24,7 +24,7 @@ export const LEGAL = [
 <li>the speech in a recording, as low-quality mono sound in parts of a few minutes;</li>
 <li>the text with your redactions blacked out, if you run the final check.</li>
 </ul>
-<p>The content goes over HTTPS to our Cloudflare Worker and is analysed by AI models running on Cloudflare Workers AI. It is held in memory for that request only. We do not store it or the results, do not log it, and do not use it to train models. If you decline, nothing is sent and you can redact by hand.</p>
+<p>The content goes over HTTPS to our Cloudflare Worker and is analysed by AI models running on Cloudflare Workers AI. Speech is turned into text by Microsoft Azure AI Speech, which does not keep it. It is held in memory for that request only. We do not store it or the results, do not log it, and do not use it to train models. If you decline, nothing is sent and you can redact by hand.</p>
 <p>Scanned pages and images are read with the Tesseract OCR engine in your browser. Picture redaction also runs a face and object detector in your browser first. The browser downloads both from the jsDelivr CDN.</p>
 
 <h2>Data we keep</h2>
@@ -43,7 +43,8 @@ export const LEGAL = [
 
 <h2>Who processes data</h2>
 <ul>
-<li><strong>Cloudflare</strong> hosts the site, runs the AI models and sends sign-in emails.</li>
+<li><strong>Cloudflare</strong> hosts the site, runs the other AI models and sends sign-in emails.</li>
+<li><strong>Microsoft</strong> transcribes the speech in recordings with Azure AI Speech.</li>
 <li><strong>Stripe</strong> handles payments, subscriptions and refunds.</li>
 <li><strong>Google</strong> confirms your identity if you sign in with Google, and runs Google Analytics with Google signals and ad personalisation turned off.</li>
 <li><strong>jsDelivr</strong> serves the OCR engine and picture models to your browser.</li>

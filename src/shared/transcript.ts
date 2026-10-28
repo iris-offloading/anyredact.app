@@ -36,6 +36,15 @@ export function wordsFromWhisper(result: unknown): Word[] {
     .filter((w) => w.text);
 }
 
+/** Words from an Azure Speech fast transcription response (MAI-Transcribe-2) with word timestamps. */
+export function wordsFromAzure(result: unknown): Word[] {
+  const phrases = (result as { phrases?: { words?: { text: string; offsetMilliseconds: number; durationMilliseconds: number }[] }[] })?.phrases ?? [];
+  return phrases
+    .flatMap((p) => p.words ?? [])
+    .map((w) => ({ text: w.text, start: w.offsetMilliseconds / 1000, end: (w.offsetMilliseconds + w.durationMilliseconds) / 1000 }))
+    .filter((w) => w.text);
+}
+
 /**
  * Joins the words of consecutive chunks into one list. Chunks overlap, so each
  * one keeps only the words whose middle falls in its own share of the overlap.

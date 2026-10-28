@@ -267,7 +267,7 @@ export const TOOLS = [
       },
       {
         q: 'Which languages work?',
-        a: 'English and most widely spoken languages. English recordings are transcribed with Deepgram Nova-3, others with OpenAI Whisper.',
+        a: 'English and about 60 other languages. Recordings are transcribed with Microsoft MAI-Transcribe-2.',
       },
     ],
   },

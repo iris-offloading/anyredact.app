@@ -1,15 +1,18 @@
 // Speech to text with word timings, for audio redaction. The browser sends one
 // chunk of 16 kHz mono WAV at a time, never the original file; nothing is stored.
 //
-// scripts/bench-audio.mjs chose the models: on English speech Nova-3 muted 86%
-// of personal values against Whisper turbo's 81%, but outside its default
-// English mode Nova-3 reports word times about 0.7 s late, so other languages
-// go to Whisper turbo (70% on Spanish, against Nova-3's 18%).
+// scripts/bench-audio.mjs chose the models: MAI-Transcribe-2 on Azure muted 92%
+// of personal values in English and 61% in Spanish, against 82% and 1% for
+// Nova-3 and 81% and 56% for Whisper turbo, with word times closest to the
+// speech. When Azure is not configured or fails, Workers AI takes over: Nova-3
+// for English (outside its default English mode its word times run about 0.7 s
+// late) and Whisper turbo for other languages.
 import { audioCredits, CHUNK_OVERLAP, CHUNK_SECONDS, CREDIT_CHARS, SPEECH_RATE } from '../shared/pricing.ts';
-import { wordsFromDeepgram, wordsFromWhisper, type Word } from '../shared/transcript.ts';
+import { wordsFromAzure, wordsFromDeepgram, wordsFromWhisper, type Word } from '../shared/transcript.ts';
 import { chargeUsage, runWithRetry, type Env } from './detect.ts';
 import { aiGuard, base64, json } from './http.ts';
 
+export const AZURE_MODEL = 'MAI-Transcribe-2';
 export const ENGLISH_MODEL = '@cf/deepgram/nova-3';
 export const SPEECH_MODEL = '@cf/openai/whisper-large-v3-turbo';
 
@@ -40,6 +43,29 @@ export function isWav(b: Uint8Array): boolean {
   return formats === 1 && ok;
 }
 
+export interface SpeechEnv extends Env {
+  TRANSCRIBE_LIMITER?: Env['DETECT_LIMITER'];
+  /** Azure Speech resource, e.g. https://<resource>.cognitiveservices.azure.com */
+  AZURE_SPEECH_URL?: string;
+  AZURE_SPEECH_KEY?: string;
+}
+
+async function azure(env: SpeechEnv, wav: Uint8Array): Promise<{ words: Word[]; language?: string }> {
+  const form = new FormData();
+  form.append('audio', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
+  form.append('definition', JSON.stringify({ enhancedMode: { enabled: true, model: AZURE_MODEL, modelOptions: { timestamps: 'word' } } }));
+  const res = await fetch(new URL('/speechtotext/transcriptions:transcribe?api-version=2025-10-15', env.AZURE_SPEECH_URL), {
+    method: 'POST',
+    headers: { 'Ocp-Apim-Subscription-Key': env.AZURE_SPEECH_KEY! },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Azure Speech ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const result = (await res.json()) as { phrases?: { locale?: string }[] };
+  // Locales come as en-US; the browser and the fallback models use en.
+  const locale = result.phrases?.find((p) => p.locale)?.locale;
+  return { words: wordsFromAzure(result), language: locale?.split('-')[0].toLowerCase() };
+}
+
 async function english(env: Env, wav: Uint8Array): Promise<Word[]> {
   const result = await runWithRetry(() =>
     env.AI!.run(ENGLISH_MODEL as never, { audio: { body: new Blob([wav]).stream(), contentType: 'audio/wav' }, smart_format: true } as never),
@@ -54,7 +80,7 @@ async function other(env: Env, wav: Uint8Array, language: string | null): Promis
   return { words: wordsFromWhisper(result), language: result.transcription_info?.language };
 }
 
-export async function handleTranscribe(request: Request, env: Env & { TRANSCRIBE_LIMITER?: Env['DETECT_LIMITER'] }): Promise<Response> {
+export async function handleTranscribe(request: Request, env: SpeechEnv): Promise<Response> {
   const refused = await aiGuard(request, env.AI, env.TRANSCRIBE_LIMITER ?? env.DETECT_LIMITER, 'Transcription is not configured on this server.', 'speech:');
   if (refused) return refused;
 
@@ -68,9 +94,17 @@ export async function handleTranscribe(request: Request, env: Env & { TRANSCRIBE
   const quota = await chargeUsage(request, env, audioCredits(seconds - CHUNK_OVERLAP - 0.05) * CREDIT_CHARS);
   if (quota instanceof Response) return quota;
 
-  // The first chunk arrives without a language: Whisper names it, and English is then redone with Nova-3.
   const asked = new URL(request.url).searchParams.get('language')?.toLowerCase() || null;
   const language = asked && /^[a-z]{2,3}$/.test(asked) ? asked : null;
+  if (env.AZURE_SPEECH_URL && env.AZURE_SPEECH_KEY) {
+    try {
+      const found = await azure(env, wav);
+      return json({ words: found.words, language: language ?? found.language ?? null, quota: quota.state });
+    } catch (err) {
+      console.warn('MAI-Transcribe failed, using Workers AI', err);
+    }
+  }
+  // The first chunk arrives without a language: Whisper names it, and English is then redone with Nova-3.
   try {
     if (language === 'en') return json({ words: await english(env, wav), language, quota: quota.state });
     const found = await other(env, wav, language);
