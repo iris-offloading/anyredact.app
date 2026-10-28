@@ -92,6 +92,17 @@ async function refundSecondPlan(env: BillingEnv, userId: string, subscription: s
   await stripe(env, `subscriptions/${encodeURIComponent(subscription)}`, {}, { method: 'DELETE' });
 }
 
+/** Whether a subscription was cancelled, so a late or retried payment event must not start it again. */
+async function subscriptionEnded(env: BillingEnv, subscription: string): Promise<boolean> {
+  try {
+    const sub = await stripe<{ status?: string }>(env, `subscriptions/${encodeURIComponent(subscription)}`, {}, { method: 'GET' });
+    return sub.status === 'canceled' || sub.status === 'incomplete_expired';
+  } catch (err) {
+    if (/No such subscription/i.test((err as Error).message)) return true;
+    throw err;
+  }
+}
+
 async function customerFor(env: BillingEnv, user: User): Promise<string> {
   if (user.stripe_customer) return user.stripe_customer;
   const customer = await stripe<{ id: string }>(env, 'customers', { email: user.email ?? undefined, metadata: { user_id: user.id } });
@@ -183,6 +194,7 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
         await refundSecondPlan(env, userId, obj.subscription, obj.invoice);
         return;
       }
+      if (current?.plan_subscription !== obj.subscription && (await subscriptionEnded(env, obj.subscription))) return;
       // invoice.paid sets the exact period end; until then allow a month.
       await db
         .prepare('UPDATE users SET plan_subscription = ?, plan_credits = ?, plan_used = 0, plan_period_end = MAX(plan_period_end, ?), stripe_customer = COALESCE(stripe_customer, ?) WHERE id = ?')
@@ -195,14 +207,20 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
     // The plan's size, for a plan whose first payment confirmed after checkout (a bank debit).
     const meta = obj.parent?.subscription_details?.metadata ?? obj.subscription_details?.metadata;
     const plan = findProduct(meta?.product);
+    const subscription = invoiceSubscription(obj)!;
+    const current = await db.prepare('SELECT plan_subscription, plan_period_end FROM users WHERE stripe_customer = ?').bind(obj.customer).first<Pick<User, 'plan_subscription' | 'plan_period_end'>>();
+    if (!current) return;
+    // Starting a plan, not renewing it: a late retry for a plan a refund or dispute cancelled must not bring it back.
+    const starts = current.plan_subscription !== subscription && (!current.plan_subscription || current.plan_period_end <= now());
+    if (starts && (await subscriptionEnded(env, subscription))) return;
     // Renews the account's plan, or starts one when it has none; a second plan's invoice changes nothing.
     await db
       .prepare('UPDATE users SET plan_subscription = ?1, plan_credits = COALESCE(?2, plan_credits), plan_used = 0, plan_period_end = ?3 WHERE stripe_customer = ?4 AND (plan_subscription IS NULL OR plan_subscription = ?1 OR plan_period_end <= ?5)')
-      .bind(invoiceSubscription(obj), plan?.monthly ? plan.credits : null, periodEnd, obj.customer, now())
+      .bind(subscription, plan?.monthly ? plan.credits : null, periodEnd, obj.customer, now())
       .run();
     // The first payment shows with its checkout; later ones are renewals.
     if (obj.billing_reason === 'subscription_cycle') {
-      const owner = await db.prepare('SELECT id, plan_credits FROM users WHERE stripe_customer = ? AND plan_subscription = ?').bind(obj.customer, invoiceSubscription(obj)).first<{ id: string; plan_credits: number }>();
+      const owner = await db.prepare('SELECT id, plan_credits FROM users WHERE stripe_customer = ? AND plan_subscription = ?').bind(obj.customer, subscription).first<{ id: string; plan_credits: number }>();
       if (owner) await logActivity(db, owner.id, event.id, 'plan', owner.plan_credits, obj.amount_paid ?? null);
     }
   } else if (event.type === 'charge.refunded' && obj.amount > 0) {
@@ -218,7 +236,7 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
  * Takes back the credits a refunded or disputed payment bought, in proportion to
  * the amount returned. One-off credits come off the balance even when already
  * spent, which can leave it negative. A plan payment ends this period's credits,
- * and a full refund of one also cancels the plan so it doesn't renew.
+ * and a dispute or full refund of one also cancels the plan.
  */
 async function takeBack(
   env: BillingEnv,
@@ -254,9 +272,10 @@ async function takeBack(
   if (!user) return;
   // Only a payment for the account's current plan touches it, not an older plan's or a charge with no purchase row.
   if ((await chargeSubscription(env, paid)) !== user.plan_subscription) return;
-  if (kind === 'refund' && share >= 1) {
+  // A dispute, or a refund of the whole payment, ends the plan so it doesn't renew.
+  if (kind === 'dispute' || share >= 1) {
     try {
-      await stripe(env, `subscriptions/${encodeURIComponent(user.plan_subscription)}`, {}, { method: 'DELETE', idempotencyKey: `refund-cancel-${eventId}` });
+      await stripe(env, `subscriptions/${encodeURIComponent(user.plan_subscription)}`, {}, { method: 'DELETE', idempotencyKey: `plan-cancel-${eventId}` });
     } catch (err) {
       // Cancelled already, in the dashboard or by an earlier try.
       if (!/canceled|cancelled|No such subscription/i.test((err as Error).message)) throw err;

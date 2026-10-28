@@ -91,7 +91,9 @@ test('webhook grants one-off credits once, under old ids too, and starts the mon
   await send({ id: 'evt_debit', type: 'checkout.session.completed', data: { object: debit } });
   await send({ id: 'evt_debit_paid', type: 'checkout.session.async_payment_succeeded', data: { object: { ...debit, payment_status: 'paid' } } });
   const sub = { id: 'evt_sub', type: 'checkout.session.completed', data: { object: { mode: 'subscription', payment_status: 'paid', subscription: 'sub_1', customer: 'cus_1', metadata: { user_id: userId, product: 'plus' } } } };
-  await send(sub);
+  await withStripe(() => ({ id: 'sub_1', status: 'active' }), async () => {
+    await send(sub);
+  });
   const u = (await db.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
   assert.equal(u.credits, 1000);
   assert.equal(u.plan_credits, 600);
@@ -268,8 +270,35 @@ test('a plan paid by a bank debit starts only once the payment confirms', async 
   assert.deepEqual({ ...(await plan()) }, { plan_subscription: null, plan_credits: 0 });
   // The invoice can confirm before the session does, and carries the plan in its metadata.
   const invoice = { customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_1', metadata: { user_id: userId, product: 'plus' } } }, lines: { data: [{ period: { end: 4102444800 } }] } };
-  await send({ id: 'evt_i', type: 'invoice.paid', data: { object: invoice } });
+  await withStripe(() => ({ id: 'sub_1', status: 'active' }), async () => {
+    await send({ id: 'evt_i', type: 'invoice.paid', data: { object: invoice } });
+  });
   assert.deepEqual({ ...(await plan()) }, { plan_subscription: 'sub_1', plan_credits: 600 });
+});
+
+test('a late invoice.paid for a cancelled plan does not start it again', async () => {
+  const db = d1();
+  const e = env(db);
+  const send = webhook(e);
+  const userId = await upsertUser(e, 'jane@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1' WHERE id = ?").bind(userId).run();
+  const invoice = { customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_1', metadata: { product: 'plus' } } }, lines: { data: [{ period: { end: 4102444800 } }] } };
+  const calls = await withStripe(
+    () => ({ id: 'sub_1', status: 'canceled' }),
+    async () => {
+      assert.equal((await send({ id: 'evt_late', type: 'invoice.paid', data: { object: invoice } })).status, 200);
+    },
+  );
+  assert.deepEqual(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`), ['GET /v1/subscriptions/sub_1']);
+  const u = (await db.prepare('SELECT plan_subscription, plan_credits FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
+  assert.deepEqual({ ...u }, { plan_subscription: null, plan_credits: 0 });
+  // A renewal of the plan the account has needs no lookup.
+  await db.prepare("UPDATE users SET plan_subscription = 'sub_1', plan_credits = 600, plan_used = 50 WHERE id = ?").bind(userId).run();
+  const renew = await withStripe(() => ({}), async () => {
+    await send({ id: 'evt_renew', type: 'invoice.paid', data: { object: invoice } });
+  });
+  assert.equal(renew.length, 0);
+  assert.equal(((await db.prepare('SELECT plan_used FROM users WHERE id = ?').bind(userId).first()) as { plan_used: number }).plan_used, 0);
 });
 
 test('live keys ignore sandbox events', async () => {
@@ -283,23 +312,20 @@ test('live keys ignore sandbox events', async () => {
   assert.equal(((await db.prepare('SELECT credits FROM users WHERE id = ?').bind(userId).first()) as { credits: number }).credits, 100);
 });
 
-test('a dispute on a plan payment ends the period\'s credits', async () => {
+test('a dispute on a plan payment ends the plan', async () => {
   const db = d1();
   const e = env(db);
   const userId = await upsertUser(e, 'jane@example.com');
   await db.prepare("UPDATE users SET stripe_customer = 'cus_9', plan_subscription = 'sub_9', plan_credits = 600, plan_used = 10, plan_period_end = 4102444800 WHERE id = ?").bind(userId).run();
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    if (String(input).includes('/v1/invoices/in_9')) return Response.json({ id: 'in_9', subscription: 'sub_9' });
-    assert.match(String(input), /\/v1\/charges\/ch_9$/);
-    return Response.json({ id: 'ch_9', customer: 'cus_9', invoice: 'in_9' });
-  }) as typeof fetch;
-  try {
-    assert.equal((await webhook(e)({ id: 'evt_d', type: 'charge.dispute.created', data: { object: { charge: 'ch_9', payment_intent: 'pi_plan', amount: 900 } } })).status, 200);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-  assert.equal(((await db.prepare('SELECT plan_used FROM users WHERE id = ?').bind(userId).first()) as { plan_used: number }).plan_used, 600);
+  const calls = await withStripe(
+    (method, url) => (url.includes('/v1/invoices/in_9') ? { id: 'in_9', subscription: 'sub_9' } : url.includes('/v1/charges/ch_9') ? { id: 'ch_9', customer: 'cus_9', invoice: 'in_9' } : { id: 'sub_9', status: 'canceled' }),
+    async () => {
+      assert.equal((await webhook(e)({ id: 'evt_d', type: 'charge.dispute.created', data: { object: { charge: 'ch_9', payment_intent: 'pi_plan', amount: 900 } } })).status, 200);
+    },
+  );
+  assert.deepEqual(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`), ['GET /v1/charges/ch_9', 'GET /v1/invoices/in_9', 'DELETE /v1/subscriptions/sub_9']);
+  const u = (await db.prepare('SELECT plan_subscription, plan_credits FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>;
+  assert.deepEqual({ ...u }, { plan_subscription: null, plan_credits: 0 });
 });
 
 test('transcription takes only 16 kHz mono 16-bit WAV, so audio is billed by its real length', () => {
