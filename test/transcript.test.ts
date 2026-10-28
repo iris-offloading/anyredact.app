@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildTranscript, mergeChunks, padRanges, paragraphs, timeRangeFor, wordsFromDeepgram, wordsFromWhisper } from '../src/shared/transcript.ts';
+import { buildTranscript, mergeChunks, padRanges, paragraphs, timeRangeFor, wordsFromAzure, wordsFromDeepgram, wordsFromWhisper } from '../src/shared/transcript.ts';
 
 test('Whisper words keep the spacing the model gave them', () => {
   const words = wordsFromWhisper({
@@ -16,6 +16,18 @@ test('Deepgram words use the formatted form', () => {
     results: { channels: [{ alternatives: [{ words: [{ word: 'hi', punctuated_word: 'Hi.', start: 0.1, end: 0.4 }, { word: '5550142', punctuated_word: '555-0142', start: 0.5, end: 2 }] }] }] },
   });
   assert.equal(buildTranscript(words).text, 'Hi. 555-0142');
+});
+
+test('Azure words read their times from milliseconds, across phrases', () => {
+  const words = wordsFromAzure({
+    phrases: [
+      { words: [{ text: 'Hi,', offsetMilliseconds: 320, durationMilliseconds: 200 }, { text: 'Priya.', offsetMilliseconds: 600, durationMilliseconds: 400 }] },
+      { words: [{ text: '4539-1488.', offsetMilliseconds: 2000, durationMilliseconds: 1500 }] },
+    ],
+  });
+  const t = buildTranscript(words);
+  assert.equal(t.text, 'Hi, Priya. 4539-1488.');
+  assert.deepEqual(timeRangeFor(t, t.text.indexOf('4539'), t.text.length - 1), [2, 3.5]);
 });
 
 test('overlapping chunks keep each word once', () => {

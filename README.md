@@ -6,7 +6,7 @@ Free online redaction for PDF, images, Word (DOCX), PowerPoint (PPTX), spreadshe
 
 - **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX, PPTX, XLSX and ODS) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
 - **Matching:** `src/shared/analyze.ts` finds every mention of what the model returned and of the user's own terms, including first or last name alone (`src/shared/names.ts`), and leaves business and helpline contacts unticked. There are no local detection rules: if the AI endpoint fails, the user is told and redacts by hand.
-- **Redaction** happens in the browser. Documents send only extracted text to the server; audio sends 16 kHz mono speech chunks (`/api/transcribe`, Nova-3 for English and Whisper turbo otherwise), so user-facing copy promises "processed, never stored" rather than "never uploaded".
+- **Redaction** happens in the browser. Documents send only extracted text to the server; audio sends 16 kHz mono speech chunks (`/api/transcribe`, MAI-Transcribe-2 on Azure Speech, with Nova-3 for English and Whisper turbo otherwise on Workers AI when Azure fails), so user-facing copy promises "processed, never stored" rather than "never uploaded".
 
 | Format | What the download contains |
 | --- | --- |
@@ -47,9 +47,9 @@ node scripts/indexnow.mjs   # after a deploy: submit the sitemap URLs to IndexNo
 
 Wrangler runs `npm run build` itself before dev, deploy and preview uploads (see `build` in `wrangler.jsonc`), so Workers Builds needs no build command. Pull request previews use the `previews` bindings.
 
-The Workers AI model defaults to `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (with thinking off) and can be overridden with an `AI_MODEL` variable. To compare models, run `node scripts/bench-models.mjs <preview-url> <model>...` against a preview deployment; previews accept a `model` in `/api/detect` requests and list the available models at `/api/models`. These preview-only features need the `TRIAL_KEY` Worker secret, sent by the scripts from the `TRIAL_KEY` environment variable. `scripts/bench-audio.mjs` compares speech-to-text models for audio redaction on synthetic recordings.
+The Workers AI model defaults to `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (with thinking off) and can be overridden with an `AI_MODEL` variable. To compare models, run `node scripts/bench-models.mjs <preview-url> <model>...` against a preview deployment; previews accept a `model` in `/api/detect` requests and list the available models at `/api/models`. These preview-only features need the `TRIAL_KEY` Worker secret, sent by the scripts from the `TRIAL_KEY` environment variable. `scripts/bench-audio.mjs` compares speech-to-text models for audio redaction on synthetic recordings. Audio goes to the Azure Speech resource in the `AZURE_SPEECH_URL` variable with the `AZURE_SPEECH_KEY` secret; without them, Workers AI transcribes.
 
 ## Roadmap
 
-- Audio and video (speech-to-text with Whisper on Workers AI, then bleep/mute and blur)
+- Video (speech-to-text, then bleep/mute and blur)
 - Redact images embedded in DOCX and keep a text layer in redacted PDFs
