@@ -1,4 +1,4 @@
-import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, rectsForPage, scaledCanvas, type LoadedDoc, type MetaField, type Page, type Progress, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, scaledCanvas, type LoadedDoc, type MetaField, type Page, type Progress, type Unit } from '../types.ts';
 import { readMetadata } from './metadata.ts';
 import { ocrUnit } from './ocr.ts';
 
@@ -217,6 +217,7 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
   const notes: string[] = [];
   let canvases: HTMLCanvasElement[];
   let metadata: Promise<MetaField[]> | MetaField[] = [];
+  let partial = partialPages(1);
   if (isSvg(file)) {
     const svg = await renderSvg(file, notes);
     canvases = [svg.canvas];
@@ -226,6 +227,7 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
     const tiff = await decodeTiff(file, progress);
     canvases = tiff.canvases;
     if (tiff.total > MAX_PAGES) notes.push(`Only the first ${MAX_PAGES} of ${tiff.total} pages were loaded.`);
+    partial = partialPages(tiff.total);
   } else {
     metadata = readMetadata(file);
     const [bitmap, frames] = await Promise.all([decode(file, progress), frameCount(file)]);
@@ -242,11 +244,12 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
     units,
     pages,
     notes,
+    downloadNote: partial.note,
     metadata: await metadata,
     async exportFile(findings, boxes) {
       // Re-encoding through a canvas writes pixels only, so EXIF, GPS, XMP and IPTC are left behind.
       const burn = (i: number) => burnBoxes(pages[i].canvas, rectsForPage(i, findings, boxes));
-      if (type === 'image/tiff') return { blob: await writeTiff(pages.length, burn), filename: outputName(file.name, /\.tiff?$/i.test(file.name) ? undefined : 'tiff') };
+      if (type === 'image/tiff') return { blob: await writeTiff(pages.length, burn), filename: outputName(file.name, /\.tiff?$/i.test(file.name) ? undefined : 'tiff', partial.suffix) };
       const blob = await canvasToBlob(type === 'image/jpeg' ? onWhite(burn(0)) : burn(0), type, 0.92);
       // Safari writes PNG when asked for WebP, so the name follows what came out.
       return { blob, filename: outputName(file.name, EXTENSIONS[blob.type] ?? 'png') };

@@ -1067,7 +1067,8 @@ class App {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
       if (this.consent !== 'yes') checkNote = ' The final check was skipped because the file was not uploaded, so review it carefully.';
-      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`, false, true);
+      const left = !transcript && doc.downloadNote ? ` ${doc.downloadNote}` : '';
+      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${left}${checkNote || ' Open it and check before sharing.'}`, false, true);
     } catch (err) {
       console.error(err);
       this.say(err instanceof Error ? err.message : 'Export failed.', true, true);
