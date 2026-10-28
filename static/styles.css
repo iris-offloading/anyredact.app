@@ -202,6 +202,7 @@ textarea { resize: vertical; }
 
 .status { margin: 12px 0; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .status.error { border-color: var(--error); color: var(--error); }
+.status.partial { margin: 0 0 10px; font-size: 0.9rem; color: var(--muted); }
 .panel .status { margin: 12px 0 4px; font-size: 0.92rem; }
 .panel-foot .status { margin: 0; }
 .status.busy { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--accent); font-weight: 600; }

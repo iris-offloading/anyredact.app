@@ -114,6 +114,8 @@ export interface LoadedDoc {
   audio?: { url: string; duration: number };
   /** Audio: writes out the speech, which fills `units`. Runs once the user agreed to send it. */
   transcribe?(progress: Progress): Promise<void>;
+  /** Shown with the download, such as pages a long file leaves out. */
+  downloadNote?: string;
   /** Frees what the loader holds (object URLs, open readers) when the file is closed. */
   dispose?(): void;
   exportFile(findings: Finding[], marks: ManualMark[], style: RedactStyle, progress?: Progress): Promise<{ blob: Blob; filename: string }>;
@@ -135,11 +137,17 @@ export const TEXT_STYLES: [RedactStyle, string][] = [
   ['label', 'Replace with label ([EMAIL])'],
 ];
 
-export function outputName(name: string, ext?: string): string {
+export function outputName(name: string, ext?: string, suffix = ''): string {
   const dot = name.lastIndexOf('.');
   const base = dot > 0 ? name.slice(0, dot) : name;
   const e = ext ?? (dot > 0 ? name.slice(dot + 1) : 'txt');
-  return `${base}-redacted.${e}`;
+  return `${base}-redacted${suffix}.${e}`;
+}
+
+/** For a file longer than MAX_PAGES: the file name suffix and the note that the download leaves the rest out. */
+export function partialPages(total: number): { suffix: string; note?: string } {
+  if (total <= MAX_PAGES) return { suffix: '' };
+  return { suffix: `-pages-1-${MAX_PAGES}`, note: `Pages ${MAX_PAGES + 1} to ${total} are not in the download.` };
 }
 
 /** Items grouped by key, in their original order. */

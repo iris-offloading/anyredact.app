@@ -1,3 +1,5 @@
+import { numfmt } from '@univerjs/core';
+import BUILTIN_FORMATS from 'exceljs/lib/xlsx/defaultnumformats.js';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
 import { enabledTexts, outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
@@ -139,6 +141,33 @@ function applyFindings(blocks: Block[], findings: Finding[], style: RedactStyle)
 
 // ---------------------------------------------------------------- XLSX
 
+/** Formats a number cell's stored value with its number format (dates, phone and ID patterns), as Excel displays it. */
+async function numberFormats(zip: JSZip, stylesPath: string | undefined, book: Document): Promise<(value: string, style: string | null) => string> {
+  const styles = stylesPath ? await readXml(zip, stylesPath) : null;
+  if (!styles) return (v) => v;
+  const S = styles.documentElement.namespaceURI ?? '';
+  const custom = new Map(Array.from(styles.getElementsByTagNameNS(S, 'numFmt'), (f) => [f.getAttribute('numFmtId'), f.getAttribute('formatCode') ?? '']));
+  const xfs = styles.getElementsByTagNameNS(S, 'cellXfs')[0];
+  const patterns = Array.from(xfs?.getElementsByTagNameNS(S, 'xf') ?? [], (xf) => {
+    const id = xf.getAttribute('numFmtId') ?? '0';
+    const builtin = BUILTIN_FORMATS[id];
+    return custom.get(id) ?? builtin?.f ?? builtin?.['en-us'] ?? 'General';
+  });
+  // Workbooks from old Mac Excel count dates from 1904.
+  const pr = book.getElementsByTagNameNS(book.documentElement.namespaceURI ?? '', 'workbookPr')[0];
+  const offset1904 = /^(1|true)$/.test(pr?.getAttribute('date1904') ?? '') ? 1462 : 0;
+  return (value, style) => {
+    const pattern = patterns[Number(style ?? 0)] ?? 'General';
+    const n = Number(value);
+    if (pattern === 'General' || !value.trim() || !Number.isFinite(n)) return value;
+    try {
+      return numfmt.format(pattern, numfmt.isDateFormat(pattern) ? n + offset1904 : n) || value;
+    } catch {
+      return value;
+    }
+  };
+}
+
 async function readXlsx(zip: JSZip): Promise<Workbook> {
   const root = await readRels(zip, '');
   const bookPath = [...root.rels.values()].find((r) => r.type.endsWith('/officeDocument'))?.target ?? 'xl/workbook.xml';
@@ -167,6 +196,8 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
     // Phonetic guides repeat the reading of the original text.
     for (const ph of Array.from(el.getElementsByTagNameNS(S, 'rPh'))) ph.remove();
   };
+
+  const shown = await numberFormats(zip, relTarget('/styles'), book);
 
   let formulasRemoved = false;
   const droppedShared = new Map<Document, Set<string>>();
@@ -228,7 +259,9 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
           cells.push({ original, at, write: (next) => (kid(c, S, 'f') ? toInline(c, next.join('')) : setTexts(is!, next)) });
         } else if (type !== 'b' && type !== 'e') {
           const v = kid(c, S, 'v')?.textContent ?? '';
-          if (v.trim()) cells.push({ original: [v], at, write: (next) => toInline(c, next[0]) });
+          // Numbers are scanned as Excel shows them, so a birth date reads 01/02/1993, not 33970.
+          const text = type === 'n' ? shown(v, c.getAttribute('s')) : v;
+          if (text.trim()) cells.push({ original: [text], at, write: (next) => toInline(c, next[0]) });
         }
       }
       if (cells.length) blocks.push(block(`${rel.target}!${rowIdx}`, name, cells, name));

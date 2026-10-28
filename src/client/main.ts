@@ -169,6 +169,8 @@ class App {
   private download: HTMLButtonElement;
   private transcriptBtn: HTMLButtonElement;
   private warn: HTMLElement;
+  /** Pages a long file leaves out of the download. */
+  private partialNote: HTMLElement;
   private checkBox: HTMLInputElement;
   /** The current scan's free final check, until it is used. */
   private checkToken: string | undefined;
@@ -284,6 +286,7 @@ class App {
     this.setDownloadLabel('file');
     this.transcriptBtn = h('button', { type: 'button', className: 'btn transcript', textContent: 'Download redacted transcript', hidden: true, onclick: () => this.export(false, true) });
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
+    this.partialNote = h('p', { className: 'status partial', hidden: true });
     // Each scan's first final check is free and starts ticked; later ones cost credits and start unticked.
     this.checkBox = h('input', { type: 'checkbox', checked: true });
     this.checkRow = h('label', { className: 'row check-row', hidden: true });
@@ -312,7 +315,7 @@ class App {
       'aside',
       { className: 'panel', id: 'review-panel', 'aria-label': 'Review' },
       this.panelBody,
-      h('div', { className: 'panel-foot' }, this.styleRow, this.checkRow, this.download, this.transcriptBtn, this.warn),
+      h('div', { className: 'panel-foot' }, this.styleRow, this.checkRow, this.partialNote, this.download, this.transcriptBtn, this.warn),
     );
     this.preview = h('div', { className: 'preview' });
     const legend = h(
@@ -385,6 +388,8 @@ class App {
       this.styleSel.replaceChildren(...styles.map(([value, textContent]) => h('option', { value, textContent })));
       this.style = styles[0]?.[0] ?? 'block';
       this.pictureBox.hidden = !this.doc.pages.length;
+      this.partialNote.textContent = this.doc.downloadNote ?? '';
+      this.partialNote.hidden = !this.doc.downloadNote;
       this.notes.replaceChildren(...this.doc.notes.map((n) => h('li', {}, n)));
       this.renderMetadata(this.doc.metadata);
       if (this.doc.render) await this.layOut(this.doc);
@@ -421,6 +426,7 @@ class App {
     this.consent = 'ask';
     this.consentBox.hidden = true;
     this.checkRow.hidden = true;
+    this.partialNote.hidden = true;
     this.setFreeCheck(undefined);
     this.overrides.clear();
     this.editors = [];

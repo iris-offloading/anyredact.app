@@ -1,6 +1,6 @@
 import * as pdfjs from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
 import { ocrUnit, pad } from './ocr.ts';
 
 declare const __PDF_WORKER_SRC__: string;
@@ -119,6 +119,7 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
   ];
   const count = Math.min(doc.numPages, MAX_PAGES);
   if (doc.numPages > MAX_PAGES) notes.push(`Only the first ${MAX_PAGES} of ${doc.numPages} pages were loaded.`);
+  const partial = partialPages(doc.numPages);
 
   const pages: Page[] = [];
   const units: Unit[] = [];
@@ -164,6 +165,7 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
     units,
     pages,
     notes,
+    downloadNote: partial.note,
     async exportFile(findings, boxes, _style, say = progress) {
       // Only needed for the download, so it loads then.
       const { PDFDocument } = await import('pdf-lib');
@@ -178,7 +180,7 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
       out.setProducer('anyredact.app');
       out.setCreator('anyredact.app');
       const bytes = await out.save();
-      return { blob: new Blob([bytes], { type: 'application/pdf' }), filename: outputName(file.name, 'pdf') };
+      return { blob: new Blob([bytes], { type: 'application/pdf' }), filename: outputName(file.name, 'pdf', partial.suffix) };
     },
   };
 }

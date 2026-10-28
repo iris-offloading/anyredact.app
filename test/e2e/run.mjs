@@ -35,8 +35,8 @@ const check = (cond, msg) => {
 const AI_VALUES = [
   ['Jane Doe', 'name'], ['Maria Gonzalez', 'name'], ['jane@example.com', 'email'], ['jane.doe@example.com', 'email'], ['bob@corp.io', 'email'],
   ['+1 (415) 555-0132', 'phone'], ['415-555- 0132', 'phone'], ['415-555- 0199', 'phone'], ['0800 123 4567', 'phone', 'organization'],
-  ['415-555-0177', 'phone'], ['4155550132', 'phone'],
-  ['10.0.0.12', 'other'], ['123-45-6789', 'ssn'], ['4111 1111 1111 1111', 'card'],
+  ['415-555-0177', 'phone'], ['4155550132', 'phone'], ['15/03/1985', 'date'],
+  ['10.0.0.12', 'ip'], ['123-45-6789', 'ssn'], ['4111 1111 1111 1111', 'card'],
 ];
 async function fakeDetect(route) {
   const { text } = JSON.parse(route.request().postData() || '{}');
@@ -245,7 +245,7 @@ async function download(name) {
 // Spreadsheets
 {
   const found = await run('redact-excel', fx('sample.xlsx'));
-  check(['jane.doe@example.com', 'bob@corp.io', '415-555-0199', '415-555-0177', '4155550132', '123-45-6789'].every((f) => found.includes(f)), `xlsx findings: ${found.join(', ')}`);
+  check(['jane.doe@example.com', 'bob@corp.io', '415-555-0199', '415-555-0177', '4155550132', '123-45-6789', '15/03/1985'].every((f) => found.includes(f)), `xlsx findings: ${found.join(', ')}`);
   const notes = await page.textContent('.notes');
   check(notes.includes('Includes hidden sheets: Old'), `xlsx hidden sheet flagged: ${notes}`);
   // The grid: one tab per sheet, hidden ones included, and a click on a highlight keeps it.
@@ -280,6 +280,7 @@ async function download(name) {
   check(s.getCell('A2').value === 'Customer' && s.getCell('D3').value === 'Helpline: 0800 123 4567', 'xlsx untouched cells kept');
   check(/^█+$/.test(s.getCell('B2').value) && /^█+$/.test(s.getCell('C2').value) && !s.getCell('D2').formula, `xlsx cells redacted: ${s.getCell('B2').value} ${s.getCell('C2').value}`);
   check(book.getWorksheet('Old').state === 'hidden', 'xlsx hidden sheet stays hidden');
+  check(/^[█/]+$/.test(s.getCell('B4').value) && !xml.includes('31121'), `xlsx date of birth found as shown and redacted: ${s.getCell('B4').value}`);
 }
 if (existsSync(fx('sample.ods'))) {
   const found = await run('redact-excel', fx('sample.ods'));
