@@ -115,7 +115,7 @@ test('spends the monthly plan before one-off credits and never overspends', asyn
 
 test('signed-in users fall back to paid pages after the free allowance', async () => {
   const db = d1();
-  const e = { ...env(db), FREE_CHARS_PER_DAY: '10' } as Env;
+  const e = env(db);
   // Quota objects: always exhausted.
   e.QUOTA = {
     idFromName: (n: string) => n,

@@ -25,7 +25,6 @@
   "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Quota"] }],
   "vars": {
-    "FREE_CHARS_PER_DAY": "30000",
     "EMAIL_FROM": "sign-in@anyredact.app",
     // Audio transcription (src/worker/transcribe.ts), with the AZURE_SPEECH_KEY secret.
     "AZURE_SPEECH_URL": "https://owo-resource.cognitiveservices.azure.com",
@@ -48,7 +47,7 @@
   "previews": {
     "ai": { "binding": "AI" },
     // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
-    "vars": { "MODEL_TRIALS": "1", "FREE_CHARS_PER_DAY": "30000", "EMAIL_FROM": "sign-in@anyredact.app", "AZURE_SPEECH_URL": "https://owo-resource.cognitiveservices.azure.com" },
+    "vars": { "MODEL_TRIALS": "1", "EMAIL_FROM": "sign-in@anyredact.app", "AZURE_SPEECH_URL": "https://owo-resource.cognitiveservices.azure.com" },
     "send_email": [{ "name": "EMAIL" }],
     "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "626376f3-fefb-4d4c-9b95-c5259f897889" }],
     "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },

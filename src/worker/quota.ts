@@ -9,11 +9,10 @@ import { clientNetwork } from './http.ts';
 
 export interface QuotaEnv {
   QUOTA?: DurableObjectNamespace;
-  FREE_CHARS_PER_DAY?: string;
 }
 
-// 10 credits: 10 pages of dense text, or 3 minutes of audio.
-export const DEFAULT_FREE_CHARS = FREE_CREDITS * CREDIT_CHARS;
+// Counted in characters, so a short scan costs less than a whole credit of the day's 10.
+export const FREE_CHARS = FREE_CREDITS * CREDIT_CHARS;
 export const IP_MULTIPLIER = 5;
 // An unused free-check pass is dropped after this, so a scan's Durable Object doesn't keep storage forever.
 const PASS_MS = 7 * 86_400_000;
@@ -71,13 +70,8 @@ export class Quota {
   }
 }
 
-export function freeLimit(env: QuotaEnv): number {
-  const n = Number(env.FREE_CHARS_PER_DAY);
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_FREE_CHARS;
-}
-
-function identities(request: Request, env: QuotaEnv): { key: string; limit: number }[] {
-  const limit = freeLimit(env);
+function identities(request: Request): { key: string; limit: number }[] {
+  const limit = FREE_CHARS;
   const out = [{ key: `ip:${clientNetwork(request)}`, limit: limit * IP_MULTIPLIER }];
   const device = request.headers.get('x-device-id');
   if (device && /^[\w-]{8,64}$/.test(device)) out.unshift({ key: `device:${device}`, limit });
@@ -102,7 +96,7 @@ export async function chargeQuota(
 ): Promise<{ exceeded: boolean; state?: QuotaState; refund: () => Promise<void> }> {
   const none = async () => {};
   if (!env.QUOTA) return { exceeded: false, refund: none };
-  const ids = identities(request, env);
+  const ids = identities(request);
   // Check every allowance first so a refused request doesn't use up any of them.
   const checks = await Promise.all(ids.map((id) => call(env, id.key, { dryRun: true, amount, limit: id.limit })));
   const blocked = checks.find((c) => !c.ok);
@@ -117,7 +111,7 @@ export async function chargeQuota(
 
 export async function quotaStatus(request: Request, env: QuotaEnv): Promise<QuotaState | null> {
   if (!env.QUOTA) return null;
-  const [id] = identities(request, env);
+  const [id] = identities(request);
   const r = await call(env, id.key, { dryRun: true, limit: id.limit });
   return { used: r.used, limit: r.limit };
 }

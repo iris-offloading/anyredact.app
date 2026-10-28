@@ -140,28 +140,28 @@ async function quotaNamespace() {
 }
 
 test('free allowance is enforced per browser, with a larger shared IP allowance', async () => {
-  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '30' };
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
   const req = (device: string, text: string) =>
     new Request('https://anyredact.app/api/detect', {
       method: 'POST',
       body: JSON.stringify({ text }),
       headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9' },
     });
-  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e);
-  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 20, limit: 30 });
-  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e)).status, 402);
+  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(20_000)), e);
+  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 20_000, limit: 30_000 });
+  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(20_000)), e)).status, 402);
   // Another browser on the same IP still has its own allowance...
-  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(25)), e)).status, 200);
+  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(25_000)), e)).status, 200);
   // ...until the IP allowance (5x) runs out.
-  // IP used: 20 + 25 + 4 x 25 = 145 of 150, so 10 more characters don't fit.
-  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(25)), e);
-  const res = await worker.fetch(req('device-gggg', 'x'.repeat(10)), e);
+  // IP used: 20,000 + 25,000 + 4 x 25,000 = 145,000 of 150,000, so 10,000 more characters don't fit.
+  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(25_000)), e);
+  const res = await worker.fetch(req('device-gggg', 'x'.repeat(10_000)), e);
   assert.equal(res.status, 402);
   assert.equal(((await res.json()) as { code: string }).code, 'quota');
 });
 
 test('each scan comes with one free final check, later ones use the allowance', async () => {
-  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '5000' };
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
   const post = (path: string, body: object) =>
     worker.fetch(
       new Request(`https://anyredact.app${path}`, {
@@ -177,11 +177,11 @@ test('each scan comes with one free final check, later ones use the allowance', 
   const second = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean; quota: { used: number } };
   // 4 characters for the scan, then 3,000 for the paid check.
   assert.deepEqual([second.free, second.quota.used], [false, 3004]);
-  assert.equal(((await (await post('/api/check', { text: 'Jane Doe', checkToken: crypto.randomUUID() })).json()) as { free?: boolean }).free, undefined);
+  assert.equal(((await (await post('/api/check', { text: 'Jane Doe', checkToken: crypto.randomUUID() })).json()) as { free: boolean }).free, false);
 });
 
 test('a failed model call gives the charge back', async () => {
-  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '5000' };
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
   const req = (text: string) =>
     new Request('https://anyredact.app/api/detect', {
       method: 'POST',
@@ -199,7 +199,7 @@ test('a failed model call gives the charge back', async () => {
 });
 
 test('a free final check covers about the size of its scan', async () => {
-  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '100000' };
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
   const post = (path: string, body: object) =>
     worker.fetch(
       new Request(`https://anyredact.app${path}`, {
