@@ -1,4 +1,4 @@
-// Compares Workers AI speech-to-text models for audio redaction, against a preview deployment.
+// Compares speech-to-text models for audio redaction, against a preview deployment.
 //
 //   node scripts/bench-dataset.mjs fetch <dir>
 //   node --experimental-strip-types scripts/bench-audio.mjs speak <preview-url> <dir>/ai4privacy.json <dir> [recordings per language]
@@ -11,6 +11,13 @@
 // and mutes what the app would mute (AI findings and their other mentions, default "Look for" types,
 // ticked findings only). A value counts as muted when 90% of its speech is.
 // Results and transcripts go to <dir>/<model>.transcripts.json for a closer look.
+//
+// Models named azure/<model> (azure/MAI-Transcribe-2) go straight to the Azure
+// Speech resource in AZURE_SPEECH_URL with AZURE_SPEECH_KEY, a recording per
+// request; options go into the request's definition, e.g.
+// azure/MAI-Transcribe-2{"byLang":{"es":{"locales":["es"]}}}.
+// Previews sit behind Cloudflare Access: a local `wrangler dev` with
+// MODEL_TRIALS=1 and a TRIAL_KEY var serves /api/trial and /api/detect too.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import wavefile from 'wavefile';
@@ -23,7 +30,8 @@ const SENTENCES_PER_RECORDING = 8;
 const VOICES = { en: ['luna', 'orion', 'athena', 'zeus', 'thalia', 'apollo'], es: ['aquila', 'carina', 'nestor', 'diana'] };
 const TTS = { en: '@cf/deepgram/aura-2-en', es: '@cf/deepgram/aura-2-es' };
 // USD per audio minute, from the Workers AI model pages.
-const PRICES = { '@cf/deepgram/nova-3': 0.0052, '@cf/openai/whisper-large-v3-turbo': 0.000513, '@cf/openai/whisper': 0.000453 };
+// MAI-Transcribe-2 in US East 2: $0.54/h list, $0.10/h until 2026-12-31.
+const PRICES = { '@cf/deepgram/nova-3': 0.0052, '@cf/openai/whisper-large-v3-turbo': 0.000513, '@cf/openai/whisper': 0.000453, 'azure/MAI-Transcribe-2': 0.009 };
 // Same core labels as scripts/bench-dataset.mjs.
 const CORE = new Set('GIVENNAME SURNAME TELEPHONENUM EMAIL STREET BUILDINGNUM ZIPCODE IDCARDNUM PASSPORTNUM TAXNUM DRIVERLICENSENUM SOCIALNUM CREDITCARDNUMBER'.split(' '));
 const APP_TYPES = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'date', 'card', 'iban', 'ip', 'other'];
@@ -116,10 +124,14 @@ async function speak(base, file, dir, perLang) {
     const pieces = [];
     for (let i = 0; i < rec.parts.length; i += 40) {
       const batch = rec.parts.slice(i, i + 40);
-      const body = await post(base, '/api/trial', {
-        model: TTS[rec.lang],
-        inputs: batch.map((p) => ({ text: p.text, speaker: voice, encoding: 'linear16', container: 'none', sample_rate: RATE })),
-      });
+      const ask = () =>
+        post(base, '/api/trial', {
+          model: TTS[rec.lang],
+          inputs: batch.map((p) => ({ text: p.text, speaker: voice, encoding: 'linear16', container: 'none', sample_rate: RATE })),
+        });
+      // A lost connection fails a single clip: ask again for the whole batch.
+      let body = await ask();
+      for (let t = 0; t < 3 && body.results.some((r) => r.error); t++) body = await ask();
       body.results.forEach((r, j) => {
         if (r.error) throw new Error(`speech failed for ${JSON.stringify(batch[j].text)}: ${r.error}`);
         const buf = Buffer.from(r.result.audio, 'base64');
@@ -151,6 +163,30 @@ async function speak(base, file, dir, perLang) {
   writeFileSync(path.join(dir, 'cases.json'), JSON.stringify(cases, null, 1));
 }
 
+// One recording through Azure Speech fast transcription, with word times.
+async function azure(model, wav, options) {
+  const base = process.env.AZURE_SPEECH_URL;
+  if (!base) throw new Error('set AZURE_SPEECH_URL, e.g. https://<resource>.cognitiveservices.azure.com');
+  const form = new FormData();
+  form.append('audio', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
+  form.append('definition', JSON.stringify({ ...options, enhancedMode: { enabled: true, model, modelOptions: { timestamps: 'word' } } }));
+  for (let t = 0; t < 6; t++) {
+    const started = Date.now();
+    const res = await fetch(new URL('/speechtotext/transcriptions:transcribe?api-version=2025-10-15', base), {
+      method: 'POST',
+      headers: { 'Ocp-Apim-Subscription-Key': process.env.AZURE_SPEECH_KEY ?? '' },
+      body: form,
+    }).catch((err) => ({ status: 0, err }));
+    if (res.status === 200) return { result: await res.json(), ms: Date.now() - started };
+    console.error(`azure: ${res.status} ${res.err ?? (await res.text()).slice(0, 200)}`);
+    await sleep(res.status === 429 ? 20_000 : 5_000 * 2 ** t);
+  }
+  return { error: 'azure kept failing' };
+}
+
+const wordsFromAzure = (result) =>
+  (result?.phrases ?? []).flatMap((p) => p.words ?? []).map((w) => ({ text: w.text, start: w.offsetMilliseconds / 1000, end: (w.offsetMilliseconds + w.durationMilliseconds) / 1000 }));
+
 function chunksOf(pcm, chunkSec) {
   if (!chunkSec || pcm.length <= chunkSec * RATE) return [{ start: 0, end: pcm.length / RATE, pcm }];
   const out = [];
@@ -178,6 +214,7 @@ async function run(base, dir, spec, chunkSec) {
   const model = brace < 0 ? spec : spec.slice(0, brace);
   const options = brace < 0 ? {} : JSON.parse(spec.slice(brace));
   const deepgram = model.includes('deepgram');
+  const onAzure = model.startsWith('azure/');
   // `byLang` holds options for one language only, e.g. {"byLang":{"es":{"language":"es"}}}.
   // `shift` moves every word by that many seconds (bench only), to test a fixed timing offset.
   const { byLang, shift = 0, ...rest } = options;
@@ -203,14 +240,26 @@ async function run(base, dir, spec, chunkSec) {
         return { ...rest, ...byLang?.[group[j].lang], audio: deepgram ? { base64: b64, contentType: 'audio/wav' } : b64 };
       }),
     );
-    const body = await post(base, '/api/trial', { model, inputs });
+    const body = onAzure
+      ? {
+          results: await Promise.all(
+            batch.flatMap((chunks, j) =>
+              chunks.map((ch) => {
+                const w = new WaveFile();
+                w.fromScratch(1, RATE, '16', ch.pcm);
+                return azure(model.slice('azure/'.length), w.toBuffer(), { ...rest, ...byLang?.[group[j].lang] });
+              }),
+            ),
+          ),
+        }
+      : await post(base, '/api/trial', { model, inputs });
     let k = 0;
     for (const chunks of batch) {
       const parts = chunks.map((ch) => {
         const r = body.results[k++];
         if (r.error) console.error(`transcription error: ${r.error}`);
         asrMs += r.ms ?? 0;
-        return { start: ch.start + shift, end: ch.end + shift, words: r.error ? [] : deepgram ? t.wordsFromDeepgram(r.result) : t.wordsFromWhisper(r.result) };
+        return { start: ch.start + shift, end: ch.end + shift, words: r.error ? [] : onAzure ? wordsFromAzure(r.result) : deepgram ? t.wordsFromDeepgram(r.result) : t.wordsFromWhisper(r.result) };
       });
       transcripts.push(t.buildTranscript(t.mergeChunks(parts)));
     }
@@ -218,10 +267,20 @@ async function run(base, dir, spec, chunkSec) {
   }
 
   // Detect, the way bench-dataset.mjs does, with the preview's default model.
+  // A transcript whose detection failed would score as nothing found, so it is asked again.
   const found = [];
   for (let i = 0; i < transcripts.length; i += 10) {
-    const body = await post(base, '/api/detect', { texts: transcripts.slice(i, i + 10).map((x) => x.text || ' ') });
-    found.push(...body.results);
+    const texts = transcripts.slice(i, i + 10).map((x) => x.text || ' ');
+    const results = (await post(base, '/api/detect', { texts })).results;
+    for (let t = 0; t < 5 && results.some((r) => r.error); t++) {
+      const failed = results.flatMap((r, j) => (r.error ? [j] : []));
+      console.error(`detection failed for ${failed.length} transcripts: ${results[failed[0]].error}`);
+      await sleep(10_000 * 2 ** t);
+      const again = (await post(base, '/api/detect', { texts: failed.map((j) => texts[j]) })).results;
+      failed.forEach((j, k) => (results[j] = again[k]));
+    }
+    if (results.some((r) => r.error)) throw new Error('detection kept failing');
+    found.push(...results);
   }
 
   const blank = () => ({ total: 0, heard: 0, muted: 0, partial: 0 });
@@ -229,6 +288,7 @@ async function run(base, dir, spec, chunkSec) {
   const byLanguage = { en: blank(), es: blank() };
   const misses = [];
   const saved = [];
+  const timing = [];
   let extraSec = 0;
   let mutedSec = 0;
   let totalSec = 0;
@@ -238,7 +298,17 @@ async function run(base, dir, spec, chunkSec) {
     const mutes = t.padRanges(spans.map((s) => t.timeRangeFor(tr, s.start, s.end)).filter(Boolean), PAD, c.duration);
     const heardText = norm(tr.text);
     saved.push({ file: c.file, transcript: tr.text, muted: spans.map((s) => `${s.type}: ${tr.text.slice(s.start, s.end)}`) });
+    const lower = tr.text.toLowerCase();
+    let cursor = 0;
     for (const g of c.gold) {
+      // Word timing: where the transcript puts a value it wrote out as spoken, against where it was spoken.
+      // Values come in order, so each search starts after the last match; more than 3 s off is another mention.
+      const at = lower.indexOf(g.text.toLowerCase(), cursor);
+      const range = at < 0 ? null : t.timeRangeFor(tr, at, at + g.text.length);
+      if (range && Math.abs(range[0] - g.start) < 3) {
+        timing.push([range[0] - g.start, range[1] - g.end]);
+        cursor = at + g.text.length;
+      }
       const core = CORE.has(g.label) || c.kind === 'call';
       const share = covered(g, mutes);
       for (const s of [(stats[core ? g.label : `(optional) ${g.label}`] ??= blank()), ...(core ? [byLanguage[c.lang]] : [])]) {
@@ -261,6 +331,8 @@ async function run(base, dir, spec, chunkSec) {
   const sum = (pred) => Object.entries(stats).filter(([l]) => pred(l)).reduce((a, [, s]) => ({ total: a.total + s.total, heard: a.heard + s.heard, muted: a.muted + s.muted, partial: a.partial + s.partial }), blank());
   const pct = (n, d) => (d ? `${((100 * n) / d).toFixed(1)}%` : '-');
   const report = (s) => ({ values: s.total, muted: pct(s.muted, s.total), partlyMuted: pct(s.partial, s.total), heardVerbatim: pct(s.heard, s.total) });
+  const median = (xs) => +[...xs].sort((a, b) => a - b)[xs.length >> 1]?.toFixed(2);
+  const within = (k, sec) => pct(timing.filter((d) => Math.abs(d[k]) <= sec).length, timing.length);
   return {
     model,
     options,
@@ -271,6 +343,14 @@ async function run(base, dir, spec, chunkSec) {
     transcribeSecondsPerAudioMinute: +(asrMs / 1000 / minutes).toFixed(2),
     core: report(sum((l) => !l.startsWith('('))),
     byLanguage: { en: report(byLanguage.en), es: report(byLanguage.es) },
+    // Seconds the transcript's word times run late (negative: early), over values it wrote out verbatim.
+    wordTiming: {
+      values: timing.length,
+      medianStartLate: median(timing.map((d) => d[0])),
+      medianEndLate: median(timing.map((d) => d[1])),
+      startWithinPad: within(0, PAD),
+      endWithinPad: within(1, PAD),
+    },
     mutedOutsideValues: `${pct(extraSec, totalSec)} of the audio (${pct(mutedSec, totalSec)} muted in all)`,
     perLabel: Object.fromEntries(Object.entries(stats).sort((a, b) => b[1].total - a[1].total).map(([l, s]) => [l, `${s.muted}/${s.total} muted, ${s.heard} heard`])),
     misses,
