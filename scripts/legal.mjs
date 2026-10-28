@@ -136,7 +136,7 @@ export const LEGAL = [
 <p>Email <a href="mailto:support@anyredact.app?subject=Refund">support@anyredact.app</a> from the address on your account and say which payment it is about. Refunds go back to the card you paid with through Stripe and usually arrive within 5 to 10 business days.</p>
 
 <h2>Chargebacks</h2>
-<p>If you dispute a payment with your bank, the credits it bought are removed while the dispute is open. Write to us first and we will try to sort it out.</p>`,
+<p>If you dispute a payment with your bank, the credits it bought are removed while the dispute is open, and a disputed plan payment also ends the plan. Write to us first and we will try to sort it out.</p>`,
   },
   {
     slug: 'contact',
