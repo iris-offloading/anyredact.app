@@ -187,9 +187,9 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
       if (owner) await logActivity(db, owner.id, event.id, 'plan', owner.plan_credits, obj.amount_paid ?? null);
     }
   } else if (event.type === 'charge.refunded' && obj.amount > 0) {
-    await takeBack(db, event.id, 'refund', obj.payment_intent, async () => obj.customer ?? null, obj.amount_refunded / obj.amount);
+    await takeBack(env, event.id, 'refund', obj.payment_intent, async () => obj.customer ?? null, obj.amount_refunded / obj.amount);
   } else if (event.type === 'charge.dispute.created') {
-    await takeBack(db, event.id, 'dispute', obj.payment_intent, () => chargeCustomer(env, obj.charge), 1);
+    await takeBack(env, event.id, 'dispute', obj.payment_intent, () => chargeCustomer(env, obj.charge), 1);
   } else if (event.type === 'customer.subscription.deleted') {
     await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE plan_subscription = ?').bind(obj.id).run();
   }
@@ -198,16 +198,18 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
 /**
  * Takes back the credits a refunded or disputed payment bought, in proportion to
  * the amount returned. One-off credits come off the balance even when already
- * spent, which can leave it negative. A plan payment ends this period's credits.
+ * spent, which can leave it negative. A plan payment ends this period's credits,
+ * and a full refund of one also cancels the plan so it doesn't renew.
  */
 async function takeBack(
-  db: D1Database,
+  env: BillingEnv,
   eventId: string,
   kind: ActivityKind,
   paymentIntent: string | null,
   customer: () => Promise<string | null>,
   share: number,
 ): Promise<void> {
+  const db = env.DB!;
   const purchase = paymentIntent
     ? await db.prepare('SELECT user_id, credits, taken FROM purchases WHERE payment_intent = ?').bind(paymentIntent).first<{ user_id: string; credits: number; taken: number }>()
     : null;
@@ -226,9 +228,22 @@ async function takeBack(
   }
   const owner = await customer();
   if (!owner) return;
-  const user = await db.prepare('SELECT id, plan_credits - plan_used AS left FROM users WHERE stripe_customer = ? AND plan_subscription IS NOT NULL').bind(owner).first<{ id: string; left: number }>();
+  const user = await db
+    .prepare('SELECT id, plan_subscription, plan_credits - plan_used AS left FROM users WHERE stripe_customer = ? AND plan_subscription IS NOT NULL')
+    .bind(owner)
+    .first<{ id: string; plan_subscription: string; left: number }>();
   if (!user) return;
-  await db.prepare('UPDATE users SET plan_used = plan_credits WHERE id = ?').bind(user.id).run();
+  if (kind === 'refund' && share >= 1) {
+    try {
+      await stripe(env, `subscriptions/${encodeURIComponent(user.plan_subscription)}`, {}, { method: 'DELETE', idempotencyKey: `refund-cancel-${eventId}` });
+    } catch (err) {
+      // Cancelled already, in the dashboard or by an earlier try.
+      if (!/canceled|cancelled|No such subscription/i.test((err as Error).message)) throw err;
+    }
+    await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE id = ?').bind(user.id).run();
+  } else {
+    await db.prepare('UPDATE users SET plan_used = plan_credits WHERE id = ?').bind(user.id).run();
+  }
   await logActivity(db, user.id, eventId, kind, -Math.max(0, user.left));
 }
 

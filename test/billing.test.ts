@@ -476,3 +476,31 @@ test('a failed scan takes its credits off the activity again', async () => {
   assert.equal(res.status, 502);
   assert.equal(((await db.prepare('SELECT credits FROM activity WHERE user_id = ?').bind(userId).first()) as { credits: number }).credits, 0);
 });
+
+test('a full refund of a plan payment cancels the plan, a partial one keeps it', async () => {
+  const db = d1();
+  const e = env(db);
+  const send = webhook(e);
+  const userId = await upsertUser(e, 'jane@example.com');
+  const start = () => db.prepare("UPDATE users SET stripe_customer = 'cus_1', plan_subscription = 'sub_1', plan_credits = 600, plan_used = 10, plan_period_end = 4102444800 WHERE id = ?").bind(userId).run();
+  const plan = async () => ({ ...((await db.prepare('SELECT plan_subscription, plan_credits, plan_used FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>) });
+  await start();
+  const partial = await withStripe(
+    () => ({}),
+    async () => {
+      await send({ id: 'evt_p', type: 'charge.refunded', data: { object: { payment_intent: 'pi_p', customer: 'cus_1', amount: 900, amount_refunded: 400 } } });
+    },
+  );
+  assert.equal(partial.length, 0);
+  assert.deepEqual(await plan(), { plan_subscription: 'sub_1', plan_credits: 600, plan_used: 600 });
+  await start();
+  const full = await withStripe(
+    () => ({ id: 'sub_1', status: 'canceled' }),
+    async () => {
+      await send({ id: 'evt_f', type: 'charge.refunded', data: { object: { payment_intent: 'pi_f', customer: 'cus_1', amount: 900, amount_refunded: 900 } } });
+    },
+  );
+  assert.deepEqual(full.map((c) => `${c.method} ${new URL(c.url).pathname}`), ['DELETE /v1/subscriptions/sub_1']);
+  assert.ok(full[0].key);
+  assert.deepEqual(await plan(), { plan_subscription: null, plan_credits: 0, plan_used: 0 });
+});
