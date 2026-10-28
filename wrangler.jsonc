@@ -25,7 +25,6 @@
   "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Quota"] }],
   "vars": {
-    "FREE_CHARS_PER_DAY": "30000",
     "EMAIL_FROM": "sign-in@anyredact.app",
     // Not set for previews: Google only accepts the redirect URIs listed on the OAuth client.
     "GOOGLE_CLIENT_ID": "879116354493-2dl85a7u6n5tkucbk36a5cbo07hsgnpb.apps.googleusercontent.com"
@@ -46,7 +45,7 @@
   "previews": {
     "ai": { "binding": "AI" },
     // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
-    "vars": { "MODEL_TRIALS": "1", "FREE_CHARS_PER_DAY": "30000", "EMAIL_FROM": "sign-in@anyredact.app" },
+    "vars": { "MODEL_TRIALS": "1", "EMAIL_FROM": "sign-in@anyredact.app" },
     "send_email": [{ "name": "EMAIL" }],
     "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "626376f3-fefb-4d4c-9b95-c5259f897889" }],
     "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
