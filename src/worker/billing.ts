@@ -42,10 +42,29 @@ export async function stripe<T>(
   return data;
 }
 
-/** The customer a charge belongs to, for a dispute, which doesn't name one. */
-async function chargeCustomer(env: BillingEnv, charge: unknown): Promise<string | null> {
+type Charge = { customer?: string | null; invoice?: string | null; payment_intent?: string | null };
+
+/** The charge a dispute is about, which names its customer. */
+async function disputedCharge(env: BillingEnv, charge: unknown): Promise<Charge | null> {
   if (typeof charge !== 'string') return null;
-  return (await stripe<{ customer?: string | null }>(env, `charges/${encodeURIComponent(charge)}`, {}, { method: 'GET' })).customer ?? null;
+  return stripe<Charge>(env, `charges/${encodeURIComponent(charge)}`, {}, { method: 'GET' });
+}
+
+/** The subscription a charge paid for, if it paid a subscription invoice. */
+async function chargeSubscription(env: BillingEnv, charge: Charge): Promise<string | null> {
+  // Older API versions name the invoice on the charge, newer ones list it under invoice payments.
+  let invoice = typeof charge.invoice === 'string' ? charge.invoice : null;
+  if (!invoice && typeof charge.payment_intent === 'string') {
+    const payments = await stripe<{ data?: { invoice?: string | null }[] }>(
+      env,
+      'invoice_payments',
+      { payment: { type: 'payment_intent', payment_intent: charge.payment_intent }, limit: 1 },
+      { method: 'GET' },
+    );
+    invoice = payments.data?.[0]?.invoice ?? null;
+  }
+  if (!invoice) return null;
+  return invoiceSubscription(await stripe<Record<string, any>>(env, `invoices/${encodeURIComponent(invoice)}`, {}, { method: 'GET' })) ?? null;
 }
 
 /**
@@ -187,9 +206,9 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
       if (owner) await logActivity(db, owner.id, event.id, 'plan', owner.plan_credits, obj.amount_paid ?? null);
     }
   } else if (event.type === 'charge.refunded' && obj.amount > 0) {
-    await takeBack(env, event.id, 'refund', obj.payment_intent, async () => obj.customer ?? null, obj.amount_refunded / obj.amount);
+    await takeBack(env, event.id, 'refund', obj.payment_intent, async () => obj, obj.amount_refunded / obj.amount);
   } else if (event.type === 'charge.dispute.created') {
-    await takeBack(env, event.id, 'dispute', obj.payment_intent, () => chargeCustomer(env, obj.charge), 1);
+    await takeBack(env, event.id, 'dispute', obj.payment_intent, () => disputedCharge(env, obj.charge), 1);
   } else if (event.type === 'customer.subscription.deleted') {
     await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE plan_subscription = ?').bind(obj.id).run();
   }
@@ -206,7 +225,7 @@ async function takeBack(
   eventId: string,
   kind: ActivityKind,
   paymentIntent: string | null,
-  customer: () => Promise<string | null>,
+  charge: () => Promise<Charge | null>,
   share: number,
 ): Promise<void> {
   const db = env.DB!;
@@ -226,13 +245,15 @@ async function takeBack(
     await logActivity(db, purchase.user_id, eventId, kind, -due);
     return;
   }
-  const owner = await customer();
-  if (!owner) return;
+  const paid = await charge();
+  if (!paid?.customer) return;
   const user = await db
     .prepare('SELECT id, plan_subscription, plan_credits - plan_used AS left FROM users WHERE stripe_customer = ? AND plan_subscription IS NOT NULL')
-    .bind(owner)
+    .bind(paid.customer)
     .first<{ id: string; plan_subscription: string; left: number }>();
   if (!user) return;
+  // Only a payment for the account's current plan touches it, not an older plan's or a charge with no purchase row.
+  if ((await chargeSubscription(env, paid)) !== user.plan_subscription) return;
   if (kind === 'refund' && share >= 1) {
     try {
       await stripe(env, `subscriptions/${encodeURIComponent(user.plan_subscription)}`, {}, { method: 'DELETE', idempotencyKey: `refund-cancel-${eventId}` });
@@ -240,9 +261,12 @@ async function takeBack(
       // Cancelled already, in the dashboard or by an earlier try.
       if (!/canceled|cancelled|No such subscription/i.test((err as Error).message)) throw err;
     }
-    await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE id = ?').bind(user.id).run();
+    await db
+      .prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE id = ? AND plan_subscription = ?')
+      .bind(user.id, user.plan_subscription)
+      .run();
   } else {
-    await db.prepare('UPDATE users SET plan_used = plan_credits WHERE id = ?').bind(user.id).run();
+    await db.prepare('UPDATE users SET plan_used = plan_credits WHERE id = ? AND plan_subscription = ?').bind(user.id, user.plan_subscription).run();
   }
   await logActivity(db, user.id, eventId, kind, -Math.max(0, user.left));
 }

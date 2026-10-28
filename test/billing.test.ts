@@ -290,8 +290,9 @@ test('a dispute on a plan payment ends the period\'s credits', async () => {
   await db.prepare("UPDATE users SET stripe_customer = 'cus_9', plan_subscription = 'sub_9', plan_credits = 600, plan_used = 10, plan_period_end = 4102444800 WHERE id = ?").bind(userId).run();
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (String(input).includes('/v1/invoices/in_9')) return Response.json({ id: 'in_9', subscription: 'sub_9' });
     assert.match(String(input), /\/v1\/charges\/ch_9$/);
-    return Response.json({ id: 'ch_9', customer: 'cus_9' });
+    return Response.json({ id: 'ch_9', customer: 'cus_9', invoice: 'in_9' });
   }) as typeof fetch;
   try {
     assert.equal((await webhook(e)({ id: 'evt_d', type: 'charge.dispute.created', data: { object: { charge: 'ch_9', payment_intent: 'pi_plan', amount: 900 } } })).status, 200);
@@ -484,23 +485,38 @@ test('a full refund of a plan payment cancels the plan, a partial one keeps it',
   const userId = await upsertUser(e, 'jane@example.com');
   const start = () => db.prepare("UPDATE users SET stripe_customer = 'cus_1', plan_subscription = 'sub_1', plan_credits = 600, plan_used = 10, plan_period_end = 4102444800 WHERE id = ?").bind(userId).run();
   const plan = async () => ({ ...((await db.prepare('SELECT plan_subscription, plan_credits, plan_used FROM users WHERE id = ?').bind(userId).first()) as Record<string, unknown>) });
+  // Newer API versions: the charge's invoice is found through its payment intent.
+  const answer = (method: string, url: string) => {
+    if (url.includes('/invoice_payments')) return { data: [{ invoice: new URL(url).searchParams.get('payment[payment_intent]') === 'pi_old' ? 'in_old' : 'in_1' }] };
+    if (url.includes('/invoices/in_old')) return { id: 'in_old', parent: { subscription_details: { subscription: 'sub_old' } } };
+    if (url.includes('/invoices/')) return { id: 'in_1', parent: { subscription_details: { subscription: 'sub_1' } } };
+    return { id: 'sub_1', status: 'canceled' };
+  };
+  const refund = (id: string, pi: string, refunded: number) =>
+    send({ id, type: 'charge.refunded', data: { object: { payment_intent: pi, customer: 'cus_1', amount: 900, amount_refunded: refunded } } });
   await start();
-  const partial = await withStripe(
-    () => ({}),
-    async () => {
-      await send({ id: 'evt_p', type: 'charge.refunded', data: { object: { payment_intent: 'pi_p', customer: 'cus_1', amount: 900, amount_refunded: 400 } } });
-    },
-  );
-  assert.equal(partial.length, 0);
+  const partial = await withStripe(answer, async () => {
+    await refund('evt_p', 'pi_p', 400);
+  });
+  assert.deepEqual(partial.map((c) => `${c.method} ${new URL(c.url).pathname}`), ['GET /v1/invoice_payments', 'GET /v1/invoices/in_1']);
   assert.deepEqual(await plan(), { plan_subscription: 'sub_1', plan_credits: 600, plan_used: 600 });
+  // A refund of another subscription's payment, or of a charge with no invoice, leaves the plan alone.
   await start();
-  const full = await withStripe(
-    () => ({ id: 'sub_1', status: 'canceled' }),
+  await withStripe(answer, async () => {
+    await refund('evt_o', 'pi_old', 900);
+  });
+  await withStripe(
+    () => ({ data: [] }),
     async () => {
-      await send({ id: 'evt_f', type: 'charge.refunded', data: { object: { payment_intent: 'pi_f', customer: 'cus_1', amount: 900, amount_refunded: 900 } } });
+      await refund('evt_n', 'pi_none', 900);
     },
   );
-  assert.deepEqual(full.map((c) => `${c.method} ${new URL(c.url).pathname}`), ['DELETE /v1/subscriptions/sub_1']);
-  assert.ok(full[0].key);
+  assert.deepEqual(await plan(), { plan_subscription: 'sub_1', plan_credits: 600, plan_used: 10 });
+  // The rest of the partly refunded payment: refunded in full now.
+  const full = await withStripe(answer, async () => {
+    await refund('evt_f', 'pi_p', 900);
+  });
+  assert.deepEqual(full.map((c) => `${c.method} ${new URL(c.url).pathname}`), ['GET /v1/invoice_payments', 'GET /v1/invoices/in_1', 'DELETE /v1/subscriptions/sub_1']);
+  assert.ok(full[2].key);
   assert.deepEqual(await plan(), { plan_subscription: null, plan_credits: 0, plan_used: 0 });
 });
