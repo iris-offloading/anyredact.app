@@ -30,6 +30,11 @@ test('returns only entities that occur in the text', async () => {
   });
 });
 
+test('keeps IP addresses as their own type', async () => {
+  const res = await worker.fetch(post({ text: 'login from 10.0.0.12' }), env({ entities: [{ text: '10.0.0.12', type: 'ip' }] }));
+  assert.deepEqual(await res.json(), { entities: [{ text: '10.0.0.12', type: 'ip' }] });
+});
+
 test('parses string responses and unknown types', async () => {
   const res = await worker.fetch(post({ text: 'id AB-123' }), env('```json\n{"entities":[{"text":"AB-123","type":"weird"}]}\n```'));
   assert.deepEqual(await res.json(), { entities: [{ text: 'AB-123', type: 'other' }] });

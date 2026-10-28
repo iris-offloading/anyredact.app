@@ -36,7 +36,7 @@ const AI_VALUES = [
   ['Jane Doe', 'name'], ['Maria Gonzalez', 'name'], ['jane@example.com', 'email'], ['jane.doe@example.com', 'email'], ['bob@corp.io', 'email'],
   ['+1 (415) 555-0132', 'phone'], ['415-555- 0132', 'phone'], ['415-555- 0199', 'phone'], ['0800 123 4567', 'phone', 'organization'],
   ['415-555-0177', 'phone'], ['4155550132', 'phone'], ['15/03/1985', 'date'],
-  ['10.0.0.12', 'other'], ['123-45-6789', 'ssn'], ['4111 1111 1111 1111', 'card'],
+  ['10.0.0.12', 'ip'], ['123-45-6789', 'ssn'], ['4111 1111 1111 1111', 'card'],
 ];
 async function fakeDetect(route) {
   const { text } = JSON.parse(route.request().postData() || '{}');
