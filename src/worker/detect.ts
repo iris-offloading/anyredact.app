@@ -1,6 +1,6 @@
 import { chunkText, plausibleEntity } from '../shared/detect.ts';
 import { pool } from '../shared/pool.ts';
-import { MAX_CHARS, CREDIT_CHARS, creditsFor } from '../shared/pricing.ts';
+import { MAX_CHARS, creditsFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
 import { jobOf, logActivity, logFreeUse, type ActivityKind } from './activity.ts';
 import { refundCredits, spendCredits, type BillingEnv } from './billing.ts';
@@ -283,7 +283,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     );
     if (trial) return json({ entities, model, ms: Date.now() - started, usage, raw, quota: quota.state });
     // The scan comes with one free final check of about its size (src/worker/check.ts).
-    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env, text.length * 2 + CREDIT_CHARS) });
+    return json({ entities, quota: quota.state, checkToken: await grantFreeCheck(env, text.length * 2 + 500) });
   } catch (err) {
     console.error('detect failed', err);
     await quota.refund();

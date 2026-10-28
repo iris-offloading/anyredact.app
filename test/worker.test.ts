@@ -215,7 +215,8 @@ test('a free final check covers about the size of its scan', async () => {
       e,
     );
   const { checkToken } = (await (await post('/api/detect', { text: 'ab' })).json()) as { checkToken: string };
-  const big = (await (await post('/api/check', { text: 'Jane '.repeat(2000), checkToken })).json()) as { free: boolean };
+  // 'ab' covers a check of up to 504 characters.
+  const big = (await (await post('/api/check', { text: 'Jane '.repeat(200), checkToken })).json()) as { free: boolean };
   assert.equal(big.free, false);
 });
 
