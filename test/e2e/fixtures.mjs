@@ -158,6 +158,8 @@ sheet.getRow(1).font = { bold: true };
 sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
 sheet.addRow(['Customer', 'jane.doe@example.com', 4155550132, { formula: 'B2', result: 'jane.doe@example.com' }]);
 sheet.addRow(['Supplier', { text: 'bob@corp.io', hyperlink: 'mailto:bob@corp.io' }, '415-555-0199', 'Helpline: 0800 123 4567']);
+sheet.addRow(['Born', new Date(Date.UTC(1985, 2, 15))]);
+sheet.getCell('B4').numFmt = 'dd/mm/yyyy';
 sheet.getCell('C2').numFmt = '0';
 sheet.getCell('A2').note = 'Called back from 415-555-0177';
 sheet.headerFooter.oddFooter = 'Prepared by Dr. Maria Gonzalez';
