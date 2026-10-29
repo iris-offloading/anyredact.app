@@ -28,14 +28,19 @@ export async function handleOrient(request: Request, env: Env): Promise<Response
         model: 'clef-omni',
         images: [image],
         state: 'A scanned page or photo, which may be turned.',
-        questions: { turn: { type: 'choice', instructions: 'Which way does the text in the image run?', criteria: TURNS } },
+        questions: {
+          turn: { type: 'choice', instructions: 'Which way does the text in the image run?', criteria: TURNS },
+          upside_down: { type: 'noul', instructions: 'Is the text in the image upside down, so letters appear rotated 180 degrees?' },
+          sideways: { type: 'noul', instructions: 'Are the lines of text in the image vertical rather than horizontal?' },
+          clockwise: { type: 'noul', instructions: 'Would turning the image a quarter turn clockwise make its text read normally?' },
+        },
       } as never),
-    )) as { answers?: { turn?: { choice?: string; option?: string; answer?: string; probabilities?: Record<string, number> } } };
+    )) as { answers?: Record<string, unknown> & { turn?: { choice?: string; option?: string; answer?: string; probabilities?: Record<string, number> } } };
     const a = result?.answers?.turn;
     const probs = a?.probabilities ?? {};
     const pick = (a?.choice ?? a?.option ?? a?.answer ?? Object.entries(probs).sort((x, y) => y[1] - x[1])[0]?.[0]) as keyof typeof TURNS | undefined;
     const quarters = pick && pick in QUARTERS ? QUARTERS[pick] : 0;
-    return json({ quarters, p: probs[pick ?? ''] ?? null, ...(trialsAllowed(request, env) ? { raw: result } : {}), answer: a ?? null });
+    return json({ quarters, p: probs[pick ?? ''] ?? null, ...(trialsAllowed(request, env) ? { raw: result } : {}), answer: a ?? null, answers: result?.answers ?? null });
   } catch (err) {
     console.error('orient failed', err);
     return json({ error: 'Page turning is unavailable right now.' }, 502);
