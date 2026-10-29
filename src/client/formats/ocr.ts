@@ -3,14 +3,14 @@ import type { Progress, Rect, Unit } from '../types.ts';
 type TesseractWorker = Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>;
 let workerPromise: Promise<TesseractWorker> | null = null;
 let report: Progress = () => {};
-let probing = false;
+let checking = false;
 
 function getWorker(): Promise<TesseractWorker> {
   workerPromise ??= import('tesseract.js').then((mod) =>
     // tesseract.js is CommonJS, so the bundle may expose it under `default`.
     (mod.createWorker ?? (mod as unknown as { default: typeof mod }).default.createWorker)('eng', 1, {
       logger: (m: { status: string; progress: number }) => {
-        if (probing) report('Checking which way up the page is…');
+        if (checking) report('Checking which way up the page is…');
         else if (m.status === 'recognizing text') report(`Reading text… ${Math.round(m.progress * 100)}%`);
         else if (m.status.startsWith('loading')) report('Loading the text recognizer (first time only)…');
       },
@@ -36,16 +36,16 @@ function score(data: Page): number {
   return n;
 }
 
-/** Draws the canvas turned clockwise by quarter turns, optionally scaled down. */
-function turned(canvas: HTMLCanvasElement, quarters: number, scale = 1): HTMLCanvasElement {
-  const w = Math.round(canvas.width * scale);
-  const h = Math.round(canvas.height * scale);
+/** Draws the canvas turned clockwise by quarter turns. */
+export function turned(canvas: HTMLCanvasElement, quarters: number): HTMLCanvasElement {
+  if (!quarters) return canvas;
+  const { width: w, height: h } = canvas;
   const out = document.createElement('canvas');
   [out.width, out.height] = quarters % 2 ? [h, w] : [w, h];
   const ctx = out.getContext('2d')!;
   ctx.translate(out.width / 2, out.height / 2);
   ctx.rotate((quarters * Math.PI) / 2);
-  ctx.drawImage(canvas, -w / 2, -h / 2, w, h);
+  ctx.drawImage(canvas, -w / 2, -h / 2);
   return out;
 }
 
@@ -63,37 +63,60 @@ export function unturn(r: Rect, quarters: number, W: number, H: number): Rect {
   }
 }
 
+/** The part of the canvas holding the words of a read, at most about 1400 x 1000 pixels. */
+function textTile(canvas: HTMLCanvasElement, data: Page): HTMLCanvasElement {
+  const boxes = (data.lines ?? []).flatMap((l) => l.words.map((w) => w.bbox));
+  const [x0, y0, x1, y1] = boxes.length
+    ? [Math.min(...boxes.map((b) => b.x0)), Math.min(...boxes.map((b) => b.y0)), Math.max(...boxes.map((b) => b.x1)), Math.max(...boxes.map((b) => b.y1))]
+    : [0, 0, canvas.width, canvas.height];
+  const w = Math.min(x1 - x0, 1400);
+  const h = Math.min(y1 - y0, 1000);
+  const x = Math.round((x0 + x1 - w) / 2);
+  const y = Math.round((y0 + y1 - h) / 2);
+  const tile = document.createElement('canvas');
+  tile.width = w;
+  tile.height = h;
+  tile.getContext('2d')!.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+  return tile;
+}
+
+const readsWell = (score: number, words: number) => score >= 20 && score >= words * 2;
+const wordCount = (data: Page) => (data.lines ?? []).reduce((n, l) => n + l.words.length, 0);
+
 /**
- * Reads the canvas the way up its text runs. Scans and photos can be sideways or upside down,
- * and Tesseract only reads upright text, so when the first pass finds little it tries the
- * other three quarter turns on a smaller copy and rereads at full size the turn that wins.
+ * Reads the canvas the way up its text runs. Tesseract only reads upright text, so when the
+ * first pass reads badly, the part of the page holding text is read turned each other way
+ * (upside down first, the usual case), and the page is read again the first way that reads well.
  */
 async function readUpright(worker: TesseractWorker, canvas: HTMLCanvasElement): Promise<{ data: Page; quarters: number }> {
   const { data } = await worker.recognize(canvas);
   const first = score(data);
-  const words = (data.lines ?? []).reduce((n, l) => n + l.words.length, 0);
-  if (first >= 40 && first >= words * 2) return { data, quarters: 0 };
-  const scale = Math.min(1, 1600 / Math.max(canvas.width, canvas.height));
-  probing = true;
+  if (first >= 40 && readsWell(first, wordCount(data))) return { data, quarters: 0 };
+  checking = true;
+  const tile = textTile(canvas, data);
+  let base = 0;
   let best = { quarters: 0, score: 0 };
   try {
-    for (const quarters of [0, 2, 1, 3]) {
-      if (quarters === 0 && scale === 1) {
-        best = { quarters, score: first };
-        continue;
-      }
-      const s = score((await worker.recognize(turned(canvas, quarters, scale))).data);
+    base = score((await worker.recognize(tile)).data);
+    best.score = base;
+    for (const quarters of [2, 1, 3]) {
+      const read = (await worker.recognize(turned(tile, quarters))).data;
+      const s = score(read);
       if (s > best.score) best = { quarters, score: s };
+      if (readsWell(s, wordCount(read)) && s > base * 2) break;
     }
   } finally {
-    probing = false;
+    checking = false;
   }
-  if (best.quarters === 0 || best.score < 4) return { data, quarters: 0 };
+  if (!best.quarters || best.score < 8 || best.score <= base * 2) return { data, quarters: 0 };
   return { data: (await worker.recognize(turned(canvas, best.quarters))).data, quarters: best.quarters };
 }
 
-/** Runs OCR on a bitmap and returns a text unit whose ranges map back to word boxes. */
-export async function ocrUnit(id: string, page: number, canvas: HTMLCanvasElement, progress: Progress): Promise<Unit> {
+/**
+ * Runs OCR on a bitmap and returns a text unit whose ranges map to word boxes, with the
+ * clockwise quarter turns that made it upright. The boxes sit on the canvas turned that way.
+ */
+export async function readText(id: string, page: number, canvas: HTMLCanvasElement, progress: Progress): Promise<{ unit: Unit; quarters: number }> {
   report = progress;
   const worker = await getWorker();
   const { data, quarters } = await readUpright(worker, canvas);
@@ -109,7 +132,7 @@ export async function ocrUnit(id: string, page: number, canvas: HTMLCanvasElemen
     }
     text = text.trimEnd() + '\n';
   });
-  return {
+  const unit: Unit = {
     id,
     page,
     text,
@@ -129,9 +152,17 @@ export async function ocrUnit(id: string, page: number, canvas: HTMLCanvasElemen
         r.x = x;
         r.y = y;
       }
-      return [...byLine.values()].map((r) => unturn(pad(r, Math.max(2, r.h * 0.12)), quarters, canvas.width, canvas.height));
+      return [...byLine.values()].map((r) => pad(r, Math.max(2, r.h * 0.12)));
     },
   };
+  return { unit, quarters };
+}
+
+/** OCR whose boxes sit on the canvas as given, for pictures that stay as they are in their file. */
+export async function ocrUnit(id: string, page: number, canvas: HTMLCanvasElement, progress: Progress): Promise<Unit> {
+  const { unit, quarters } = await readText(id, page, canvas, progress);
+  if (!quarters) return unit;
+  return { ...unit, rectsFor: (start, end) => unit.rectsFor!(start, end).map((r) => unturn(r, quarters, canvas.width, canvas.height)) };
 }
 
 export function pad(r: Rect, p: number): Rect {

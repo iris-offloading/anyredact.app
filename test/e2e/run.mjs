@@ -432,7 +432,7 @@ if (existsSync(fx('sample.ods'))) {
   page.off('request', onRequest);
 }
 
-// Turned scans and photos: OCR reads them upright, boxes land on the original pixels
+// Turned scans and photos: OCR reads them, preview and download come out upright
 {
   const card = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300"><rect width="100%" height="100%" fill="#fff"/><text x="30" y="110" font-family="Arial" font-size="40">Email: jane.doe@example.com</text><text x="30" y="200" font-family="Arial" font-size="40">Contact bob@corp.io today</text></svg>')).png().toBuffer();
   // Dark share of a region of the redacted download.
@@ -441,14 +441,15 @@ if (existsSync(fx('sample.ods'))) {
     return px.filter((v) => v < 60).length / px.length;
   };
   // "bob@corp.io" sits at about x 175 to 385, y 170 to 205 on the upright card.
+  const region = [175, 170, 210, 35];
   const cases = [
-    ['upside-down', await sharp(card).rotate(180).png().toBuffer(), [800 - 385, 300 - 205, 210, 35]],
-    ['turned-right', await sharp(card).rotate(90).png().toBuffer(), [300 - 205, 175, 35, 210]],
-    ['turned-left', await sharp(card).rotate(270).png().toBuffer(), [170, 800 - 385, 35, 210]],
+    ['upside-down', await sharp(card).rotate(180).png().toBuffer()],
+    ['turned-right', await sharp(card).rotate(90).png().toBuffer()],
+    ['turned-left', await sharp(card).rotate(270).png().toBuffer()],
     // Pixels stored upside down, EXIF says to turn them: the browser shows it upright.
-    ['exif-turned', await sharp(await sharp(card).rotate(180).jpeg().toBuffer()).withMetadata({ orientation: 3 }).toBuffer(), [175, 170, 210, 35]],
+    ['exif-turned', await sharp(await sharp(card).rotate(180).jpeg().toBuffer()).withMetadata({ orientation: 3 }).toBuffer()],
   ];
-  for (const [name, bytes, region] of cases) {
+  for (const [name, bytes] of cases) {
     const file = fx(`${name}.${name.startsWith('exif') ? 'jpg' : 'png'}`);
     writeFileSync(file, bytes);
     const found = await run('redact-image', file);
@@ -460,8 +461,9 @@ if (existsSync(fx('sample.ods'))) {
       await page.setViewportSize({ width: 1280, height: 900 });
     }
     const { path: p } = await download(`${name}-out.png`);
+    const { width, height } = await sharp(readFileSync(p)).metadata();
     const share = await dark(p, ...region);
-    check(share > 0.85, `${name} box over the email in the download (${Math.round(share * 100)}% dark)`);
+    check(width === 800 && height === 300 && share > 0.85, `${name} saved upright (${width}x${height}), box over the email (${Math.round(share * 100)}% dark)`);
   }
 
   const pdf = await PDFDocument.create();
@@ -470,6 +472,24 @@ if (existsSync(fx('sample.ods'))) {
   writeFileSync(fx('upside-down.pdf'), await pdf.save());
   const found = await run('redact-pdf', fx('upside-down.pdf'));
   check(found.some((f) => f.includes('jane.doe@example.com')), `upside-down pdf findings: ${found.join(', ')}`);
+  const { path: p } = await download('upside-down-out.pdf');
+  const [jpg] = [...readFileSync(p).toString('latin1').matchAll(/\xFF\xD8[\s\S]*?\xFF\xD9/g)].map((m) => Buffer.from(m[0], 'latin1'));
+  const s = (await sharp(jpg).metadata()).width / 800;
+  const box = await sharp(jpg).extract({ left: Math.round(175 * s), top: Math.round(170 * s), width: Math.round(210 * s), height: Math.round(35 * s) }).greyscale().raw().toBuffer();
+  const share = box.filter((v) => v < 60).length / box.length;
+  check(share > 0.85, `upside-down pdf saved upright, box over the email (${Math.round(share * 100)}% dark)`);
+
+  // A real-looking scan: a letter on grey paper, slightly skewed, blurred and heavily compressed.
+  await page.setViewportSize({ width: 827, height: 1169 });
+  await page.setContent(`<div style="font:13px 'Times New Roman';padding:70px;line-height:1.5;background:#fff"><p>14 March 2025</p><p>Ms Maria Gonzalez<br>12 Elm Street, Springfield</p>${'<p>Thank you for your letter regarding the outstanding balance on your account. We have reviewed the payments received and can confirm that the amount due has been adjusted. Please contact our office on 415-555-0132 if you have any questions about this statement.</p>'.repeat(3)}<p>Yours sincerely,<br>John Smith</p></div>`);
+  const letter = await sharp(await page.screenshot()).grayscale().linear(0.85, 20).rotate(181.2, { background: '#e8e8e8' }).blur(0.6).jpeg({ quality: 55 }).toBuffer();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { width: lw, height: lh } = await sharp(letter).metadata();
+  const scanned = await PDFDocument.create();
+  scanned.addPage([lw * 0.75, lh * 0.75]).drawImage(await scanned.embedJpg(letter), { x: 0, y: 0, width: lw * 0.75, height: lh * 0.75 });
+  writeFileSync(fx('letter-scan.pdf'), await scanned.save());
+  const letterFound = await run('redact-pdf', fx('letter-scan.pdf'));
+  check(letterFound.some((f) => f.includes('Maria Gonzalez')) && letterFound.some((f) => f.includes('415-555')), `upside-down letter scan findings: ${letterFound.join(', ')}`);
 }
 
 // Subtitles keep their numbering and timings

@@ -1,6 +1,6 @@
 import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, scaledCanvas, type LoadedDoc, type MetaField, type Page, type Progress, type Unit } from '../types.ts';
 import { readMetadata } from './metadata.ts';
-import { ocrUnit } from './ocr.ts';
+import { readText, turned } from './ocr.ts';
 
 const HEIC = /^image\/hei[cf]/;
 // Drawings are rendered with this many pixels on their long side, so OCR can read small labels.
@@ -188,14 +188,16 @@ async function renderSvg(file: File, notes: string[]): Promise<{ canvas: HTMLCan
   return { canvas, metadata };
 }
 
-/** Reads each page with OCR, noting when it finds nothing or fails. */
+/** Reads each page with OCR, noting when it finds nothing or fails. A page lying sideways or upside down is turned upright in place. */
 async function readPages(canvases: HTMLCanvasElement[], progress: Progress, notes: string[]): Promise<Unit[]> {
   const units: Unit[] = [];
   let failed = false;
   for (const [i, canvas] of canvases.entries()) {
     const id = canvases.length > 1 ? `p${i + 1}` : 'image';
     try {
-      units.push(await ocrUnit(id, i, onWhite(canvas), canvases.length > 1 ? (m) => progress(`Page ${i + 1}: ${m}`) : progress));
+      const read = await readText(id, i, onWhite(canvas), canvases.length > 1 ? (m) => progress(`Page ${i + 1}: ${m}`) : progress);
+      canvases[i] = turned(canvas, read.quarters);
+      units.push(read.unit);
     } catch (err) {
       console.error(err);
       failed = true;
@@ -236,8 +238,8 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
     if (frames > 1) notes.push('This image is animated. Only its first frame is kept.');
   }
 
-  const pages: Page[] = canvases.map((canvas, index) => ({ index, canvas }));
   const units = await readPages(canvases, progress, notes);
+  const pages: Page[] = canvases.map((canvas, index) => ({ index, canvas }));
   const type = isTiff(file) ? 'image/tiff' : isHeic(file) ? 'image/jpeg' : (OUTPUT[typeOf(file)] ?? 'image/png');
   return {
     kind: 'image',

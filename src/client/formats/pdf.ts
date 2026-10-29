@@ -1,7 +1,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
-import { ocrUnit, pad } from './ocr.ts';
+import { pad, readText, turned } from './ocr.ts';
 
 declare const __PDF_WORKER_SRC__: string;
 pdfjs.GlobalWorkerOptions.workerSrc = __PDF_WORKER_SRC__;
@@ -143,18 +143,23 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
     const items = content.items.filter((it): it is TextItem => 'str' in it);
     const scanned = items.map((it) => it.str).join('').replace(/\s/g, '').length < 8;
     let unit = textUnit(`p${i}`, i - 1, items, content.styles, viewport, await formFields(page, viewport));
+    let shown = canvas;
+    let size = { w: base.width, h: base.height };
     if (scanned) {
-      // Probably a scanned page: fall back to OCR.
+      // Probably a scanned page: fall back to OCR. A page scanned sideways or upside down is shown and saved upright.
       try {
-        unit = await ocrUnit(`p${i}`, i - 1, canvas, (m) => progress(`Page ${i}: ${m}`));
+        const read = await readText(`p${i}`, i - 1, canvas, (m) => progress(`Page ${i}: ${m}`));
+        unit = read.unit;
+        shown = turned(canvas, read.quarters);
+        if (read.quarters % 2) size = { w: size.h, h: size.w };
         ocrPages++;
       } catch (err) {
         console.error(err);
       }
     }
-    pages.push({ index: i - 1, canvas });
+    pages.push({ index: i - 1, canvas: shown });
     units.push(unit);
-    sizes.push({ w: base.width, h: base.height });
+    sizes.push(size);
     page.cleanup();
   }
   await doc.destroy();
