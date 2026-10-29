@@ -1,6 +1,5 @@
 import { chunkText, type EntityType } from '../shared/detect.ts';
 import { MAX_CHARS, FREE_CREDITS } from '../shared/pricing.ts';
-import { humanToken } from './turnstile.ts';
 
 export interface AiEntity {
   text: string;
@@ -30,8 +29,22 @@ export function startJob(format: string) {
   job = { id: crypto.randomUUID(), format };
 }
 
-// The human check under way, so requests sent at the same time wait for one pass instead of each asking.
+// Cloudflare Turnstile: a signed-out browser's first request of the day needs a token. The page runs the
+// check next to its Upload button and hands the token over here, or asks again when the server wants one.
+let presetToken: (() => Promise<string>) | undefined;
+let askHuman: ((siteKey: string) => Promise<string>) | undefined;
+// The request carrying a token, so requests sent at the same time wait for its pass instead of each asking.
 let checking: Promise<unknown> | undefined;
+
+/** Sends `token()` with the next metered request. */
+export function useHumanToken(token: () => Promise<string>) {
+  presetToken = token;
+}
+
+/** How the page gets a token when the server asks for one it didn't expect. */
+export function onHumanCheck(ask: (siteKey: string) => Promise<string>) {
+  askHuman = ask;
+}
 
 /** POSTs to a metered API route, as JSON unless another content type is given; a 402 becomes a QuotaError. */
 export async function postApi<T>(path: string, body: unknown, failure: string, contentType = 'application/json'): Promise<T> {
@@ -49,20 +62,25 @@ export async function postApi<T>(path: string, body: unknown, failure: string, c
     const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string; siteKey?: string };
     return { res, data, human: res.status === 403 && data.code === 'turnstile' && !!data.siteKey };
   };
-  let { res, data, human } = await send();
-  // A signed-out browser's first request of the day must pass Cloudflare Turnstile.
+  const withToken = async (token: Promise<string>) => {
+    const sent = token.then(send);
+    checking = sent;
+    try {
+      return await sent;
+    } finally {
+      if (checking === sent) checking = undefined;
+    }
+  };
+  const preset = presetToken;
+  presetToken = undefined;
+  let { res, data, human } = preset ? await withToken(preset()) : await send();
   if (human && checking) {
     await checking.catch(() => {});
     ({ res, data, human } = await send());
   }
   if (human) {
-    const passed = humanToken(data.siteKey!).then(send);
-    checking = passed;
-    try {
-      ({ res, data } = await passed);
-    } finally {
-      if (checking === passed) checking = undefined;
-    }
+    if (!askHuman) throw new Error(data.error);
+    ({ res, data } = await withToken(askHuman(data.siteKey!)));
   }
   if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.", data.code === 'negative');
   if (!res.ok) throw new Error(data.error || `${failure} (${res.status}).`);
@@ -82,16 +100,21 @@ export class QuotaError extends Error {
 
 /** Today's free credits left, or null when the server doesn't track one. */
 export async function freeCreditsLeft(): Promise<number | null> {
+  return (await freeCredits()).left;
+}
+
+/** The free credits left, plus the Turnstile site key while this browser still needs a pass today. */
+export async function freeCredits(): Promise<{ left: number | null; turnstile?: string }> {
   try {
     const res = await fetch('/api/quota', { headers: { 'x-device-id': deviceId() } });
-    const { quota } = (await res.json()) as { quota?: { used: number; limit: number } | null };
+    const { quota, turnstile } = (await res.json()) as { quota?: { used: number; limit: number } | null; turnstile?: string };
     const left = quota ? Math.max(0, quota.limit - quota.used) : null;
     try {
       localStorage.setItem(FREE_KEY, JSON.stringify({ day: utcDay(), left }));
     } catch {}
-    return left;
+    return { left, turnstile };
   } catch {
-    return null;
+    return { left: null };
   }
 }
 

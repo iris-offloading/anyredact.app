@@ -288,6 +288,9 @@ test("a signed-out browser's first scan of the day needs Turnstile", async () =>
         body: JSON.stringify({ text: 'Jane Doe' }),
         headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9', ...(turnstile ? { 'x-turnstile': turnstile } : {}) },
       });
+    const quota = async () =>
+      (await (await worker.fetch(new Request('https://anyredact.app/api/quota', { headers: { 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' } }), e)).json()) as { turnstile?: string };
+    assert.equal((await quota()).turnstile, 'site');
     const first = await worker.fetch(req('device-aaaa'), e);
     assert.equal(first.status, 403);
     assert.deepEqual(await first.json(), { error: 'Please confirm you are human.', code: 'turnstile', siteKey: 'site' });
@@ -298,6 +301,7 @@ test("a signed-out browser's first scan of the day needs Turnstile", async () =>
     assert.equal(((await passed.json()) as { quota: { used: number } }).quota.used, 1);
     // The rest of the day needs no token...
     assert.equal((await worker.fetch(req('device-aaaa'), e)).status, 200);
+    assert.equal((await quota()).turnstile, undefined);
     // ...but a new browser ID asks again, and a token works once.
     assert.equal((await worker.fetch(req('device-bbbb'), e)).status, 403);
     assert.equal((await worker.fetch(req('device-bbbb', 'ok-1'), e)).status, 403);

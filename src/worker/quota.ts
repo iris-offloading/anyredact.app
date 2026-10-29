@@ -128,11 +128,12 @@ export async function chargeQuota(
   return { exceeded: results.some((r) => !r.ok), state: { used: first.used, limit: first.limit }, refund };
 }
 
-export async function quotaStatus(request: Request, env: QuotaEnv): Promise<QuotaState | null> {
+/** Today's state of the browser's allowance, and whether it has passed Turnstile today. */
+export async function quotaStatus(request: Request, env: QuotaEnv): Promise<(QuotaState & { human: boolean }) | null> {
   if (!env.QUOTA) return null;
   const [id] = identities(request);
   const r = await call(env, id.key, { dryRun: true, limit: id.limit });
-  return { used: r.used, limit: r.limit };
+  return { used: r.used, limit: r.limit, human: !!r.human };
 }
 
 /**

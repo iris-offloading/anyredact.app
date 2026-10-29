@@ -1,10 +1,16 @@
-// Cloudflare Turnstile (src/worker/turnstile.ts). The widget runs out of sight and only
-// shows, in a box over the page, when Cloudflare wants the visitor to click.
-import { h } from './dom.ts';
+// Cloudflare Turnstile (src/worker/turnstile.ts), placed next to the button it guards. The widget
+// takes no room and only shows when Cloudflare wants the visitor to click.
 
 interface Turnstile {
   render(el: HTMLElement, opts: Record<string, unknown>): string;
+  reset(id: string): void;
   remove(id: string): void;
+}
+
+export interface HumanCheck {
+  /** A one-time token; the widget then fetches the next one, or goes when made with `once`. */
+  token(): Promise<string>;
+  remove(): void;
 }
 
 const SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
@@ -12,7 +18,9 @@ let loading: Promise<Turnstile> | undefined;
 
 function load(): Promise<Turnstile> {
   loading ??= new Promise<Turnstile>((resolve, reject) => {
-    const script = h('script', { src: SCRIPT, async: true });
+    const script = document.createElement('script');
+    script.src = SCRIPT;
+    script.async = true;
     script.onload = () => resolve((window as unknown as { turnstile: Turnstile }).turnstile);
     script.onerror = () => {
       loading = undefined;
@@ -24,29 +32,54 @@ function load(): Promise<Turnstile> {
 }
 
 const theme = () => document.documentElement.dataset.theme ?? 'auto';
+const failed = () => new Error("Couldn't confirm you're human. Please try again.");
 
-/** A one-time Turnstile token for this site key. */
-export async function humanToken(siteKey: string): Promise<string> {
-  const turnstile = await load();
-  const box = h('div', { className: 'human-check' });
-  document.body.append(box);
-  return new Promise<string>((resolve, reject) => {
-    let id = '';
-    const done = (fn: () => void) => {
-      turnstile.remove(id);
-      box.remove();
-      fn();
-    };
-    const fail = () => done(() => reject(new Error("Couldn't confirm you're human. Please try again.")));
-    id = turnstile.render(box, {
+/**
+ * Runs Turnstile in `slot` right away, so a token is usually ready by the time the button is pressed.
+ * With `once`, the widget goes after its token is taken.
+ */
+export function humanCheck(slot: HTMLElement, siteKey: string, once = false): HumanCheck {
+  let resolve!: (token: string) => void;
+  let reject!: (err: Error) => void;
+  let ready!: Promise<string>;
+  const next = () => {
+    ready = new Promise<string>((a, b) => ((resolve = a), (reject = b)));
+    ready.catch(() => {});
+  };
+  next();
+  const widget = load().then((turnstile) => ({
+    turnstile,
+    id: turnstile.render(slot, {
       sitekey: siteKey,
       theme: theme(),
       appearance: 'interaction-only',
-      'before-interactive-callback': () => box.classList.add('shown'),
-      callback: (token: string) => done(() => resolve(token)),
-      'error-callback': fail,
-      'timeout-callback': fail,
-      'unsupported-callback': fail,
-    });
-  });
+      size: 'flexible',
+      // Out of the layout until then (static/styles.css).
+      'before-interactive-callback': () => slot.classList.add('shown'),
+      'after-interactive-callback': () => slot.classList.remove('shown'),
+      callback: (token: string) => resolve(token),
+      // Tokens last 5 minutes; Turnstile fetches a fresh one, which arrives through callback.
+      'expired-callback': next,
+      'error-callback': () => reject(failed()),
+      'timeout-callback': () => reject(failed()),
+      'unsupported-callback': () => reject(failed()),
+    }),
+  }));
+  widget.catch((err) => reject(err));
+  const restart = () => {
+    next();
+    widget.then(({ turnstile, id }) => turnstile.reset(id)).catch(() => {});
+  };
+  const remove = () => void widget.then(({ turnstile, id }) => turnstile.remove(id)).catch(() => {});
+  return {
+    async token() {
+      try {
+        return await ready;
+      } finally {
+        if (once) remove();
+        else restart();
+      }
+    },
+    remove,
+  };
 }

@@ -4,10 +4,11 @@ import { handleCheck } from './check.ts';
 import { handleDetect, type Env } from './detect.ts';
 import { pool } from '../shared/pool.ts';
 import { base64, json, rateLimited, trialsAllowed } from './http.ts';
-import { handleAccounts, me } from './accounts.ts';
+import { currentUser, handleAccounts, me } from './accounts.ts';
 import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';
 import { handleTranscribe } from './transcribe.ts';
+import { turnstileSiteKey } from './turnstile.ts';
 import { handleVision } from './vision.ts';
 
 // Durable Object class for the free daily allowance; workerd allows class exports.
@@ -23,7 +24,7 @@ export default {
     const account = (await handleAccounts(request, env, url)) ?? (await handleBilling(request, env, url));
     if (account) return account;
     if (url.pathname === '/account' && request.method === 'GET') return accountPage(request, env);
-    if (url.pathname === '/api/quota') return json({ quota: await quotaStatus(request, env) });
+    if (url.pathname === '/api/quota') return quota(request, env);
     if (url.pathname === '/api/health') return json({ ok: true });
     // static/analytics.js asks for cookie consent in the countries that require it.
     if (url.pathname === '/api/country') return json({ country: request.cf?.country ?? null });
@@ -58,6 +59,16 @@ export default {
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
+
+// The free credits left today, plus the Turnstile site key while this browser still needs a pass, so the
+// page can run the check next to its Upload button.
+async function quota(request: Request, env: Env): Promise<Response> {
+  const key = turnstileSiteKey(env);
+  const [state, user] = await Promise.all([quotaStatus(request, env), key ? currentUser(request, env) : null]);
+  if (!state) return json({ quota: null });
+  const { human, ...rest } = state;
+  return json({ quota: rest, ...(key && !human && !user ? { turnstile: key } : {}) });
+}
 
 // /account comes with the visitor's /api/me answer written in, so the page renders with no loading state.
 async function accountPage(request: Request, env: Env): Promise<Response> {

@@ -1,7 +1,7 @@
 import { findProduct, FREE_CREDITS, price, PRODUCTS, type Product } from '../shared/pricing.ts';
 import { freeCreditsLeft, lastFreeCredits } from './ai.ts';
 import { h } from './dom.ts';
-import { humanToken } from './turnstile.ts';
+import { humanCheck } from './turnstile.ts';
 import { fetchMe, forgetPaidBase, type Me, paidBase, paidLeft, planLeft, post, rememberPaidBase, type Activity, type User } from './me.ts';
 
 // The /account page: sign in, see balances, buy a plan or credits, manage a plan.
@@ -58,18 +58,22 @@ const card = (title: string, ...children: Node[]) => h('div', { className: 'auth
 
 function signInForm(opts: { email: boolean; google: boolean; turnstile?: string }) {
   const email = h('input', { type: 'email', required: true, placeholder: 'you@example.com', autocomplete: 'email', 'aria-label': 'Email address' });
+  const slot = h('div', { className: 'human-slot' });
   const form = h(
     'form',
     { className: 'signin' },
     email,
+    slot,
     h('button', { type: 'submit', className: 'btn primary', textContent: 'Email me a sign-in link', disabled: !opts.email }),
   );
+  // Every link needs a fresh Turnstile token.
+  const human = opts.turnstile && opts.email ? humanCheck(slot, opts.turnstile) : null;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     say('Sending…');
     let turnstile: string | undefined;
     try {
-      if (opts.turnstile) turnstile = await humanToken(opts.turnstile);
+      turnstile = await human?.token();
     } catch (err) {
       return say((err as Error).message, true);
     }
