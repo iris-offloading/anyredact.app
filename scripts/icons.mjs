@@ -1,4 +1,4 @@
-// Writes the logo files into static/: favicon.svg, apple-touch-icon.png and the
+// Writes the logo files into static/: favicon.svg, apple-touch-icon.png, the email logos and the
 // 1200 x 630 social image. Run with `npm run icons` after changing scripts/logo.mjs
 // and commit the results; the site build only copies them.
 import { createRequire } from 'node:module';
@@ -13,6 +13,9 @@ const out = (file) => path.join(root, 'static', file);
 
 await writeFile(out('favicon.svg'), faviconSvg);
 await sharp(Buffer.from(iconSvg(180, { radius: 0 }))).png().toFile(out('apple-touch-icon.png'));
+// Sign-in email header (src/worker/email.ts), shown at 32 px.
+await sharp(Buffer.from(iconSvg(96))).png().toFile(out('email-logo.png'));
+await sharp(Buffer.from(iconSvg(96, { theme: 'dark' }))).png().toFile(out('email-logo-dark.png'));
 
 const font = (await readFile(path.join(root, 'node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2'))).toString('base64');
 const h1 = HOME.h1.replace('finds', '<span class="redacted">finds</span>');

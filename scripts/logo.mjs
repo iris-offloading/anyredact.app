@@ -19,7 +19,7 @@ export const logoMark = (size) =>
 export const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><style>.b{fill:${COLORS.light.bg}}.f{fill:${COLORS.light.fg}}.a{fill:${COLORS.light.accent}}@media (prefers-color-scheme:dark){.b{fill:${COLORS.dark.bg}}.f{fill:${COLORS.dark.fg}}.a{fill:${COLORS.dark.accent}}}</style>${shapes('class="b"', 'class="f"', 'class="a"')}</svg>\n`;
 
 // Fixed colours for PNGs. Home screen icons fill the square, the device rounds them.
-export const iconSvg = (size, { radius = 7 } = {}) => {
-  const c = COLORS.light;
+export const iconSvg = (size, { radius = 7, theme = 'light' } = {}) => {
+  const c = COLORS[theme];
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 28 28">${shapes(`fill="${c.bg}"`, `fill="${c.fg}"`, `fill="${c.accent}"`, radius)}</svg>`;
 };
