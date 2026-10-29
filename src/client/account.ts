@@ -1,6 +1,7 @@
 import { findProduct, FREE_CREDITS, price, PRODUCTS, type Product } from '../shared/pricing.ts';
 import { freeCreditsLeft, lastFreeCredits } from './ai.ts';
 import { h } from './dom.ts';
+import { humanCheck } from './turnstile.ts';
 import { fetchMe, forgetPaidBase, type Me, paidBase, paidLeft, planLeft, post, rememberPaidBase, type Activity, type User } from './me.ts';
 
 // The /account page: sign in, see balances, buy a plan or credits, manage a plan.
@@ -55,18 +56,28 @@ const GOOGLE_G =
 /** The card that holds every state of the page, with the status line under its heading. */
 const card = (title: string, ...children: Node[]) => h('div', { className: 'auth-card' }, h('h1', {}, title), status, ...children);
 
-function signInForm(opts: { email: boolean; google: boolean }) {
+function signInForm(opts: { email: boolean; google: boolean; turnstile?: string }) {
   const email = h('input', { type: 'email', required: true, placeholder: 'you@example.com', autocomplete: 'email', 'aria-label': 'Email address' });
+  const slot = h('div', { className: 'human-slot' });
   const form = h(
     'form',
     { className: 'signin' },
     email,
+    slot,
     h('button', { type: 'submit', className: 'btn primary', textContent: 'Email me a sign-in link', disabled: !opts.email }),
   );
+  // Every link needs a fresh Turnstile token.
+  const human = opts.turnstile && opts.email ? humanCheck(slot, opts.turnstile) : null;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     say('Sending…');
-    const r = await post('/api/auth/email', { email: email.value });
+    let turnstile: string | undefined;
+    try {
+      turnstile = await human?.token();
+    } catch (err) {
+      return say((err as Error).message, true);
+    }
+    const r = await post('/api/auth/email', { email: email.value, turnstile });
     if (r.ok) say(`Check ${email.value} for a sign-in link. It expires in 15 minutes.`);
     else say(r.error || 'Could not send the link.', true);
   });

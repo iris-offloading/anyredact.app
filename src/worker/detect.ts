@@ -5,6 +5,7 @@ import { currentUser } from './accounts.ts';
 import { jobOf, logActivity, logFreeUse, type ActivityKind } from './activity.ts';
 import { refundCredits, spendCredits, type BillingEnv } from './billing.ts';
 import { chargeQuota, grantFreeCheck, type QuotaEnv, type QuotaState } from './quota.ts';
+import { turnstileRequired } from './turnstile.ts';
 import { json, modelJson, readAiPost, trialsAllowed, type Limiter } from './http.ts';
 
 // AI detection endpoint. The browser sends the text it extracted from a file
@@ -228,7 +229,11 @@ export interface Charge {
  * response when neither covers it. A signed-in account's activity records the cost.
  */
 export async function chargeUsage(request: Request, env: Env, credits: number, kind?: ActivityKind): Promise<Response | Charge> {
-  const [user, quota] = await Promise.all([currentUser(request, env), chargeQuota(request, env, credits)]);
+  const userP = currentUser(request, env);
+  // Signed-in accounts and preview benchmarks skip Turnstile.
+  const exempt = trialsAllowed(request, env) ? Promise.resolve(true) : userP.then(Boolean);
+  const [user, quota] = await Promise.all([userP, chargeQuota(request, env, credits, exempt)]);
+  if (quota.unverified) return turnstileRequired(env);
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
   if (user && user.credits < 0) {
     await quota.refund();
