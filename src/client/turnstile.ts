@@ -32,7 +32,7 @@ function load(): Promise<Turnstile> {
 }
 
 const theme = () => document.documentElement.dataset.theme ?? 'auto';
-const failed = () => new Error("Couldn't confirm you're human. Please try again.");
+const failed = (code?: string) => new Error(`Couldn't confirm you're human${code ? ` (error ${code})` : ''}. Please try again.`);
 
 /**
  * Runs Turnstile in `slot` right away, so a token is usually ready by the time the button is pressed.
@@ -47,7 +47,11 @@ export function humanCheck(slot: HTMLElement, siteKey: string, once = false): Hu
     ready.catch(() => {});
   };
   next();
-  const widget = load().then((turnstile) => ({
+  const restart = () => {
+    next();
+    widget.then(({ turnstile, id }) => turnstile.reset(id)).catch(() => {});
+  };
+  const widget: Promise<{ turnstile: Turnstile; id: string }> = load().then((turnstile) => ({
     turnstile,
     id: turnstile.render(slot, {
       sitekey: siteKey,
@@ -60,16 +64,22 @@ export function humanCheck(slot: HTMLElement, siteKey: string, once = false): Hu
       callback: (token: string) => resolve(token),
       // Tokens last 5 minutes; Turnstile fetches a fresh one, which arrives through callback.
       'expired-callback': next,
-      'error-callback': () => reject(failed()),
-      'timeout-callback': () => reject(failed()),
+      // Turnstile retries by itself after an error, so a later token still counts. The widget shows
+      // what went wrong.
+      'error-callback': (code: string) => {
+        console.warn('turnstile error', code);
+        slot.classList.add('shown');
+        reject(failed(code));
+        next();
+      },
+      'timeout-callback': () => {
+        reject(failed());
+        restart();
+      },
       'unsupported-callback': () => reject(failed()),
     }),
   }));
   widget.catch((err) => reject(err));
-  const restart = () => {
-    next();
-    widget.then(({ turnstile, id }) => turnstile.reset(id)).catch(() => {});
-  };
   const remove = () => void widget.then(({ turnstile, id }) => turnstile.remove(id)).catch(() => {});
   return {
     async token() {
