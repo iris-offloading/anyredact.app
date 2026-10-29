@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { findTerms, type EntityType } from '../src/shared/detect.ts';
+import { findPrivateKeys, findTerms, type EntityType } from '../src/shared/detect.ts';
 import { redactStructured, syntaxOf } from '../src/shared/structured.ts';
 
 const spans = (text: string, terms: [string, EntityType][]) => findTerms(text, terms.map(([t, type]) => ({ text: t, type })));
@@ -81,4 +81,10 @@ test('subtitles keep cue numbers, timings and tags', () => {
   const s = spans(text, [['Jane Doe', 'name'], ['12', 'phone'], ['00', 'other']]);
   const out = redactStructured(text, s, 'label', 'subtitle');
   assert.equal(out, 'WEBVTT - Call with [NAME]\n\n1\n00:00:01.000 --> 00:00:04.000 align:start\n<v [NAME]>I am <i>[NAME]</i>, call [PHONE] 34\n\n2\r\n00:00:05,000 --> 00:00:06,000\r\n[PHONE]\r\nSent --> [NAME]\r\n');
+});
+
+test('a private key with escaped line breaks is covered and the JSON still parses', () => {
+  const text = '{"private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkq\\n-----END PRIVATE KEY-----\\n"}';
+  const out = redactStructured(text, findTerms(text, findPrivateKeys(text).map((t) => ({ text: t, type: 'other' as EntityType }))), 'block', 'json');
+  assert.doesNotMatch(JSON.parse(out).private_key, /MIIE|PRIVATE/);
 });

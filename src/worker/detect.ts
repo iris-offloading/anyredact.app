@@ -1,4 +1,4 @@
-import { chunkText, plausibleEntity } from '../shared/detect.ts';
+import { chunkText, findPrivateKeys, plausibleEntity } from '../shared/detect.ts';
 import { pool } from '../shared/pool.ts';
 import { MAX_CHARS, creditsFor } from '../shared/pricing.ts';
 import { currentUser } from './accounts.ts';
@@ -191,8 +191,9 @@ const maxTokens = (chunk: string) => Math.min(32_768, Math.max(4096, Math.ceil(c
 
 async function detectText(run: Run, text: string): Promise<Entity[]> {
   const results = await Promise.all(chunkText(text, run.chunkChars ?? CHUNK_CHARS).map((c) => detectChunk(run, c)));
+  const keys = findPrivateKeys(text).map((k): Entity => ({ text: k, type: 'other', owner: 'person' }));
   const seen = new Set<string>();
-  return results.flat().filter((e) => {
+  return [...keys, ...results.flat()].filter((e) => {
     const k = `${e.type}\u0000${e.text}`;
     if (seen.has(k)) return false;
     seen.add(k);
