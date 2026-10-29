@@ -105,8 +105,10 @@ async function download(name) {
       }
     }
   });
+  check((await page.evaluate(() => CSS.highlights.get('same-text')?.size)) === 1, 'selection marks where its text appears');
   await page.click('.sel-add >> text=Redact here');
   await page.waitForFunction(() => [...document.querySelectorAll('.ftext')].some((e) => e.textContent === 'Server'));
+  check(!(await page.evaluate(() => CSS.highlights.has('same-text'))), 'matches cleared once redacted');
   const { path: p } = await download('pick.txt');
   const txt = readFileSync(p, 'utf8');
   const terms = await page.inputValue('textarea[aria-label="Words to always redact"]');

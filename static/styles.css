@@ -385,6 +385,7 @@ mark.saying { outline: 2px solid var(--accent); }
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 .sel-add .btn { width: auto; white-space: nowrap; }
+::highlight(same-text) { background-color: color-mix(in srgb, var(--accent) 25%, transparent); text-decoration: underline 2px var(--accent); }
 /* On a phone it sits above the download bar. */
 @media (max-width: 900px) { .sel-add { bottom: 180px; z-index: 21; } }
 
