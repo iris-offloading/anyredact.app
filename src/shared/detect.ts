@@ -147,6 +147,50 @@ export function chunkText(text: string, size: number): string[] {
   return chunks;
 }
 
+// Private keys are found by their armour rather than by the model, which
+// skips long blobs such as the key in a Google service account file. Line
+// breaks may be real or escaped as \n, as in JSON and source code.
+const KEY_LABEL = String.raw`(?:[A-Z0-9]+\s+)*PRIVATE\s+KEY(?:\s+BLOCK)?-----`;
+const KEY_BEGIN = new RegExp(String.raw`-----BEGIN\s+${KEY_LABEL}`, 'g');
+const KEY_END = new RegExp(String.raw`-----END\s+${KEY_LABEL}`, 'g');
+const KEY_BREAK = /(\r?\n|\\+[nr])/;
+const KEY_LINE = /^[ \t]*[A-Za-z0-9+/=]*[ \t]*$/;
+const MAX_KEY = 20_000;
+
+/** Length of the base64 lines at the start of `parts` (lines and breaks, as split with KEY_BREAK). */
+function keyLines(parts: string[]): number {
+  let n = 0;
+  let taken = 0;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 0 && !KEY_LINE.test(parts[i])) break;
+    n += parts[i].length;
+    if (i % 2 === 0 && parts[i].trim()) taken = n;
+  }
+  return taken;
+}
+
+/**
+ * Finds PEM, OpenSSH and PGP private keys, header to footer. A key cut off by
+ * the end of the text, or starting before it, is taken as far as its base64 lines go.
+ */
+export function findPrivateKeys(text: string): string[] {
+  const keys: [number, number][] = [];
+  for (const begin of text.matchAll(KEY_BEGIN)) {
+    const from = begin.index + begin[0].length;
+    if (keys.length && begin.index < keys[keys.length - 1][1]) continue;
+    KEY_END.lastIndex = from;
+    const end = KEY_END.exec(text);
+    const next = text.slice(from, from + MAX_KEY);
+    keys.push([begin.index, end && end.index - from < MAX_KEY ? end.index + end[0].length : from + keyLines(next.split(KEY_BREAK))]);
+  }
+  for (const end of text.matchAll(KEY_END)) {
+    if (keys.some(([a, b]) => end.index >= a && end.index < b)) continue;
+    const before = text.slice(Math.max(0, end.index - MAX_KEY), end.index).split(KEY_BREAK).reverse();
+    keys.push([end.index - keyLines(before), end.index + end[0].length]);
+  }
+  return keys.map(([a, b]) => text.slice(a, b).trim());
+}
+
 // Field labels a model sometimes returns as if they were the sensitive value.
 const LABEL_WORDS = new Set([
   'ssn', 'itin', 'ein', 'tin', 'ssn/itin', 'itin/ssn', 'ssn or itin', 'dob', 'date of birth', 'name', 'full name',

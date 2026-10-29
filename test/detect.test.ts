@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dedupe, findTerms, labelText, maskText } from '../src/shared/detect.ts';
+import { dedupe, findPrivateKeys, findTerms, labelText, maskText } from '../src/shared/detect.ts';
 import { analyzeUnits, startsTicked, type Term } from '../src/shared/analyze.ts';
 import { rewriteSegments } from '../src/shared/segments.ts';
 
@@ -101,4 +101,18 @@ test('dates the AI reports start ticked', () => {
   const text = 'Invoice date 12.10.2026. Patient born 01.03.1956.';
   const spans = analyzeUnits([{ id: 'u', text }], { ai: [{ text: '01.03.1956', type: 'date' }] });
   assert.deepEqual(spans.map((s) => [text.slice(s.start, s.end), startsTicked(s)]), [['01.03.1956', true]]);
+});
+
+test('private keys are found in any armour, whole or cut off', () => {
+  const body = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASC\nBKcwggSjAgEAAoIBAQC7\nAbCd==';
+  const pem = `-----BEGIN RSA PRIVATE KEY-----\n${body}\n-----END RSA PRIVATE KEY-----`;
+  assert.deepEqual(findPrivateKeys(`My key:\n${pem}\nThanks`), [pem]);
+  assert.deepEqual(findPrivateKeys(pem.replace(/\n/g, '\r\n')), [pem.replace(/\n/g, '\r\n')]);
+  assert.deepEqual(findPrivateKeys(pem.replace(/\n/g, ' ')), [pem.replace(/\n/g, ' ')]);
+  const ssh = '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE=\n-----END OPENSSH PRIVATE KEY-----';
+  assert.deepEqual(findPrivateKeys(ssh), [ssh]);
+  // A key split across two requests: each part is taken as far as its base64 lines go.
+  assert.deepEqual(findPrivateKeys(`${pem.slice(0, 60)}`), [pem.slice(0, 60)]);
+  assert.deepEqual(findPrivateKeys(`Sent by Jane Doe\n${pem.slice(70)}`), [pem.slice(70)]);
+  assert.deepEqual(findPrivateKeys('-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----'), []);
 });
