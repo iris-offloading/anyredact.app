@@ -8,7 +8,7 @@ import { PageEditor, type Overlay } from './editor.ts';
 import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
 import { highlight, pieces, termRanges, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
-import { groupBy, isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
+import { FileError, groupBy, isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
 import { aiKinds, detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
@@ -85,7 +85,7 @@ async function load(file: File, progress: (m: string) => void): Promise<LoadedDo
     case 'audio':
       return (await import('./formats/audio.ts')).loadAudio(file, progress);
     default:
-      throw new Error('This file type is not supported yet. Try PDF, an image, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
+      throw new FileError('This file type is not supported yet. Try PDF, an image, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
   }
 }
 
@@ -434,7 +434,7 @@ class App {
     } catch (err) {
       console.error(err);
       this.reset(false);
-      this.say(err instanceof Error ? err.message : 'Could not open that file.', true);
+      this.say(openFailure(err, kindOf(file)), true);
     } finally {
       this.busy = false;
       this.fileInput.value = '';
@@ -721,7 +721,7 @@ class App {
     if (ratio < 1) sheet.style.zoom = String(ratio);
   }
 
-  private async renderPreview() {
+  private async renderPreview(): Promise<void> {
     const doc = this.doc!;
     if (doc.mountView) {
       const host = h('div', { className: 'sheet-view' });
@@ -737,17 +737,26 @@ class App {
         el.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
       }
       this.drawCellBar();
-      const view = await doc.mountView(host, {
-        toggle: (keys, on) => this.toggle(keys, on),
-        cell: (c) => {
-          this.cell = c;
-          this.drawCellBar();
-          // Selecting a cell without highlights offers to redact its text.
-          const s = c.spot;
-          const pick = s && !this.findings.some((f) => f.unitId === s.unitId && f.start < s.end && f.end > s.start) ? s : null;
-          this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : '');
-        },
-      });
+      let view: DocView;
+      try {
+        view = await doc.mountView(host, {
+          toggle: (keys, on) => this.toggle(keys, on),
+          cell: (c) => {
+            this.cell = c;
+            this.drawCellBar();
+            // Selecting a cell without highlights offers to redact its text.
+            const s = c.spot;
+            const pick = s && !this.findings.some((f) => f.unitId === s.unitId && f.start < s.end && f.end > s.start) ? s : null;
+            this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : '');
+          },
+        });
+      } catch (err) {
+        // The grid's reader is stricter than the redaction's; every cell is still listed as text.
+        console.warn(err);
+        doc.mountView = undefined;
+        doc.gridUnits = undefined;
+        return this.renderPreview();
+      }
       if (this.doc !== doc) return view.dispose();
       this.view = view;
       this.refreshPreview();
@@ -1232,6 +1241,24 @@ const credits = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
 function aiFailure(err: unknown, fallback: string): string {
   if (err instanceof QuotaError) return err.negative ? err.message : `${err.message} They reset tomorrow, or you can buy more under Pricing.`;
   return err instanceof Error ? err.message : fallback;
+}
+
+// Shown when a library fails on a file, instead of its own wording.
+const DAMAGED: Record<Kind, string> = {
+  pdf: 'This PDF could not be read. It may be damaged.',
+  image: 'This picture could not be opened. It may be damaged, or in a format this browser cannot read.',
+  docx: 'This Word file could not be read. It may be damaged.',
+  pptx: 'This PowerPoint file could not be read. It may be damaged.',
+  sheet: 'This spreadsheet could not be read. It may be damaged.',
+  text: 'This file could not be read.',
+  audio: 'This recording could not be read.',
+};
+
+function openFailure(err: unknown, kind: Kind | null): string {
+  if (err instanceof FileError) return err.message;
+  // pdf.js names its errors.
+  if ((err as Error)?.name === 'PasswordException') return 'This PDF is locked with a password. Save a copy without the password and try again.';
+  return kind ? DAMAGED[kind] : 'Could not open that file.';
 }
 
 const root = document.getElementById('tool');

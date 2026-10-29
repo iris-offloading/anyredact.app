@@ -1,6 +1,6 @@
 import type JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { burnBoxes, canvasToBlob, groupBy, outputName, rectsForPage, scaledCanvas, type Finding, type ManualMark, type Page, type Progress, type RedactStyle, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, FileError, groupBy, outputName, rectsForPage, scaledCanvas, type Finding, type ManualMark, type Page, type Progress, type RedactStyle, type Unit } from '../types.ts';
 import { ocrUnit } from './ocr.ts';
 
 // Helpers shared by the Word, Excel and PowerPoint formats, which are all zipped XML parts.
@@ -38,7 +38,7 @@ export interface Pictures {
   pictures: Picture[];
   pages: Page[];
   units: Unit[];
-  /** Pictures in a format the browser cannot open. */
+  /** Pictures the browser cannot open: EMF, WMF, TIFF or damaged files. */
   unreadable: number;
 }
 
@@ -177,7 +177,7 @@ export async function dropEmbeddings(zip: JSZip, parts: Map<string, Document>, r
     // Parts read for review are written again on every download, so they change in memory too.
     const source = rels.replace(/_rels\/([^/]+)\.rels$/, '$1');
     const held = parts.get(source);
-    if (held) unlink(held), zip.file(source, new XMLSerializer().serializeToString(held));
+    if (held) unlink(held), zip.file(source, xmlString(held));
     else await editXml(zip, source, unlink);
   }
   await editXml(zip, '[Content_Types].xml', (xml) => {
@@ -280,14 +280,46 @@ export async function removePart(zip: JSZip, owner: string, part: string) {
   });
 }
 
+// Characters XML 1.0 forbids, raw or as references, which some writers still put in text and Office tolerates.
+const FORBIDDEN_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|&#(?:x0*(?:[0-8bBcCeEfF]|1[0-9a-fA-F])|0*(?:[0-8]|1[124-9]|2\d|3[01]));/g;
+
+/** Decodes a part as its byte order mark or XML declaration says, as Office does, rather than always as UTF-8. */
+export function xmlText(bytes: Uint8Array): string {
+  const [a, b] = bytes;
+  let encoding = 'utf-8';
+  if ((a === 0xff && b === 0xfe) || (a === 0x3c && b === 0x00)) encoding = 'utf-16le';
+  else if ((a === 0xfe && b === 0xff) || (a === 0x00 && b === 0x3c)) encoding = 'utf-16be';
+  else if (!(a === 0xef && b === 0xbb)) encoding = new TextDecoder('latin1').decode(bytes.subarray(0, 200)).match(/^<\?xml[^>]*encoding=["']([\w.:-]+)["']/)?.[1] ?? encoding;
+  let text: string;
+  try {
+    text = new TextDecoder(encoding).decode(bytes);
+  } catch {
+    text = new TextDecoder().decode(bytes);
+  }
+  return text.replace(FORBIDDEN_CHARS, '');
+}
+
+/**
+ * Parses an XML part, or returns null when the file has none. A part that will not parse
+ * stops the file from opening: skipping it would leave its text unredacted in the download.
+ */
 export async function readXml(zip: JSZip, name: string): Promise<Document | null> {
   const f = zip.file(name);
   if (!f) return null;
-  const xml = new DOMParser().parseFromString(await f.async('string'), 'application/xml');
-  return xml.getElementsByTagName('parsererror').length ? null : xml;
+  const xml = new DOMParser().parseFromString(xmlText(await f.async('uint8array')), 'application/xml');
+  if (xml.getElementsByTagName('parsererror').length) throw new FileError(`This file has a damaged part (${name}), so it cannot be redacted safely.`);
+  return xml;
 }
 
-export const saveXml = (zip: JSZip, name: string, xml: Document) => zip.file(name, new XMLSerializer().serializeToString(xml));
+/** Serializes a part as the UTF-8 it is saved in, whatever encoding the file declared. */
+export const xmlString = (xml: Document) => new XMLSerializer().serializeToString(xml).replace(/^(<\?xml[^>]*encoding=["'])[\w.:-]+/, '$1UTF-8');
+
+export const saveXml = (zip: JSZip, name: string, xml: Document) => zip.file(name, xmlString(xml));
+
+/** Refuses a file with any XML part the browser cannot parse, before the visitor reviews it rather than at the download. */
+export async function checkParts(zip: JSZip) {
+  for (const name of Object.keys(zip.files)) if (/\.(xml|rels)$/i.test(name) && !zip.files[name].dir) await readXml(zip, name);
+}
 
 export async function editXml(zip: JSZip, name: string, edit: (xml: Document) => boolean) {
   const xml = await readXml(zip, name);
@@ -399,7 +431,7 @@ export async function scrubProperties(zip: JSZip) {
 /** The load notes Word and PowerPoint files share. */
 export function officeNotes(zip: JSZip, root: 'word' | 'ppt', unreadable: number, extra: string[] = []): string[] {
   const notes = ['Author names and document properties are removed on download.', ...extra];
-  if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} in EMF, WMF or TIFF format could not be opened and stay as they are.`);
+  if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} could not be opened and stay${unreadable > 1 ? '' : 's'} as ${unreadable > 1 ? 'they are' : 'it is'}.`);
   if (Object.keys(zip.files).some((n) => new RegExp(`^${root}/embeddings/[^/]+$`).test(n))) notes.push('Embedded files and chart data are removed on download.');
   return notes;
 }

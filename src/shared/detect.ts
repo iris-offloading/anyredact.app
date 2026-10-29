@@ -109,7 +109,8 @@ export function termRegExp(term: string, caseSensitive = false): RegExp | null {
   if (t.length < 2) return null;
   const pattern = t.split(/\s+/).map(escapeRe).join('\\s+');
   const wordy = /^\w/.test(t) && /\w$/.test(t);
-  return new RegExp(wordy ? `(?<![\\w])${pattern}(?![\\w])` : pattern, caseSensitive ? 'g' : 'gi');
+  // A letter after a backslash is an escape such as \n in JSON or code, not part of the word.
+  return new RegExp(wordy ? `(?<!(?<!\\\\)\\w)${pattern}(?![\\w])` : pattern, caseSensitive ? 'g' : 'gi');
 }
 
 /** Finds every occurrence of each term (case-insensitive unless asked, whitespace-tolerant). */

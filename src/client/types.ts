@@ -132,6 +132,9 @@ export interface Layout {
 
 export type Progress = (message: string) => void;
 
+/** A problem with the file, worded for the visitor; any other error opening a file gets a general message. */
+export class FileError extends Error {}
+
 export const TEXT_STYLES: [RedactStyle, string][] = [
   ['block', 'Black out (█████)'],
   ['label', 'Replace with label ([EMAIL])'],

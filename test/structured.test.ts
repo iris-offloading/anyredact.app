@@ -88,3 +88,16 @@ test('a private key with escaped line breaks is covered and the JSON still parse
   const out = redactStructured(text, findTerms(text, findPrivateKeys(text).map((t) => ({ text: t, type: 'other' as EntityType }))), 'block', 'json');
   assert.doesNotMatch(JSON.parse(out).private_key, /MIIE|PRIVATE/);
 });
+
+test('a name right after an escape such as \\n is still a whole word', () => {
+  const text = '{"note": "Hello\\nJane Doe\\tthanks", "other": "MaryJane Doe"}';
+  const s = spans(text, [['Jane Doe', 'name']]);
+  assert.equal(s.length, 1);
+  assert.deepEqual(JSON.parse(redactStructured(text, s, 'block', 'json')).note, 'Hello\n████ ███\tthanks');
+});
+
+test('XML declarations keep their quoted values redactable', () => {
+  const text = '<?xml version="1.0"?>\n<!DOCTYPE p [<!ENTITY n "Jane Doe">]>\n<p>&n;</p>';
+  const out = redactStructured(text, spans(text, [['Jane Doe', 'name']]), 'block', 'xml');
+  assert.equal(out, '<?xml version="1.0"?>\n<!DOCTYPE p [<!ENTITY n "████ ███">]>\n<p>&n;</p>');
+});

@@ -1,4 +1,4 @@
-import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, scaledCanvas, type LoadedDoc, type MetaField, type Page, type Progress, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, FileError, MAX_PAGES, outputName, partialPages, rectsForPage, scaledCanvas, type LoadedDoc, type MetaField, type Page, type Progress, type Unit } from '../types.ts';
 import { readMetadata } from './metadata.ts';
 import { readText, turned } from './ocr.ts';
 
@@ -63,7 +63,7 @@ async function decodeTiff(file: File, progress: Progress): Promise<{ canvases: H
   const { default: UTIF } = await import('utif2');
   const buf = await file.arrayBuffer();
   const ifds = UTIF.decode(buf).filter((ifd) => ifd.t256 && ifd.t257 && !(Number((ifd.t254 as number[] | undefined)?.[0]) & 1));
-  if (!ifds.length) throw new Error('This TIFF has no pages to show.');
+  if (!ifds.length) throw new FileError('This TIFF has no pages to show.');
   const canvases: HTMLCanvasElement[] = [];
   for (const [i, ifd] of ifds.slice(0, MAX_PAGES).entries()) {
     if (ifds.length > 1) progress(`Opening page ${i + 1} of ${Math.min(ifds.length, MAX_PAGES)}…`);
@@ -149,7 +149,7 @@ function readable(canvas: HTMLCanvasElement) {
 async function renderSvg(file: File, notes: string[]): Promise<{ canvas: HTMLCanvasElement; metadata: MetaField[] }> {
   const doc = new DOMParser().parseFromString(await file.text(), 'image/svg+xml');
   const svg = doc.documentElement;
-  if (doc.querySelector('parsererror') || svg.localName !== 'svg') throw new Error('This SVG file could not be read.');
+  if (doc.querySelector('parsererror') || svg.localName !== 'svg') throw new FileError('This SVG file could not be read.');
   // Relative sizes (%, em) fall back to the viewBox.
   const length = (v: string | null) => {
     const m = v?.trim().match(/^([\d.]+)([a-z]*)$/i);
@@ -184,7 +184,7 @@ async function renderSvg(file: File, notes: string[]): Promise<{ canvas: HTMLCan
     canvas = await drawSvg(doc, w, h);
     notes.push('Embedded HTML in this drawing cannot be drawn here, so it is left out of the preview and the download.');
   }
-  if (!readable(canvas)) throw new Error('This SVG file could not be drawn.');
+  if (!readable(canvas)) throw new FileError('This SVG file could not be drawn.');
   return { canvas, metadata };
 }
 
@@ -195,7 +195,7 @@ async function readPages(canvases: HTMLCanvasElement[], progress: Progress, note
   for (const [i, canvas] of canvases.entries()) {
     const id = canvases.length > 1 ? `p${i + 1}` : 'image';
     try {
-      const read = await readText(id, i, onWhite(canvas), canvases.length > 1 ? (m) => progress(`Page ${i + 1}: ${m}`) : progress);
+      const read = await readText(id, i, canvas, canvases.length > 1 ? (m) => progress(`Page ${i + 1}: ${m}`) : progress);
       canvases[i] = turned(canvas, read.quarters);
       units.push(read.unit);
     } catch (err) {
