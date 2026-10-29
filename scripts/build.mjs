@@ -240,7 +240,12 @@ ${page.slug ? relatedGuides(page.slug) : ''}`,
   );
 }
 
-const howSection = (page) => `<section class="wrap section"><h2>How it works</h2>${howItWorks(page.art, page.how)}</section>`;
+const howSection = (page) => `<section class="wrap section"><h2>${esc(page.howTitle)}</h2>${howItWorks(page.art, page.how)}</section>
+${page.topics.map(topicSection).join('\n')}`;
+
+// Tool pages: a guide's subject as an H2, with its main points as H3s.
+const topicSection = (t) =>
+  `<section class="wrap section topic"><h2>${esc(t.h2)}</h2><p class="topic-intro">${esc(t.intro)}</p><div class="topic-items">${t.items.map(([h, d]) => `<div><h3>${esc(h)}</h3><p>${esc(d)}</p></div>`).join('')}</div></section>`;
 
 const guideCards = (list) => `<div class="cards">${list.map((g) => `<a class="card" href="/guides/${g.slug}"><strong>${esc(g.h1)}</strong><span>${esc(g.summary)}</span></a>`).join('')}</div>`;
 
