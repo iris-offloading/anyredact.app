@@ -1,5 +1,5 @@
 import { chunkText, type EntityType } from '../shared/detect.ts';
-import { MAX_CHARS, CREDIT_CHARS, FREE_CREDITS } from '../shared/pricing.ts';
+import { MAX_CHARS, FREE_CREDITS } from '../shared/pricing.ts';
 
 export interface AiEntity {
   text: string;
@@ -53,12 +53,12 @@ export class QuotaError extends Error {
   }
 }
 
-/** Today's free credits left (3,000 characters each), or null when the server doesn't track one. */
+/** Today's free credits left, or null when the server doesn't track one. */
 export async function freeCreditsLeft(): Promise<number | null> {
   try {
     const res = await fetch('/api/quota', { headers: { 'x-device-id': deviceId() } });
     const { quota } = (await res.json()) as { quota?: { used: number; limit: number } | null };
-    const left = quota ? Math.max(0, Math.floor((quota.limit - quota.used) / CREDIT_CHARS)) : null;
+    const left = quota ? Math.max(0, quota.limit - quota.used) : null;
     try {
       localStorage.setItem(FREE_KEY, JSON.stringify({ day: utcDay(), left }));
     } catch {}

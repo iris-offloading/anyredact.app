@@ -228,7 +228,8 @@ export interface Charge {
  * response when neither covers it. A signed-in account's activity records the cost.
  */
 export async function chargeUsage(request: Request, env: Env, chars: number, kind?: ActivityKind): Promise<Response | Charge> {
-  const [user, quota] = await Promise.all([currentUser(request, env), chargeQuota(request, env, chars)]);
+  const credits = creditsFor(chars);
+  const [user, quota] = await Promise.all([currentUser(request, env), chargeQuota(request, env, credits)]);
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
   if (user && user.credits < 0) {
     await quota.refund();
@@ -236,8 +237,7 @@ export async function chargeUsage(request: Request, env: Env, chars: number, kin
   }
   const job = jobOf(request);
   if (kind) job.job += `:${kind}`;
-  const log = (credits: number) => (user ? logActivity(env.DB, user.id, job.job, kind ?? job.kind, credits) : Promise.resolve());
-  const credits = creditsFor(chars);
+  const log = (n: number) => (user ? logActivity(env.DB, user.id, job.job, kind ?? job.kind, n) : Promise.resolve());
   if (!quota.exceeded) {
     const free = (n: number) => (user ? logFreeUse(env.DB, user.id, n) : Promise.resolve());
     await Promise.all([log(-credits), free(credits)]);
