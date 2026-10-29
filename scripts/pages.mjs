@@ -7,6 +7,8 @@ export const SITE = {
   tagline: 'Free online redaction for PDF, images, Word, PowerPoint, Excel, text and audio',
 };
 
+// Each tool page's credit cost, from the numbers in src/shared/pricing.ts.
+const textCost = ({ CREDIT_CHARS }) => `1 credit per ${CREDIT_CHARS.toLocaleString('en-US')} characters, about a page`;
 
 export const TOOLS = [
   {
@@ -20,6 +22,7 @@ export const TOOLS = [
       'Auto redact PDF files online with AI. Names, addresses and account numbers are marked on every page, scans included, and the download is flattened.',
     h1: 'Auto redact PDF online with AI',
     lead: 'Drop a PDF and our AI will find and permanently remove names, numbers, signatures, and other sensitive details, including on scanned pages.',
+    cost: textCost,
     hint: 'PDF up to 60 pages',
     art: 'pdf',
     how: [
@@ -55,6 +58,7 @@ export const TOOLS = [
     h1: 'Auto redact images online with AI',
     lead: 'Upload a photo, scan, or screenshot to automatically black out faces, ID numbers, and any text you don’t want shared.',
     also: 'Works with JPG, PNG, WebP, HEIC, AVIF, GIF, BMP, multi-page TIFF and SVG.',
+    cost: () => '1 credit per image',
     hint: 'PNG, JPG, WebP, HEIC, AVIF, GIF, BMP, TIFF or SVG',
     art: 'image',
     how: [
@@ -101,6 +105,7 @@ export const TOOLS = [
       'Remove personal details from Word (DOCX) files with AI, including headers, footers, comments and tracked changes. Author names are cleared.',
     h1: 'Auto redact Word online with AI',
     lead: 'Upload a .docx to redact sensitive text, comments, tracked changes, and metadata while keeping your formatting intact.',
+    cost: textCost,
     hint: 'Word .docx files',
     art: 'doc',
     how: [
@@ -135,6 +140,7 @@ export const TOOLS = [
       'Redact PowerPoint (PPTX) decks with AI: slides, speaker notes, comments and pictures. The file keeps its layout and loses its author names.',
     h1: 'Auto redact PowerPoint online with AI',
     lead: 'Upload a .pptx to redact names, numbers and other personal details on slides, in speaker notes, comments and pictures.',
+    cost: textCost,
     hint: 'PowerPoint .pptx files',
     art: 'slide',
     how: [
@@ -170,6 +176,7 @@ export const TOOLS = [
     h1: 'Auto redact Excel online with AI',
     lead: 'Upload a spreadsheet to redact personal data in columns, cells, hidden sheets, and comments without breaking your layout.',
     also: 'Works with ODS and CSV.',
+    cost: textCost,
     hint: 'Excel .xlsx, OpenDocument .ods or CSV',
     art: 'sheet',
     how: [
@@ -209,6 +216,7 @@ export const TOOLS = [
     h1: 'Auto redact text online with AI',
     lead: 'Paste text or upload a file to mask personal info, passwords, API keys, and other secrets in seconds.',
     also: 'Works with CSV, JSON, XML, HTML, Markdown, YAML, .env, logs, SRT and VTT subtitles, and source code.',
+    cost: textCost,
     hint: 'TXT, CSV, JSON, XML, HTML, Markdown, subtitles, logs or code',
     art: 'text',
     how: [
@@ -248,6 +256,7 @@ export const TOOLS = [
     h1: 'Auto redact audio online with AI',
     lead: 'Upload a recording and we’ll bleep spoken sensitive details, then give you the redacted audio and a redacted transcript.',
     also: 'Works with MP3, M4A, WAV, FLAC, OGG and Opus.',
+    cost: ({ AUDIO_CREDITS_PER_MINUTE }) => `${AUDIO_CREDITS_PER_MINUTE} credits per minute`,
     hint: 'MP3, M4A, WAV, FLAC, OGG or Opus, up to 2 hours',
     art: 'audio',
     how: [

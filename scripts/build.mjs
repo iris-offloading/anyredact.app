@@ -227,6 +227,7 @@ function toolPage(page) {
   <div class="hero-copy">
     <h1>${page.slug ? esc(page.h1) : esc(page.h1).replace('finds', '<span class="redacted">finds</span>')}</h1>
     <p class="lead">${esc(page.also ? `${page.lead} ${page.also}` : page.lead)}</p>
+    ${page.cost ? `<p class="cost">${esc(page.cost(plans))}. <a href="/pricing">${plans.FREE_CREDITS} free credits a day</a></p>` : ''}
   </div>
   <div id="tool" class="tool" data-format="${page.format}" data-hint="${esc(page.hint)}">
     <noscript><p class="status error">AnyRedact runs in your browser and needs JavaScript enabled.</p></noscript>
@@ -258,6 +259,10 @@ function relatedGuides(slug) {
   const list = GUIDES.filter((g) => g.tools?.includes(slug));
   return list.length ? `<section class="wrap section"><h2>Guides</h2>${guideCards(list)}</section>` : '';
 }
+
+// The pricing page and each tool page's cost read src/shared/pricing.ts, so they can't drift from checkout.
+const pricingTs = await transform(await readFile(path.join(root, 'src/shared/pricing.ts'), 'utf8'), { loader: 'ts', format: 'esm' });
+const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.code).toString('base64')}`);
 
 const pages = [
   [HOME, 'index.html'],
@@ -340,9 +345,6 @@ await writeFile(
   ).replace('<link rel="canonical" href="https://anyredact.app/account">', '<meta name="robots" content="noindex">'),
 );
 
-// The pricing page reads plans and credits from src/shared/pricing.ts, so it can't drift from checkout.
-const pricingTs = await transform(await readFile(path.join(root, 'src/shared/pricing.ts'), 'utf8'), { loader: 'ts', format: 'esm' });
-const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.code).toString('base64')}`);
 await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, script: pricingSrc, jsonLd: ld(PRICING, { nodes: [PRICING.app(plans, { '@id': `${SITE.origin}/#app`, url: url(''), provider: ref(ORG) })] }) }, PRICING.body(plans, esc)));
 
 // /account and the 404 page are noindex, so they stay out.
