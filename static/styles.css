@@ -246,7 +246,8 @@ body.editing .hero { max-width: none; padding: 0; }
 .panel-foot { flex: none; display: grid; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); background: var(--surface); }
 .panel-foot .row { margin: 0; }
 .btn-icon svg { display: block; }
-.stage { min-width: 0; padding: 0 24px 48px; }
+/* The stage fills the column, so a drag released below the text ends in the text. */
+.stage { min-width: 0; padding: 0 24px 48px; align-self: stretch; }
 .preview-bar {
   position: sticky; top: var(--header-h); z-index: 5; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   margin: 0 -24px 24px; padding: 10px 24px; min-height: 48px; background: var(--bg); border-bottom: 1px solid var(--line); font-size: 0.8125rem;
@@ -292,7 +293,6 @@ body.editing .hero { max-width: none; padding: 0; }
   .panel-foot .style-row select { min-height: 40px; }
   .panel-foot .btn.primary { white-space: nowrap; font-size: 1rem; min-height: 52px; padding: 12px; }
   body:has(.workspace:not([hidden])) { padding-bottom: 180px; }
-  .sel-add { bottom: 180px; }
 }
 .panel .btn.transcript { width: 100%; padding: 10px 16px; }
 .panel h3, .panel-label { font-size: 0.875rem; font-weight: 600; line-height: 1.2; margin: 28px 0 10px; }
@@ -385,6 +385,8 @@ mark.saying { outline: 2px solid var(--accent); }
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 .sel-add .btn { width: auto; white-space: nowrap; }
+/* On a phone it sits above the download bar. */
+@media (max-width: 900px) { .sel-add { bottom: 180px; z-index: 21; } }
 
 /* Landing sections */
 .band { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }

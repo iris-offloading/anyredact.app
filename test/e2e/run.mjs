@@ -111,6 +111,21 @@ async function download(name) {
   const txt = readFileSync(p, 'utf8');
   const terms = await page.inputValue('textarea[aria-label="Words to always redact"]');
   check(txt.includes('\n██████: ') && !terms, `one spot redacted, no term added: ${JSON.stringify(txt)}`);
+  // A drag released outside the text box still offers the selection.
+  const at = await page.evaluate(() => {
+    const n = document.querySelector('.unit').firstChild;
+    const r = document.createRange();
+    r.setStart(n, 0);
+    r.setEnd(n, 4);
+    const b = r.getBoundingClientRect();
+    return { x: b.x + 1, y: b.y + b.height / 2 };
+  });
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 300, at.y + 600, { steps: 8 });
+  await page.mouse.up();
+  check((await page.locator('.sel-add').count()) === 1, 'drag released outside the text offers to redact');
+  await page.mouse.click(5, 5);
 }
 
 // DOCX

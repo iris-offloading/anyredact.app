@@ -342,6 +342,27 @@ class App {
       if (f) this.open(f);
       else if (format === 'text' || format === 'all') pasteText(e.clipboardData?.getData('text/plain') ?? '');
     });
+    // A drag can end outside the text, and phones adjust a selection with handles, so selections are also picked up page-wide.
+    document.addEventListener('mouseup', (e) => {
+      // The text's own listeners handle releases inside it.
+      if (![this.textHost, this.extras].some((el) => el.contains(e.target as Node))) this.onSelect(e);
+    });
+    let dragging = false;
+    let settle = 0;
+    document.addEventListener('pointerdown', (e) => (dragging = e.pointerType === 'mouse'));
+    document.addEventListener('pointerup', () => {
+      // The mouseup that follows offers the selection.
+      if (dragging) clearTimeout(settle);
+      dragging = false;
+    });
+    document.addEventListener('selectionchange', () => {
+      clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        const s = getSelection();
+        if (dragging || !s?.rangeCount || s.isCollapsed || !s.getRangeAt(0).intersectsNode(this.preview)) return;
+        this.onSelect();
+      }, 400);
+    });
   }
 
   private addTerm: (t: string) => void = () => {};
