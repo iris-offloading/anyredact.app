@@ -29,11 +29,14 @@
     // Audio transcription (src/worker/transcribe.ts), with the AZURE_SPEECH_KEY secret.
     "AZURE_SPEECH_URL": "https://owo-resource.cognitiveservices.azure.com",
     // Not set for previews: Google only accepts the redirect URIs listed on the OAuth client.
-    "GOOGLE_CLIENT_ID": "879116354493-2dl85a7u6n5tkucbk36a5cbo07hsgnpb.apps.googleusercontent.com"
+    "GOOGLE_CLIENT_ID": "879116354493-2dl85a7u6n5tkucbk36a5cbo07hsgnpb.apps.googleusercontent.com",
+    // Public Turnstile key (src/worker/turnstile.ts), with the TURNSTILE_SECRET_KEY secret.
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFqv_XXOXUiRgMfN"
   },
   // Accounts and paid page balances (migrations/). Secrets set in the dashboard:
   // STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_CLIENT_SECRET, AZURE_SPEECH_KEY,
-  // and TRIAL_KEY, which benchmark requests to previews must send.
+  // TRIAL_KEY, which benchmark requests to previews must send, and TURNSTILE_SECRET_KEY;
+  // Turnstile stays off until it is set.
   // Sign-in links go out through Cloudflare Email Service (needs anyredact.app onboarded).
   "send_email": [{ "name": "EMAIL" }],
   "d1_databases": [{ "binding": "DB", "database_name": "anyredact", "database_id": "3dac13f1-b620-4fb7-be0d-95fe9ca963a7" }],
@@ -47,7 +50,7 @@
   "previews": {
     "ai": { "binding": "AI" },
     // Lets requests to a preview choose the model (see scripts/bench-models.mjs).
-    "vars": { "MODEL_TRIALS": "1", "EMAIL_FROM": "sign-in@anyredact.app", "AZURE_SPEECH_URL": "https://owo-resource.cognitiveservices.azure.com" },
+    "vars": { "MODEL_TRIALS": "1", "EMAIL_FROM": "sign-in@anyredact.app", "AZURE_SPEECH_URL": "https://owo-resource.cognitiveservices.azure.com", "TURNSTILE_SITE_KEY": "0x4AAAAAAFqv_XXOXUiRgMfN" },
     "send_email": [{ "name": "EMAIL" }],
     "d1_databases": [{ "binding": "DB", "database_name": "anyredact-preview", "database_id": "626376f3-fefb-4d4c-9b95-c5259f897889" }],
     "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },

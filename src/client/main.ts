@@ -1,7 +1,8 @@
 import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
 import { h } from './dom.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
-import { detectWithAi, freeCreditsLeft, QuotaError, startJob, type AiEntity } from './ai.ts';
+import { detectWithAi, freeCredits, onHumanCheck, QuotaError, startJob, useHumanToken, type AiEntity } from './ai.ts';
+import { humanCheck, type HumanCheck } from './turnstile.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
@@ -140,6 +141,8 @@ class App {
   // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
+  // Turnstile above the Upload button, for a signed-out browser's first scan of the day.
+  private human: HumanCheck | null = null;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   // Business and public-service contacts start ticked too.
   private redactPublic = store.get('redact-public') === '1';
@@ -182,6 +185,7 @@ class App {
   constructor(private root: HTMLElement) {
     const format = (root.dataset.format as Kind | 'all') || 'all';
     root.textContent = '';
+    onHumanCheck((siteKey) => this.askHuman(siteKey));
 
     this.fileInput = h('input', { type: 'file', accept: ACCEPT[format], className: 'visually-hidden', id: 'file-input' });
     this.fileInput.addEventListener('change', () => this.fileInput.files?.[0] && this.open(this.fileInput.files[0]));
@@ -446,6 +450,8 @@ class App {
     this.visualError = null;
     this.consent = 'ask';
     this.consentBox.hidden = true;
+    this.human?.remove();
+    this.human = null;
     this.checkRow.hidden = true;
     this.partialNote.hidden = true;
     this.setFreeCheck(undefined);
@@ -1125,7 +1131,24 @@ class App {
       this.consentBox.hidden = true;
       return;
     }
-    const upload = () => {
+    let siteKey: string | undefined;
+    const upload = async () => {
+      // The box stays up until Turnstile passes, in case it wants a click.
+      if (this.human) {
+        button.disabled = true;
+        try {
+          const token = await this.human.token();
+          useHumanToken(async () => token);
+        } catch (err) {
+          if (this.doc !== doc) return;
+          this.say((err as Error).message, true);
+          this.human = humanCheck(slot, siteKey!, true);
+          button.disabled = false;
+          return;
+        }
+        this.human = null;
+        if (this.doc !== doc) return;
+      }
       this.consent = 'yes';
       this.consentBox.hidden = true;
       this.checkRow.hidden = false;
@@ -1137,16 +1160,25 @@ class App {
     const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
     const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
     const costLine = h('p', { className: 'hint' }, `${cost}.`);
-    this.consentBox.replaceChildren(
-      h('p', {}, `Upload ${what} to find personal info?`),
-      costLine,
-      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
-    );
+    const slot = h('div', { className: 'human-slot' });
+    const button = h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload });
+    this.consentBox.replaceChildren(h('p', {}, `Upload ${what} to find personal info?`), costLine, slot, button);
     this.consentBox.hidden = false;
-    freeCreditsLeft().then((left) => {
-      if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      costLine.textContent = `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`;
+    freeCredits().then(({ left, turnstile }) => {
+      if (this.doc !== doc || this.consentBox.hidden) return;
+      if (turnstile) this.human = humanCheck(slot, (siteKey = turnstile), true);
+      if (left !== null) costLine.textContent = `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`;
     });
+  }
+
+  /** The server asked for Turnstile the page didn't expect: run it in the consent box until it passes. */
+  private askHuman(siteKey: string): Promise<string> {
+    const slot = h('div', { className: 'human-slot' });
+    this.consentBox.replaceChildren(h('p', {}, 'Confirm you are human to continue.'), slot);
+    this.consentBox.hidden = false;
+    return humanCheck(slot, siteKey, true)
+      .token()
+      .finally(() => (this.consentBox.hidden = true));
   }
 
   /** Ticks the final check while the scan's free one is unused, and labels its price. */

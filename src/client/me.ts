@@ -20,7 +20,7 @@ export interface User {
 
 export interface Me {
   user: User | null;
-  signIn?: { email: boolean; google: boolean };
+  signIn?: { email: boolean; google: boolean; turnstile?: string };
 }
 
 /** POSTs JSON to an account route. Failures come back as { error }. */
