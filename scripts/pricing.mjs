@@ -51,7 +51,8 @@ export const PRICING = {
       .join('');
     const rows = [
       ['Documents, images and scans', `1 per ${n(CREDIT_CHARS)} characters of text, about one page`],
-      ['Faces, screens, road signs and number plates', '1 per picture or page, only when ticked'],
+      ['Faces and screens', 'Free, found on your device'],
+      ['Road signs and number plates', '1 per picture or page, only when ticked'],
       ['Audio', `${AUDIO_CREDITS_PER_MINUTE} per started minute`],
       ['Check for anything left', `Free once per file, then ${CHECK_CREDITS}`],
     ]
