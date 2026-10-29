@@ -9,7 +9,7 @@ import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
 import { highlight, pieces, termRanges, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
 import { groupBy, isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
-import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
+import { aiKinds, detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
 
@@ -143,6 +143,10 @@ class App {
   private consentBox: HTMLElement;
   // Turnstile above the Upload button, for a signed-out browser's first scan of the day.
   private human: HumanCheck | null = null;
+  // The consent box's question and price, rewritten when a picture option changes.
+  private consentQuestion: HTMLElement | null = null;
+  private consentCost: HTMLElement | null = null;
+  private freeLeft: number | null = null;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   // Business and public-service contacts start ticked too.
   private redactPublic = store.get('redact-public') === '1';
@@ -562,7 +566,7 @@ class App {
         this.visualError = 'The on-device picture detector could not start in this browser.';
       }
     }
-    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, kinds) : new Set<VisualKind>();
+    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, aiKinds(kinds)) : new Set<VisualKind>();
     if (ai.size) {
       const pages = doc.pages.slice(0, MAX_AI_PICTURE_PAGES);
       try {
@@ -1122,13 +1126,27 @@ class App {
   }
 
   private askConsent(doc: LoadedDoc) {
-    if (!this.consentBox.hidden) return;
     const text = doc.units.map((u) => u.text).join(' ');
     const words = text.split(/\s+/).filter(Boolean).length;
-    const pictures = this.visualKinds.size > 0 && doc.pages.length > 0;
+    // Faces and screens are found on this device, so only the other picture options upload pages.
+    const pictures = aiKinds(this.visualKinds).size > 0 && doc.pages.length > 0;
     const seconds = doc.transcribe ? (doc.audio?.duration ?? 0) : 0;
     if (!words && !pictures && !seconds) {
       this.consentBox.hidden = true;
+      this.human?.remove();
+      this.human = null;
+      return;
+    }
+    const images = `${isOffice(doc) ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
+    const what = seconds ? `the recording (${clock(seconds)})` : words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
+    // Speech runs at about 900 characters a minute, which detection then reads.
+    const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
+    const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
+    const costText = (left: number | null) => (left === null ? `${cost}.` : `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`);
+    // Already showing: a picture option changed, so only the wording and price move.
+    if (!this.consentBox.hidden && this.consentQuestion && this.consentCost) {
+      this.consentQuestion.textContent = `Upload ${what} to find personal info?`;
+      this.consentCost.textContent = costText(this.freeLeft);
       return;
     }
     let siteKey: string | undefined;
@@ -1154,20 +1172,19 @@ class App {
       this.checkRow.hidden = false;
       this.analyze();
     };
-    const images = `${isOffice(doc) ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
-    const what = seconds ? `the recording (${clock(seconds)})` : words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
-    // Speech runs at about 900 characters a minute, which detection then reads.
-    const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
-    const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
-    const costLine = h('p', { className: 'hint' }, `${cost}.`);
+    this.freeLeft = null;
+    const costLine = (this.consentCost = h('p', { className: 'hint' }, costText(null)));
+    const question = (this.consentQuestion = h('p', {}, `Upload ${what} to find personal info?`));
     const slot = h('div', { className: 'human-slot' });
     const button = h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload });
-    this.consentBox.replaceChildren(h('p', {}, `Upload ${what} to find personal info?`), costLine, slot, button);
+    this.consentBox.replaceChildren(question, costLine, slot, button);
     this.consentBox.hidden = false;
     freeCredits().then(({ left, turnstile }) => {
-      if (this.doc !== doc || this.consentBox.hidden) return;
+      if (this.doc !== doc || this.consentBox.hidden || this.consentCost !== costLine) return;
       if (turnstile) this.human = humanCheck(slot, (siteKey = turnstile), true);
-      if (left !== null) costLine.textContent = `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`;
+      this.freeLeft = left;
+      // Read the price again: a picture option may have changed it while this was loading.
+      this.askConsent(doc);
     });
   }
 

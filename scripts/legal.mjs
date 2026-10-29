@@ -20,12 +20,12 @@ export const LEGAL = [
 <p>To find personal information, AnyRedact sends part of the file to our server after you agree in the editor:</p>
 <ul>
 <li>the text read from the file, for detection;</li>
-<li>page images, if you turn on picture redaction;</li>
+<li>page images, if you turn on road sign or number plate redaction;</li>
 <li>the speech in a recording, as low-quality mono sound in parts of a few minutes;</li>
 <li>the text with your redactions blacked out, if you run the final check.</li>
 </ul>
 <p>The content goes over HTTPS to our Cloudflare Worker and is analysed by AI models running on Cloudflare Workers AI. Speech is turned into text by Microsoft Azure AI Speech, which does not keep it. It is held in memory for that request only. We do not store it or the results, do not log it, and do not use it to train models. If you decline, nothing is sent and you can redact by hand.</p>
-<p>Scanned pages and images are read with the Tesseract OCR engine in your browser. Picture redaction also runs a face and object detector in your browser first. The browser downloads both from the jsDelivr CDN.</p>
+<p>Scanned pages and images are read with the Tesseract OCR engine in your browser. Picture redaction runs a face and object detector in your browser, which finds faces and screens without uploading anything. The browser downloads both from the jsDelivr CDN.</p>
 
 <h2>Data we keep</h2>
 <ul>

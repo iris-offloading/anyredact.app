@@ -4,8 +4,9 @@ import { scaledCanvas, type Rect } from './types.ts';
 
 // Optional picture redaction: faces, screens, road signs and number plates.
 // A local MediaPipe pass runs in the browser and uploads nothing (models from
-// /models, runtime from the CDN). When the visitor agreed to send the file, a
-// vision model on the server adds what the local pass misses.
+// /models, runtime from the CDN) and covers faces and screens on its own. Road
+// signs and number plates also go to a vision model on the server, once the
+// visitor agreed to send the file.
 // The two .tflite files in static/models are Google's MediaPipe models
 // (Apache-2.0), from storage.googleapis.com/mediapipe-models.
 
@@ -19,6 +20,13 @@ export const VISUAL_LABELS: Record<VisualKind, string> = {
   sign: 'Road signs',
   plate: 'Number plates',
 };
+
+// Found on this device for free. The rest need the server's vision model, one credit a page.
+const LOCAL_KINDS: VisualKind[] = ['face', 'screen'];
+
+export function aiKinds(kinds: Set<VisualKind>): Set<VisualKind> {
+  return new Set([...kinds].filter((k) => !LOCAL_KINDS.includes(k)));
+}
 
 export interface VisualHit {
   kind: VisualKind;
@@ -176,7 +184,7 @@ export async function detectVisual(canvas: HTMLCanvasElement, kinds: Set<VisualK
 
 const AI_MAX_SIDE = 1280;
 
-/** Asks the server's vision model for the same regions, plus number plates and other signs. */
+/** Asks the server's vision model for road signs and number plates. */
 export async function detectVisualAi(canvas: HTMLCanvasElement, kinds: Set<VisualKind>): Promise<VisualHit[]> {
   if (!kinds.size) return [];
   const small = scaledCanvas(canvas, AI_MAX_SIDE);
