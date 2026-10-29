@@ -432,7 +432,7 @@ if (existsSync(fx('sample.ods'))) {
   page.off('request', onRequest);
 }
 
-// Turned scans and photos: OCR reads them upright, boxes land on the original pixels
+// Turned scans and photos: OCR reads them, preview and download come out upright
 {
   const card = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300"><rect width="100%" height="100%" fill="#fff"/><text x="30" y="110" font-family="Arial" font-size="40">Email: jane.doe@example.com</text><text x="30" y="200" font-family="Arial" font-size="40">Contact bob@corp.io today</text></svg>')).png().toBuffer();
   // Dark share of a region of the redacted download.
@@ -441,14 +441,15 @@ if (existsSync(fx('sample.ods'))) {
     return px.filter((v) => v < 60).length / px.length;
   };
   // "bob@corp.io" sits at about x 175 to 385, y 170 to 205 on the upright card.
+  const region = [175, 170, 210, 35];
   const cases = [
-    ['upside-down', await sharp(card).rotate(180).png().toBuffer(), [800 - 385, 300 - 205, 210, 35]],
-    ['turned-right', await sharp(card).rotate(90).png().toBuffer(), [300 - 205, 175, 35, 210]],
-    ['turned-left', await sharp(card).rotate(270).png().toBuffer(), [170, 800 - 385, 35, 210]],
+    ['upside-down', await sharp(card).rotate(180).png().toBuffer()],
+    ['turned-right', await sharp(card).rotate(90).png().toBuffer()],
+    ['turned-left', await sharp(card).rotate(270).png().toBuffer()],
     // Pixels stored upside down, EXIF says to turn them: the browser shows it upright.
-    ['exif-turned', await sharp(await sharp(card).rotate(180).jpeg().toBuffer()).withMetadata({ orientation: 3 }).toBuffer(), [175, 170, 210, 35]],
+    ['exif-turned', await sharp(await sharp(card).rotate(180).jpeg().toBuffer()).withMetadata({ orientation: 3 }).toBuffer()],
   ];
-  for (const [name, bytes, region] of cases) {
+  for (const [name, bytes] of cases) {
     const file = fx(`${name}.${name.startsWith('exif') ? 'jpg' : 'png'}`);
     writeFileSync(file, bytes);
     const found = await run('redact-image', file);
@@ -460,8 +461,9 @@ if (existsSync(fx('sample.ods'))) {
       await page.setViewportSize({ width: 1280, height: 900 });
     }
     const { path: p } = await download(`${name}-out.png`);
+    const { width, height } = await sharp(readFileSync(p)).metadata();
     const share = await dark(p, ...region);
-    check(share > 0.85, `${name} box over the email in the download (${Math.round(share * 100)}% dark)`);
+    check(width === 800 && height === 300 && share > 0.85, `${name} saved upright (${width}x${height}), box over the email (${Math.round(share * 100)}% dark)`);
   }
 
   const pdf = await PDFDocument.create();
@@ -470,6 +472,12 @@ if (existsSync(fx('sample.ods'))) {
   writeFileSync(fx('upside-down.pdf'), await pdf.save());
   const found = await run('redact-pdf', fx('upside-down.pdf'));
   check(found.some((f) => f.includes('jane.doe@example.com')), `upside-down pdf findings: ${found.join(', ')}`);
+  const { path: p } = await download('upside-down-out.pdf');
+  const [jpg] = [...readFileSync(p).toString('latin1').matchAll(/\xFF\xD8[\s\S]*?\xFF\xD9/g)].map((m) => Buffer.from(m[0], 'latin1'));
+  const s = (await sharp(jpg).metadata()).width / 800;
+  const box = await sharp(jpg).extract({ left: Math.round(175 * s), top: Math.round(170 * s), width: Math.round(210 * s), height: Math.round(35 * s) }).greyscale().raw().toBuffer();
+  const share = box.filter((v) => v < 60).length / box.length;
+  check(share > 0.85, `upside-down pdf saved upright, box over the email (${Math.round(share * 100)}% dark)`);
 }
 
 // Subtitles keep their numbering and timings

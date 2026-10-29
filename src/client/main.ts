@@ -383,9 +383,12 @@ class App {
 
   /** Shows the status at the top of the panel while a file is open, or above the download button while exporting. */
   private say(msg: string, error = false, nearDownload = false) {
-    if (this.workspace.hidden) this.intake.after(this.status);
-    else if (nearDownload) this.download.before(this.status);
-    else this.panelBody.prepend(this.status);
+    // Moving the element restarts the spinner, so it only moves when it is somewhere else.
+    if (this.workspace.hidden) {
+      if (this.intake.nextElementSibling !== this.status) this.intake.after(this.status);
+    } else if (nearDownload) {
+      if (this.download.previousElementSibling !== this.status) this.download.before(this.status);
+    } else if (this.panelBody.firstElementChild !== this.status) this.panelBody.prepend(this.status);
     // Progress messages carry an ellipsis and get a spinner.
     this.status.classList.toggle('busy', !error && msg.includes('…'));
     this.status.hidden = !msg;
