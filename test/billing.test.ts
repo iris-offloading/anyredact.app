@@ -546,3 +546,43 @@ test('a full refund of a plan payment cancels the plan, a partial one keeps it',
   assert.ok(full[2].key);
   assert.deepEqual(await plan(), { plan_subscription: null, plan_credits: 0, plan_used: 0 });
 });
+
+// Stands in for Cloudflare's siteverify: only the token "ok" passes.
+async function withTurnstile(run: () => Promise<void>) {
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) =>
+    String(url).includes('challenges.cloudflare.com') ? Response.json({ success: (init!.body as FormData).get('response') === 'ok' }) : real(url, init)) as typeof fetch;
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test('every sign-in email needs Turnstile, signed-in scans never do', () =>
+  withTurnstile(async () => {
+    const db = d1();
+    const sent: unknown[] = [];
+    const e = { ...env(db), TURNSTILE_SITE_KEY: 'site', TURNSTILE_SECRET_KEY: 'secret', EMAIL: { send: async (m: unknown) => (sent.push(m), { messageId: 'm' }) } } as Env;
+    const email = (turnstile?: string) =>
+      fetchWorker(new Request('https://anyredact.app/api/auth/email', { method: 'POST', body: JSON.stringify({ email: 'jane@example.com', turnstile }), headers: { origin: 'https://anyredact.app' } }), e);
+    assert.equal((await email()).status, 403);
+    assert.equal((await email('bad')).status, 403);
+    assert.equal(sent.length, 0);
+    assert.equal((await email('ok')).status, 200);
+    assert.equal(sent.length, 1);
+    const me = (await (await fetchWorker(new Request('https://anyredact.app/api/me'), e)).json()) as { signIn: { turnstile: string } };
+    assert.equal(me.signIn.turnstile, 'site');
+
+    // Quota objects: free credits left, never passed Turnstile.
+    e.QUOTA = {
+      idFromName: (n: string) => n,
+      get: () => ({ fetch: async () => Response.json({ ok: true, used: 0, limit: 10, human: false }) }),
+    } as unknown as DurableObjectNamespace;
+    const id = await upsertUser(e, 'jane@example.com');
+    await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), id, Math.floor(Date.now() / 1000) + 3600).run();
+    const scan = (cookie?: string) =>
+      fetchWorker(new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane' }), headers: { origin: 'https://anyredact.app', ...(cookie ? { cookie } : {}) } }), e);
+    assert.equal((await scan()).status, 403);
+    assert.equal((await scan('session=tok')).status, 200);
+  }));

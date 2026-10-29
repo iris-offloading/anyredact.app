@@ -1,5 +1,6 @@
 import { chunkText, type EntityType } from '../shared/detect.ts';
 import { MAX_CHARS, FREE_CREDITS } from '../shared/pricing.ts';
+import { humanToken } from './turnstile.ts';
 
 export interface AiEntity {
   text: string;
@@ -29,14 +30,40 @@ export function startJob(format: string) {
   job = { id: crypto.randomUUID(), format };
 }
 
+// The human check under way, so requests sent at the same time wait for one pass instead of each asking.
+let checking: Promise<unknown> | undefined;
+
 /** POSTs to a metered API route, as JSON unless another content type is given; a 402 becomes a QuotaError. */
 export async function postApi<T>(path: string, body: unknown, failure: string, contentType = 'application/json'): Promise<T> {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': contentType, 'x-device-id': deviceId(), ...(job ? { 'x-job': job.id, 'x-format': job.format } : {}) },
-    body: contentType === 'application/json' ? JSON.stringify(body) : (body as BodyInit),
-  });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };
+  const send = async (turnstile?: string) => {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'content-type': contentType,
+        'x-device-id': deviceId(),
+        ...(job ? { 'x-job': job.id, 'x-format': job.format } : {}),
+        ...(turnstile ? { 'x-turnstile': turnstile } : {}),
+      },
+      body: contentType === 'application/json' ? JSON.stringify(body) : (body as BodyInit),
+    });
+    const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string; siteKey?: string };
+    return { res, data, human: res.status === 403 && data.code === 'turnstile' && !!data.siteKey };
+  };
+  let { res, data, human } = await send();
+  // A signed-out browser's first request of the day must pass Cloudflare Turnstile.
+  if (human && checking) {
+    await checking.catch(() => {});
+    ({ res, data, human } = await send());
+  }
+  if (human) {
+    const passed = humanToken(data.siteKey!).then(send);
+    checking = passed;
+    try {
+      ({ res, data } = await passed);
+    } finally {
+      if (checking === passed) checking = undefined;
+    }
+  }
   if (res.status === 402) throw new QuotaError(data.error || "You've used today's free credits.", data.code === 'negative');
   if (!res.ok) throw new Error(data.error || `${failure} (${res.status}).`);
   return data;

@@ -43,7 +43,7 @@ export const LEGAL = [
 
 <h2>Who processes data</h2>
 <ul>
-<li><strong>Cloudflare</strong> hosts the site, runs the other AI models and sends sign-in emails.</li>
+<li><strong>Cloudflare</strong> hosts the site, runs the other AI models, sends sign-in emails and checks with Turnstile that a visitor is not a bot, before the first free scan of the day and before every sign-in email.</li>
 <li><strong>Microsoft</strong> transcribes the speech in recordings with Azure AI Speech.</li>
 <li><strong>Stripe</strong> handles payments, subscriptions and refunds.</li>
 <li><strong>Google</strong> confirms your identity if you sign in with Google, and runs Google Analytics with Google signals and ad personalisation turned off.</li>

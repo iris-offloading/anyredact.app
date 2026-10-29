@@ -6,8 +6,9 @@
 
 import { FREE_CREDITS } from '../shared/pricing.ts';
 import { clientNetwork } from './http.ts';
+import { turnstileSiteKey, verifyTurnstile, type TurnstileEnv } from './turnstile.ts';
 
-export interface QuotaEnv {
+export interface QuotaEnv extends TurnstileEnv {
   QUOTA?: DurableObjectNamespace;
 }
 
@@ -18,6 +19,12 @@ const PASS_MS = 7 * 86_400_000;
 export interface QuotaState {
   used: number;
   limit: number;
+}
+
+interface QuotaReply extends QuotaState {
+  ok: boolean;
+  /** Passed Turnstile today. */
+  human?: boolean;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -31,12 +38,14 @@ export class Quota {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const { amount = 0, limit, dryRun = false, grant = false, redeem = false } = (await request.json()) as {
+    const { amount = 0, limit, dryRun = false, grant = false, redeem = false, human = false } = (await request.json()) as {
       amount?: number;
       limit: number;
       dryRun?: boolean;
       grant?: boolean;
       redeem?: boolean;
+      /** Marks the key as having passed Turnstile today. */
+      human?: boolean;
     };
     // A one-time pass for up to `limit` characters, such as a scan's free final check: granted once, redeemed once.
     if (grant) {
@@ -55,13 +64,16 @@ export class Quota {
     // Counts kept in characters before credits, under 'usage', are ignored.
     const stored = (await this.state.storage.get<{ day: string; used: number }>('credits')) ?? { day, used: 0 };
     const used = stored.day === day ? stored.used : 0;
+    // Like the allowance, a pass lasts until midnight UTC.
+    const passed = human || (await this.state.storage.get<string>('human')) === day;
     // A first request larger than the whole allowance is still allowed once a day.
     const fits = used === 0 || used + amount <= limit;
-    if (dryRun || !fits) return Response.json({ ok: fits, used, limit });
+    if (dryRun || !fits) return Response.json({ ok: fits, used, limit, human: passed });
+    if (human) await this.state.storage.put('human', day);
     // A negative amount gives back a charge whose model call failed.
     const next = Math.max(0, used + amount);
     await this.state.storage.put('credits', { day, used: next });
-    return Response.json({ ok: true, used: next, limit });
+    return Response.json({ ok: true, used: next, limit, human: passed });
   }
 
   async alarm(): Promise<void> {
@@ -77,7 +89,7 @@ function identities(request: Request): { key: string; limit: number }[] {
   return out;
 }
 
-async function call(env: QuotaEnv, key: string, body: object): Promise<{ ok: boolean; used: number; limit: number }> {
+async function call(env: QuotaEnv, key: string, body: object): Promise<QuotaReply> {
   const stub = env.QUOTA!.get(env.QUOTA!.idFromName(key));
   const res = await stub.fetch('https://quota/', { method: 'POST', body: JSON.stringify(body) });
   return res.json();
@@ -86,21 +98,29 @@ async function call(env: QuotaEnv, key: string, body: object): Promise<{ ok: boo
 /**
  * Charges `amount` credits to the visitor's allowances. Returns the
  * visitor's own (browser) state, or `exceeded` when any allowance is used up.
- * Without the binding (local dev) everything is allowed.
+ * The first charge of the day needs a Turnstile token (x-turnstile header)
+ * unless `exempt` resolves true; without one it returns `unverified` and
+ * charges nothing. Without the binding (local dev) everything is allowed.
  */
 export async function chargeQuota(
   request: Request,
   env: QuotaEnv,
   amount: number,
-): Promise<{ exceeded: boolean; state?: QuotaState; refund: () => Promise<void> }> {
+  exempt: Promise<boolean> = Promise.resolve(false),
+): Promise<{ exceeded: boolean; unverified?: boolean; state?: QuotaState; refund: () => Promise<void> }> {
   const none = async () => {};
   if (!env.QUOTA) return { exceeded: false, refund: none };
   const ids = identities(request);
+  const token = request.headers.get('x-turnstile');
+  const verified = turnstileSiteKey(env) && token ? verifyTurnstile(request, env, token) : Promise.resolve(false);
   // Check every allowance first so a refused request doesn't use up any of them.
   const checks = await Promise.all(ids.map((id) => call(env, id.key, { dryRun: true, amount, limit: id.limit })));
   const blocked = checks.find((c) => !c.ok);
   if (blocked) return { exceeded: true, state: { used: checks[0].used, limit: checks[0].limit }, refund: none };
-  const results = await Promise.all(ids.map((id) => call(env, id.key, { amount, limit: id.limit })));
+  // The browser's own pass counts (the IP's when it sends no ID), so a new browser ID means a new check.
+  const human = await verified;
+  if (turnstileSiteKey(env) && !checks[0].human && !human && !(await exempt)) return { exceeded: false, unverified: true, refund: none };
+  const results = await Promise.all(ids.map((id) => call(env, id.key, { amount, limit: id.limit, human })));
   const first = results[0];
   const refund = async () => {
     await Promise.all(ids.filter((_, i) => results[i].ok).map((id) => call(env, id.key, { amount: -amount, limit: id.limit })));

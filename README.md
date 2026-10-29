@@ -4,7 +4,7 @@ Free online redaction for PDF, images, Word (DOCX), PowerPoint (PPTX), spreadshe
 
 ## How it works
 
-- **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX, PPTX, XLSX and ODS) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP.
+- **Detection:** the browser reads the text out of the file (pdf.js, OCR via Tesseract for images and scanned pages, XML for DOCX, PPTX, XLSX and ODS) and sends only that text to `POST /api/detect`. The Worker asks a Workers AI model for names, addresses, IDs and similar, keeps only strings that really occur in the text, and returns them. Nothing is stored. Requests are rate-limited per IP, and a signed-out browser's first request of the day must pass Cloudflare Turnstile, as does every sign-in email (`TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` Worker secrets; off until both are set).
 - **Matching:** `src/shared/analyze.ts` finds every mention of what the model returned and of the user's own terms, including first or last name alone (`src/shared/names.ts`), and leaves business and helpline contacts unticked. There are no local detection rules: if the AI endpoint fails, the user is told and redacts by hand.
 - **Redaction** happens in the browser. Documents send only extracted text to the server; audio sends 16 kHz mono speech chunks (`/api/transcribe`, MAI-Transcribe-2 on Azure Speech, with Nova-3 for English and Whisper turbo otherwise on Workers AI when Azure fails), so user-facing copy promises "processed, never stored" rather than "never uploaded".
 
