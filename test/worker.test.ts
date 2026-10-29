@@ -152,15 +152,16 @@ test('free allowance is enforced per browser, with a larger shared IP allowance'
       body: JSON.stringify({ text }),
       headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9' },
     });
-  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(20_000)), e);
-  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 20_000, limit: 30_000 });
-  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(20_000)), e)).status, 402);
+  // 3,000 characters to a credit, rounded up.
+  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(17_000)), e);
+  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 6, limit: 10 });
+  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(18_000)), e)).status, 402);
   // Another browser on the same IP still has its own allowance...
-  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(25_000)), e)).status, 200);
+  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(21_000)), e)).status, 200);
   // ...until the IP allowance (5x) runs out.
-  // IP used: 20,000 + 25,000 + 4 x 25,000 = 145,000 of 150,000, so 10,000 more characters don't fit.
-  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(25_000)), e);
-  const res = await worker.fetch(req('device-gggg', 'x'.repeat(10_000)), e);
+  // IP used: 6 + 7 + 4 x 9 = 49 of 50 credits, so 2 more don't fit.
+  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(27_000)), e);
+  const res = await worker.fetch(req('device-gggg', 'x'.repeat(6_000)), e);
   assert.equal(res.status, 402);
   assert.equal(((await res.json()) as { code: string }).code, 'quota');
 });
@@ -180,8 +181,8 @@ test('each scan comes with one free final check, later ones use the allowance', 
   const first = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean };
   assert.equal(first.free, true);
   const second = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean; quota: { used: number } };
-  // 4 characters for the scan, then 3,000 for the paid check.
-  assert.deepEqual([second.free, second.quota.used], [false, 3004]);
+  // 1 credit for the scan, then 1 for the paid check.
+  assert.deepEqual([second.free, second.quota.used], [false, 2]);
   assert.equal(((await (await post('/api/check', { text: 'Jane Doe', checkToken: crypto.randomUUID() })).json()) as { free: boolean }).free, false);
 });
 
@@ -197,10 +198,10 @@ test('a failed model call gives the charge back', async () => {
   e.AI!.run = (async () => {
     throw new Error('model down');
   }) as never;
-  assert.equal((await worker.fetch(req('x'.repeat(100)), e)).status, 502);
+  assert.equal((await worker.fetch(req('x'.repeat(9_000)), e)).status, 502);
   e.AI!.run = run;
   const ok = (await (await worker.fetch(req('x'.repeat(10)), e)).json()) as { quota: { used: number } };
-  assert.equal(ok.quota.used, 10);
+  assert.equal(ok.quota.used, 1);
 });
 
 test('a free final check covers about the size of its scan', async () => {

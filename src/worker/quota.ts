@@ -1,18 +1,16 @@
 // Free daily AI allowance. Each visitor (a random browser ID) and each IP
-// address gets its own Durable Object holding today's character count, so
+// address gets its own Durable Object holding today's credit count, so
 // concurrent requests can't overspend. The IP allowance is larger, so people
 // behind a shared office or mobile network don't block each other, but it
 // still stops someone who clears their browser ID to start over.
 
-import { FREE_CREDITS, CREDIT_CHARS } from '../shared/pricing.ts';
+import { FREE_CREDITS } from '../shared/pricing.ts';
 import { clientNetwork } from './http.ts';
 
 export interface QuotaEnv {
   QUOTA?: DurableObjectNamespace;
 }
 
-// Counted in characters, so a short scan costs less than a whole credit of the day's 10.
-export const FREE_CHARS = FREE_CREDITS * CREDIT_CHARS;
 export const IP_MULTIPLIER = 5;
 // An unused free-check pass is dropped after this, so a scan's Durable Object doesn't keep storage forever.
 const PASS_MS = 7 * 86_400_000;
@@ -54,14 +52,15 @@ export class Quota {
       return Response.json({ ok, used: 0, limit });
     }
     const day = today();
-    const stored = (await this.state.storage.get<{ day: string; used: number }>('usage')) ?? { day, used: 0 };
+    // Counts kept in characters before credits, under 'usage', are ignored.
+    const stored = (await this.state.storage.get<{ day: string; used: number }>('credits')) ?? { day, used: 0 };
     const used = stored.day === day ? stored.used : 0;
     // A first request larger than the whole allowance is still allowed once a day.
     const fits = used === 0 || used + amount <= limit;
     if (dryRun || !fits) return Response.json({ ok: fits, used, limit });
     // A negative amount gives back a charge whose model call failed.
     const next = Math.max(0, used + amount);
-    await this.state.storage.put('usage', { day, used: next });
+    await this.state.storage.put('credits', { day, used: next });
     return Response.json({ ok: true, used: next, limit });
   }
 
@@ -71,7 +70,7 @@ export class Quota {
 }
 
 function identities(request: Request): { key: string; limit: number }[] {
-  const limit = FREE_CHARS;
+  const limit = FREE_CREDITS;
   const out = [{ key: `ip:${clientNetwork(request)}`, limit: limit * IP_MULTIPLIER }];
   const device = request.headers.get('x-device-id');
   if (device && /^[\w-]{8,64}$/.test(device)) out.unshift({ key: `device:${device}`, limit });
@@ -85,7 +84,7 @@ async function call(env: QuotaEnv, key: string, body: object): Promise<{ ok: boo
 }
 
 /**
- * Charges `amount` characters to the visitor's allowances. Returns the
+ * Charges `amount` credits to the visitor's allowances. Returns the
  * visitor's own (browser) state, or `exceeded` when any allowance is used up.
  * Without the binding (local dev) everything is allowed.
  */
