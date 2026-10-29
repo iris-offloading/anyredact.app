@@ -4,8 +4,9 @@ import { scaledCanvas, type Rect } from './types.ts';
 
 // Optional picture redaction: faces, screens, road signs and number plates.
 // A local MediaPipe pass runs in the browser and uploads nothing (models from
-// /models, runtime from the CDN). When the visitor agreed to send the file, a
-// vision model on the server adds what the local pass misses.
+// /models, runtime from the CDN) and covers faces and screens on its own. Road
+// signs and number plates also go to a vision model on the server, once the
+// visitor agreed to send the file.
 // The two .tflite files in static/models are Google's MediaPipe models
 // (Apache-2.0), from storage.googleapis.com/mediapipe-models.
 
@@ -19,6 +20,13 @@ export const VISUAL_LABELS: Record<VisualKind, string> = {
   sign: 'Road signs',
   plate: 'Number plates',
 };
+
+// Found on this device for free. The rest need the server's vision model, one credit a page.
+const LOCAL_KINDS: VisualKind[] = ['face', 'screen'];
+
+export function aiKinds(kinds: Set<VisualKind>): Set<VisualKind> {
+  return new Set([...kinds].filter((k) => !LOCAL_KINDS.includes(k)));
+}
 
 export interface VisualHit {
   kind: VisualKind;
@@ -150,6 +158,28 @@ function scan(canvas: HTMLCanvasElement, levels: number[], detect: (c: HTMLCanva
   return out;
 }
 
+// A face takes up less than a tenth of a passport or ID page scan, and the faded
+// second portrait beside the photo even less, so faces get a finer zoom level too.
+// That level also sees faces in text and patterns, so each of its hits must be found
+// again, centred and with confidence, in a crop twice its size.
+const FINE_LEVEL = 8;
+const FINE_CONFIRM = 0.7;
+
+function confirmed(face: FaceDetector, canvas: HTMLCanvasElement, r: Rect): boolean {
+  const side = Math.max(r.w, r.h) * 2;
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.max(1, Math.round(side));
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(canvas, r.x + r.w / 2 - side / 2, r.y + r.h / 2 - side / 2, side, side, 0, 0, c.width, c.height);
+  return face.detect(c).detections.some((d) => {
+    const b = d.boundingBox;
+    const centre = b && Math.abs(b.originX + b.width / 2 - c.width / 2) < c.width / 4 && Math.abs(b.originY + b.height / 2 - c.height / 2) < c.height / 4;
+    return centre && (d.categories[0]?.score ?? 0) >= FINE_CONFIRM;
+  });
+}
+
 /** Finds faces, screens and stop signs on a page bitmap, without uploading it. */
 export async function detectVisual(canvas: HTMLCanvasElement, kinds: Set<VisualKind>): Promise<VisualHit[]> {
   if (!kinds.size) return [];
@@ -161,6 +191,9 @@ export async function detectVisual(canvas: HTMLCanvasElement, kinds: Set<VisualK
     hits.push(
       // The model's box covers eyes to chin; grow it to take in hair and ears.
       ...scan(canvas, [1, 2, 4], (c) => face.detect(c).detections, (d, rect) => ({ kind: 'face', rect: pad(rect, 0.3, width, height), score: d.categories[0]?.score ?? 0 })),
+      ...scan(canvas, [FINE_LEVEL], (c) => face.detect(c).detections, (d, rect) => ({ kind: 'face', rect, score: d.categories[0]?.score ?? 0 }))
+        .filter((hit) => confirmed(face, canvas, hit.rect))
+        .map((hit) => ({ ...hit, rect: pad(hit.rect, 0.3, width, height) })),
     );
   }
   if (objectModel) {
@@ -176,7 +209,7 @@ export async function detectVisual(canvas: HTMLCanvasElement, kinds: Set<VisualK
 
 const AI_MAX_SIDE = 1280;
 
-/** Asks the server's vision model for the same regions, plus number plates and other signs. */
+/** Asks the server's vision model for road signs and number plates. */
 export async function detectVisualAi(canvas: HTMLCanvasElement, kinds: Set<VisualKind>): Promise<VisualHit[]> {
   if (!kinds.size) return [];
   const small = scaledCanvas(canvas, AI_MAX_SIDE);

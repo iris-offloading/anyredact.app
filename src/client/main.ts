@@ -1,14 +1,15 @@
 import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
 import { h } from './dom.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
-import { detectWithAi, freeCreditsLeft, QuotaError, startJob, type AiEntity } from './ai.ts';
+import { detectWithAi, freeCredits, onHumanCheck, QuotaError, startJob, useHumanToken, type AiEntity } from './ai.ts';
+import { humanCheck, type HumanCheck } from './turnstile.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
-import { highlight, pieces, unitRange } from './highlight.ts';
+import { highlight, pieces, termRanges, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
 import { groupBy, isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
-import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
+import { aiKinds, detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
 
@@ -140,6 +141,12 @@ class App {
   // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
+  // Turnstile above the Upload button, for a signed-out browser's first scan of the day.
+  private human: HumanCheck | null = null;
+  // The consent box's question and price, rewritten when a picture option changes.
+  private consentQuestion: HTMLElement | null = null;
+  private consentCost: HTMLElement | null = null;
+  private freeLeft: number | null = null;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   // Business and public-service contacts start ticked too.
   private redactPublic = store.get('redact-public') === '1';
@@ -182,6 +189,7 @@ class App {
   constructor(private root: HTMLElement) {
     const format = (root.dataset.format as Kind | 'all') || 'all';
     root.textContent = '';
+    onHumanCheck((siteKey) => this.askHuman(siteKey));
 
     this.fileInput = h('input', { type: 'file', accept: ACCEPT[format], className: 'visually-hidden', id: 'file-input' });
     this.fileInput.addEventListener('change', () => this.fileInput.files?.[0] && this.open(this.fileInput.files[0]));
@@ -342,6 +350,27 @@ class App {
       if (f) this.open(f);
       else if (format === 'text' || format === 'all') pasteText(e.clipboardData?.getData('text/plain') ?? '');
     });
+    // A drag can end outside the text, and phones adjust a selection with handles, so selections are also picked up page-wide.
+    document.addEventListener('mouseup', (e) => {
+      // The text's own listeners handle releases inside it.
+      if (![this.textHost, this.extras].some((el) => el.contains(e.target as Node))) this.onSelect(e);
+    });
+    let dragging = false;
+    let settle = 0;
+    document.addEventListener('pointerdown', (e) => (dragging = e.pointerType === 'mouse'));
+    document.addEventListener('pointerup', () => {
+      // The mouseup that follows offers the selection.
+      if (dragging) clearTimeout(settle);
+      dragging = false;
+    });
+    document.addEventListener('selectionchange', () => {
+      clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        const s = getSelection();
+        if (dragging || !s?.rangeCount || s.isCollapsed || !s.getRangeAt(0).intersectsNode(this.preview)) return;
+        this.onSelect();
+      }, 400);
+    });
   }
 
   private addTerm: (t: string) => void = () => {};
@@ -358,9 +387,12 @@ class App {
 
   /** Shows the status at the top of the panel while a file is open, or above the download button while exporting. */
   private say(msg: string, error = false, nearDownload = false) {
-    if (this.workspace.hidden) this.intake.after(this.status);
-    else if (nearDownload) this.download.before(this.status);
-    else this.panelBody.prepend(this.status);
+    // Moving the element restarts the spinner, so it only moves when it is somewhere else.
+    if (this.workspace.hidden) {
+      if (this.intake.nextElementSibling !== this.status) this.intake.after(this.status);
+    } else if (nearDownload) {
+      if (this.download.previousElementSibling !== this.status) this.download.before(this.status);
+    } else if (this.panelBody.firstElementChild !== this.status) this.panelBody.prepend(this.status);
     // Progress messages carry an ellipsis and get a spinner.
     this.status.classList.toggle('busy', !error && msg.includes('…'));
     this.status.hidden = !msg;
@@ -425,6 +457,8 @@ class App {
     this.visualError = null;
     this.consent = 'ask';
     this.consentBox.hidden = true;
+    this.human?.remove();
+    this.human = null;
     this.checkRow.hidden = true;
     this.partialNote.hidden = true;
     this.setFreeCheck(undefined);
@@ -535,7 +569,7 @@ class App {
         this.visualError = 'The on-device picture detector could not start in this browser.';
       }
     }
-    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, kinds) : new Set<VisualKind>();
+    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, aiKinds(kinds)) : new Set<VisualKind>();
     if (ai.size) {
       const pages = doc.pages.slice(0, MAX_AI_PICTURE_PAGES);
       try {
@@ -811,18 +845,18 @@ class App {
     if ((e?.target as Element | null)?.closest?.('.sel-add')) return;
     const range = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0) : null;
     const sel = range?.toString().trim();
-    this.preview.querySelector('.sel-add')?.remove();
+    this.closePicks();
     if (!range || !sel || sel.length < 2 || sel.length > 200 || !this.doc || !hasText(this.doc)) return;
     this.offerPicks(this.selectedSpans(range), sel);
   };
 
   /** Offers to redact a selection at this spot only, or every match of its text. */
   private offerPicks(picks: { unitId: string; start: number; end: number }[], sel: string) {
-    this.preview.querySelector('.sel-add')?.remove();
+    this.closePicks();
     if (!picks.length || sel.trim().length < 2) return;
     const done = (fn: () => void) => () => {
       getSelection()?.removeAllRanges();
-      this.preview.querySelector('.sel-add')?.remove();
+      this.closePicks();
       fn();
     };
     this.textHost.append(
@@ -833,6 +867,15 @@ class App {
         h('button', { type: 'button', className: 'btn', textContent: 'Redact everywhere', onclick: done(() => this.addTerm(sel.trim())) }),
       ),
     );
+    // Marks the other places Redact everywhere covers.
+    if (typeof Highlight === 'undefined') return;
+    const blocks = [...this.preview.querySelectorAll<HTMLElement>('.unit'), ...[...(this.layout?.blocks.values() ?? [])].flat()];
+    CSS.highlights.set('same-text', new Highlight(...blocks.flatMap((b) => termRanges(b, sel))));
+  }
+
+  private closePicks() {
+    this.preview.querySelector('.sel-add')?.remove();
+    if (typeof Highlight !== 'undefined') CSS.highlights.delete('same-text');
   }
 
   /** Character ranges of the selection in each text unit it touches, without surrounding spaces. */
@@ -884,6 +927,8 @@ class App {
   private refreshPreview() {
     const doc = this.doc;
     if (!doc) return;
+    // Redrawing replaces the text a selection was in.
+    this.closePicks();
     for (const e of this.editors) e.draw();
     this.timeline?.draw();
     const loose = this.editors.filter((e) => !e.el.classList.contains('placed'));
@@ -1084,37 +1129,76 @@ class App {
   }
 
   private askConsent(doc: LoadedDoc) {
-    if (!this.consentBox.hidden) return;
     const text = doc.units.map((u) => u.text).join(' ');
     const words = text.split(/\s+/).filter(Boolean).length;
-    const pictures = this.visualKinds.size > 0 && doc.pages.length > 0;
+    // Faces and screens are found on this device, so only the other picture options upload pages.
+    const pictures = aiKinds(this.visualKinds).size > 0 && doc.pages.length > 0;
     const seconds = doc.transcribe ? (doc.audio?.duration ?? 0) : 0;
     if (!words && !pictures && !seconds) {
       this.consentBox.hidden = true;
+      this.human?.remove();
+      this.human = null;
       return;
     }
-    const upload = () => {
-      this.consent = 'yes';
-      this.consentBox.hidden = true;
-      this.checkRow.hidden = false;
-      this.analyze();
-    };
     const images = `${isOffice(doc) ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
     const what = seconds ? `the recording (${clock(seconds)})` : words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
     // Speech runs at about 900 characters a minute, which detection then reads.
     const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
     const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
-    const costLine = h('p', { className: 'hint' }, `${cost}.`);
-    this.consentBox.replaceChildren(
-      h('p', {}, `Upload ${what} to find personal info?`),
-      costLine,
-      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
-    );
+    const costText = (left: number | null) => (left === null ? `${cost}.` : `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`);
+    // Already showing: a picture option changed, so only the wording and price move.
+    if (!this.consentBox.hidden && this.consentQuestion && this.consentCost) {
+      this.consentQuestion.textContent = `Upload ${what} to find personal info?`;
+      this.consentCost.textContent = costText(this.freeLeft);
+      return;
+    }
+    let siteKey: string | undefined;
+    const upload = async () => {
+      // The box stays up until Turnstile passes, in case it wants a click.
+      if (this.human) {
+        button.disabled = true;
+        try {
+          const token = await this.human.token();
+          useHumanToken(async () => token);
+        } catch (err) {
+          if (this.doc !== doc) return;
+          this.say((err as Error).message, true);
+          this.human = humanCheck(slot, siteKey!, true);
+          button.disabled = false;
+          return;
+        }
+        this.human = null;
+        if (this.doc !== doc) return;
+      }
+      this.consent = 'yes';
+      this.consentBox.hidden = true;
+      this.checkRow.hidden = false;
+      this.analyze();
+    };
+    this.freeLeft = null;
+    const costLine = (this.consentCost = h('p', { className: 'hint' }, costText(null)));
+    const question = (this.consentQuestion = h('p', {}, `Upload ${what} to find personal info?`));
+    const slot = h('div', { className: 'human-slot' });
+    const button = h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload });
+    this.consentBox.replaceChildren(question, costLine, slot, button);
     this.consentBox.hidden = false;
-    freeCreditsLeft().then((left) => {
-      if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      costLine.textContent = `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`;
+    freeCredits().then(({ left, turnstile }) => {
+      if (this.doc !== doc || this.consentBox.hidden || this.consentCost !== costLine) return;
+      if (turnstile) this.human = humanCheck(slot, (siteKey = turnstile), true);
+      this.freeLeft = left;
+      // Read the price again: a picture option may have changed it while this was loading.
+      this.askConsent(doc);
     });
+  }
+
+  /** The server asked for Turnstile the page didn't expect: run it in the consent box until it passes. */
+  private askHuman(siteKey: string): Promise<string> {
+    const slot = h('div', { className: 'human-slot' });
+    this.consentBox.replaceChildren(h('p', {}, 'Confirm you are human to continue.'), slot);
+    this.consentBox.hidden = false;
+    return humanCheck(slot, siteKey, true)
+      .token()
+      .finally(() => (this.consentBox.hidden = true));
   }
 
   /** Ticks the final check while the scan's free one is unused, and labels its price. */

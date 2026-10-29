@@ -275,3 +275,58 @@ test('finds private keys the model skipped, with escaped line breaks', async () 
     ],
   });
 });
+
+// Stands in for Cloudflare's siteverify: tokens starting with "ok" pass, once each.
+function fakeTurnstile() {
+  const spent = new Set<string>();
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (!String(url).includes('challenges.cloudflare.com')) return real(url, init);
+    const token = String((init!.body as FormData).get('response'));
+    const success = token.startsWith('ok') && !spent.has(token);
+    spent.add(token);
+    return Response.json({ success });
+  }) as typeof fetch;
+  return () => void (globalThis.fetch = real);
+}
+
+test("a signed-out browser's first scan of the day needs Turnstile", async () => {
+  const restore = fakeTurnstile();
+  try {
+    const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), TURNSTILE_SITE_KEY: 'site', TURNSTILE_SECRET_KEY: 'secret' };
+    const req = (device: string, turnstile?: string) =>
+      new Request('https://anyredact.app/api/detect', {
+        method: 'POST',
+        body: JSON.stringify({ text: 'Jane Doe' }),
+        headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9', ...(turnstile ? { 'x-turnstile': turnstile } : {}) },
+      });
+    const quota = async () =>
+      (await (await worker.fetch(new Request('https://anyredact.app/api/quota', { headers: { 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' } }), e)).json()) as { turnstile?: string };
+    assert.equal((await quota()).turnstile, 'site');
+    const first = await worker.fetch(req('device-aaaa'), e);
+    assert.equal(first.status, 403);
+    assert.deepEqual(await first.json(), { error: 'Please confirm you are human.', code: 'turnstile', siteKey: 'site' });
+    assert.equal((await worker.fetch(req('device-aaaa', 'bad'), e)).status, 403);
+    const passed = await worker.fetch(req('device-aaaa', 'ok-1'), e);
+    assert.equal(passed.status, 200);
+    // Refused requests charged nothing.
+    assert.equal(((await passed.json()) as { quota: { used: number } }).quota.used, 1);
+    // The rest of the day needs no token...
+    assert.equal((await worker.fetch(req('device-aaaa'), e)).status, 200);
+    assert.equal((await quota()).turnstile, undefined);
+    // ...but a new browser ID asks again, and a token works once.
+    assert.equal((await worker.fetch(req('device-bbbb'), e)).status, 403);
+    assert.equal((await worker.fetch(req('device-bbbb', 'ok-1'), e)).status, 403);
+  } finally {
+    restore();
+  }
+});
+
+test('Turnstile stays off until both keys are set', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), TURNSTILE_SITE_KEY: 'site' };
+  const res = await worker.fetch(
+    new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane Doe' }), headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa' } }),
+    e,
+  );
+  assert.equal(res.status, 200);
+});

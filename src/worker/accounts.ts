@@ -3,12 +3,14 @@
 // their SHA-256 hashes are stored.
 import { recentActivity } from './activity.ts';
 import { stripe } from './billing.ts';
+import { loginEmail } from './email.ts';
 import { crossOrigin, hex, json, now, rateLimited, withCookies, type Limiter } from './http.ts';
+import { turnstileRequired, turnstileSiteKey, verifyTurnstile, type TurnstileEnv } from './turnstile.ts';
 
-export interface AccountsEnv {
+export interface AccountsEnv extends TurnstileEnv {
   DB?: D1Database;
   DETECT_LIMITER?: Limiter;
-  EMAIL?: { send(message: { from: string; to: string; subject: string; text: string }): Promise<{ messageId: string }> };
+  EMAIL?: { send(message: { from: string; to: string; subject: string; text: string; html?: string }): Promise<{ messageId: string }> };
   EMAIL_FROM?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
@@ -112,8 +114,7 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
     await env.EMAIL.send({
       from: env.EMAIL_FROM || 'sign-in@anyredact.app',
       to: email,
-      subject: 'Your AnyRedact sign-in link',
-      text: `Click to sign in to AnyRedact:\n\n${link}\n\nThe link works once and expires in ${LOGIN_MINUTES} minutes. If you didn't ask for it, ignore this email.`,
+      ...loginEmail(origin, link, LOGIN_MINUTES),
     });
   } catch (err) {
     console.error('email send failed', (err as { code?: string }).code, (err as Error).message);
@@ -170,7 +171,7 @@ async function planEnding(env: AccountsEnv, subscription: string): Promise<boole
 /** What /api/me returns, also written into the /account page so it renders without a request. */
 export async function me(request: Request, env: AccountsEnv) {
   const user = env.DB ? await currentUser(request, env) : null;
-  if (!user) return { user: null, signIn: { email: !!env.EMAIL, google: !!env.GOOGLE_CLIENT_ID } };
+  if (!user) return { user: null, signIn: { email: !!env.EMAIL, google: !!env.GOOGLE_CLIENT_ID, turnstile: turnstileSiteKey(env) } };
   const planActive = !!user.plan_subscription && user.plan_period_end > now();
   return {
     user: {
@@ -196,8 +197,10 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
   if (path === '/api/auth/email' && request.method === 'POST') {
     if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
     if (await rateLimited(request, env.DETECT_LIMITER, 'login:')) return json({ error: 'Too many requests. Please wait a minute.' }, 429);
-    const { email } = (await request.json().catch(() => ({}))) as { email?: unknown };
+    const { email, turnstile } = (await request.json().catch(() => ({}))) as { email?: unknown; turnstile?: unknown };
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) return json({ error: 'Please enter a valid email address.' }, 400);
+    // Every link needs a fresh pass, so nobody can script sign-in emails to other people.
+    if (turnstileSiteKey(env) && !(await verifyTurnstile(request, env, turnstile))) return turnstileRequired(env, 'Please complete the check below and try again.');
     return sendLoginEmail(env, origin, email.trim().toLowerCase());
   }
 

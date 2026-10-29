@@ -105,12 +105,29 @@ async function download(name) {
       }
     }
   });
+  check((await page.evaluate(() => CSS.highlights.get('same-text')?.size)) === 1, 'selection marks where its text appears');
   await page.click('.sel-add >> text=Redact here');
   await page.waitForFunction(() => [...document.querySelectorAll('.ftext')].some((e) => e.textContent === 'Server'));
+  check(!(await page.evaluate(() => CSS.highlights.has('same-text'))), 'matches cleared once redacted');
   const { path: p } = await download('pick.txt');
   const txt = readFileSync(p, 'utf8');
   const terms = await page.inputValue('textarea[aria-label="Words to always redact"]');
   check(txt.includes('\n██████: ') && !terms, `one spot redacted, no term added: ${JSON.stringify(txt)}`);
+  // A drag released outside the text box still offers the selection.
+  const at = await page.evaluate(() => {
+    const n = document.querySelector('.unit').firstChild;
+    const r = document.createRange();
+    r.setStart(n, 0);
+    r.setEnd(n, 4);
+    const b = r.getBoundingClientRect();
+    return { x: b.x + 1, y: b.y + b.height / 2 };
+  });
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 300, at.y + 600, { steps: 8 });
+  await page.mouse.up();
+  check((await page.locator('.sel-add').count()) === 1, 'drag released outside the text offers to redact');
+  await page.mouse.click(5, 5);
 }
 
 // DOCX
@@ -413,6 +430,66 @@ if (existsSync(fx('sample.ods'))) {
   const svgInfo = await sharp(readFileSync(p)).metadata();
   check(filename === 'chart-redacted.png' && svgInfo.format === 'png' && svgInfo.width === 1600 && !(await page.evaluate(() => window.svgRan)) && !external.length, `svg flattened to ${filename} (${svgInfo.format} ${svgInfo.width}px), no script or external load`);
   page.off('request', onRequest);
+}
+
+// Turned scans and photos: OCR reads them, preview and download come out upright
+{
+  const card = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300"><rect width="100%" height="100%" fill="#fff"/><text x="30" y="110" font-family="Arial" font-size="40">Email: jane.doe@example.com</text><text x="30" y="200" font-family="Arial" font-size="40">Contact bob@corp.io today</text></svg>')).png().toBuffer();
+  // Dark share of a region of the redacted download.
+  const dark = async (file, left, top, width, height) => {
+    const px = await sharp(readFileSync(file)).extract({ left, top, width, height }).greyscale().raw().toBuffer();
+    return px.filter((v) => v < 60).length / px.length;
+  };
+  // "bob@corp.io" sits at about x 175 to 385, y 170 to 205 on the upright card.
+  const region = [175, 170, 210, 35];
+  const cases = [
+    ['upside-down', await sharp(card).rotate(180).png().toBuffer()],
+    ['turned-right', await sharp(card).rotate(90).png().toBuffer()],
+    ['turned-left', await sharp(card).rotate(270).png().toBuffer()],
+    // Pixels stored upside down, EXIF says to turn them: the browser shows it upright.
+    ['exif-turned', await sharp(await sharp(card).rotate(180).jpeg().toBuffer()).withMetadata({ orientation: 3 }).toBuffer()],
+  ];
+  for (const [name, bytes] of cases) {
+    const file = fx(`${name}.${name.startsWith('exif') ? 'jpg' : 'png'}`);
+    writeFileSync(file, bytes);
+    const found = await run('redact-image', file);
+    check(found.some((f) => f.includes('jane.doe@example.com')) && found.some((f) => f.includes('bob@corp.io')), `${name} findings: ${found.join(', ')}`);
+    if (name === 'upside-down') {
+      await page.screenshot({ path: fx('upside-down.png') });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: fx('upside-down-phone.png') });
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
+    const { path: p } = await download(`${name}-out.png`);
+    const { width, height } = await sharp(readFileSync(p)).metadata();
+    const share = await dark(p, ...region);
+    check(width === 800 && height === 300 && share > 0.85, `${name} saved upright (${width}x${height}), box over the email (${Math.round(share * 100)}% dark)`);
+  }
+
+  const pdf = await PDFDocument.create();
+  const scan = await pdf.embedPng(await sharp(card).rotate(180).png().toBuffer());
+  pdf.addPage([800, 300]).drawImage(scan, { x: 0, y: 0, width: 800, height: 300 });
+  writeFileSync(fx('upside-down.pdf'), await pdf.save());
+  const found = await run('redact-pdf', fx('upside-down.pdf'));
+  check(found.some((f) => f.includes('jane.doe@example.com')), `upside-down pdf findings: ${found.join(', ')}`);
+  const { path: p } = await download('upside-down-out.pdf');
+  const [jpg] = [...readFileSync(p).toString('latin1').matchAll(/\xFF\xD8[\s\S]*?\xFF\xD9/g)].map((m) => Buffer.from(m[0], 'latin1'));
+  const s = (await sharp(jpg).metadata()).width / 800;
+  const box = await sharp(jpg).extract({ left: Math.round(175 * s), top: Math.round(170 * s), width: Math.round(210 * s), height: Math.round(35 * s) }).greyscale().raw().toBuffer();
+  const share = box.filter((v) => v < 60).length / box.length;
+  check(share > 0.85, `upside-down pdf saved upright, box over the email (${Math.round(share * 100)}% dark)`);
+
+  // A real-looking scan: a letter on grey paper, slightly skewed, blurred and heavily compressed.
+  await page.setViewportSize({ width: 827, height: 1169 });
+  await page.setContent(`<div style="font:13px 'Times New Roman';padding:70px;line-height:1.5;background:#fff"><p>14 March 2025</p><p>Ms Maria Gonzalez<br>12 Elm Street, Springfield</p>${'<p>Thank you for your letter regarding the outstanding balance on your account. We have reviewed the payments received and can confirm that the amount due has been adjusted. Please contact our office on 415-555-0132 if you have any questions about this statement.</p>'.repeat(3)}<p>Yours sincerely,<br>John Smith</p></div>`);
+  const letter = await sharp(await page.screenshot()).grayscale().linear(0.85, 20).rotate(181.2, { background: '#e8e8e8' }).blur(0.6).jpeg({ quality: 55 }).toBuffer();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { width: lw, height: lh } = await sharp(letter).metadata();
+  const scanned = await PDFDocument.create();
+  scanned.addPage([lw * 0.75, lh * 0.75]).drawImage(await scanned.embedJpg(letter), { x: 0, y: 0, width: lw * 0.75, height: lh * 0.75 });
+  writeFileSync(fx('letter-scan.pdf'), await scanned.save());
+  const letterFound = await run('redact-pdf', fx('letter-scan.pdf'));
+  check(letterFound.some((f) => f.includes('Maria Gonzalez')) && letterFound.some((f) => f.includes('415-555')), `upside-down letter scan findings: ${letterFound.join(', ')}`);
 }
 
 // Subtitles keep their numbering and timings
