@@ -3,35 +3,21 @@ import type { Progress, Rect, Unit } from '../types.ts';
 type TesseractWorker = Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>;
 let workerPromise: Promise<TesseractWorker> | null = null;
 let report: Progress = () => {};
+let checking = false;
 
 function getWorker(): Promise<TesseractWorker> {
   workerPromise ??= import('tesseract.js').then((mod) =>
     // tesseract.js is CommonJS, so the bundle may expose it under `default`.
     (mod.createWorker ?? (mod as unknown as { default: typeof mod }).default.createWorker)('eng', 1, {
       logger: (m: { status: string; progress: number }) => {
-        if (m.status === 'recognizing text') report(`Reading text… ${Math.round(m.progress * 100)}%`);
+        if (checking) report('Checking which way up the page is…');
+        else if (m.status === 'recognizing text') report(`Reading text… ${Math.round(m.progress * 100)}%`);
         else if (m.status.startsWith('loading')) report('Loading the text recognizer (first time only)…');
       },
     }),
   );
   workerPromise.catch(() => (workerPromise = null));
   return workerPromise;
-}
-
-// Orientation detection needs Tesseract's legacy engine and its own model, so it gets a
-// worker of its own, loaded only when a page reads badly.
-let osdPromise: Promise<TesseractWorker> | null = null;
-
-function getOsd(): Promise<TesseractWorker> {
-  osdPromise ??= import('tesseract.js').then((mod) =>
-    (mod.createWorker ?? (mod as unknown as { default: typeof mod }).default.createWorker)('osd', 0, {
-      legacyCore: true,
-      legacyLang: true,
-      logger: (m: { status: string }) => m.status.startsWith('loading') && report('Loading the page turn check (first time only)…'),
-    }),
-  );
-  osdPromise.catch(() => (osdPromise = null));
-  return osdPromise;
 }
 
 interface WordBox {
@@ -77,28 +63,53 @@ export function unturn(r: Rect, quarters: number, W: number, H: number): Rect {
   }
 }
 
-/** Clockwise quarter turns that make the page upright, from Tesseract's orientation detection. */
-async function uprightTurn(canvas: HTMLCanvasElement): Promise<number> {
-  const { data } = await (await getOsd()).detect(canvas);
-  if (data.orientation_degrees == null || (data.orientation_confidence ?? 0) < 1) return 0;
-  return ((data.orientation_degrees / 90) % 4 + 4) % 4;
+/** The part of the canvas holding the words of a read, at most about 1400 x 1000 pixels. */
+function textTile(canvas: HTMLCanvasElement, data: Page): HTMLCanvasElement {
+  const boxes = (data.lines ?? []).flatMap((l) => l.words.map((w) => w.bbox));
+  const [x0, y0, x1, y1] = boxes.length
+    ? [Math.min(...boxes.map((b) => b.x0)), Math.min(...boxes.map((b) => b.y0)), Math.max(...boxes.map((b) => b.x1)), Math.max(...boxes.map((b) => b.y1))]
+    : [0, 0, canvas.width, canvas.height];
+  const w = Math.min(x1 - x0, 1400);
+  const h = Math.min(y1 - y0, 1000);
+  const x = Math.round((x0 + x1 - w) / 2);
+  const y = Math.round((y0 + y1 - h) / 2);
+  const tile = document.createElement('canvas');
+  tile.width = w;
+  tile.height = h;
+  tile.getContext('2d')!.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+  return tile;
 }
+
+const readsWell = (score: number, words: number) => score >= 20 && score >= words * 2;
+const wordCount = (data: Page) => (data.lines ?? []).reduce((n, l) => n + l.words.length, 0);
 
 /**
  * Reads the canvas the way up its text runs. Tesseract only reads upright text, so when the
- * first pass finds little it asks Tesseract's orientation detection which way up the page is,
- * and reads it again turned upright.
+ * first pass reads badly, the part of the page holding text is read turned each other way
+ * (upside down first, the usual case), and the page is read again the first way that reads well.
  */
 async function readUpright(worker: TesseractWorker, canvas: HTMLCanvasElement): Promise<{ data: Page; quarters: number }> {
   const { data } = await worker.recognize(canvas);
   const first = score(data);
-  const words = (data.lines ?? []).reduce((n, l) => n + l.words.length, 0);
-  if (first >= 40 && first >= words * 2) return { data, quarters: 0 };
-  report('Checking which way up the page is…');
-  const quarters = await uprightTurn(canvas).catch((err) => (console.error(err), 0));
-  if (!quarters) return { data, quarters: 0 };
-  const again = (await worker.recognize(turned(canvas, quarters))).data;
-  return score(again) > first ? { data: again, quarters } : { data, quarters: 0 };
+  if (first >= 40 && readsWell(first, wordCount(data))) return { data, quarters: 0 };
+  checking = true;
+  const tile = textTile(canvas, data);
+  let base = 0;
+  let best = { quarters: 0, score: 0 };
+  try {
+    base = score((await worker.recognize(tile)).data);
+    best.score = base;
+    for (const quarters of [2, 1, 3]) {
+      const read = (await worker.recognize(turned(tile, quarters))).data;
+      const s = score(read);
+      if (s > best.score) best = { quarters, score: s };
+      if (readsWell(s, wordCount(read)) && s > base * 2) break;
+    }
+  } finally {
+    checking = false;
+  }
+  if (!best.quarters || best.score < 8 || best.score <= base * 2) return { data, quarters: 0 };
+  return { data: (await worker.recognize(turned(canvas, best.quarters))).data, quarters: best.quarters };
 }
 
 /**

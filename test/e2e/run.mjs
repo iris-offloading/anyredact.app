@@ -478,6 +478,18 @@ if (existsSync(fx('sample.ods'))) {
   const box = await sharp(jpg).extract({ left: Math.round(175 * s), top: Math.round(170 * s), width: Math.round(210 * s), height: Math.round(35 * s) }).greyscale().raw().toBuffer();
   const share = box.filter((v) => v < 60).length / box.length;
   check(share > 0.85, `upside-down pdf saved upright, box over the email (${Math.round(share * 100)}% dark)`);
+
+  // A real-looking scan: a letter on grey paper, slightly skewed, blurred and heavily compressed.
+  await page.setViewportSize({ width: 827, height: 1169 });
+  await page.setContent(`<div style="font:13px 'Times New Roman';padding:70px;line-height:1.5;background:#fff"><p>14 March 2025</p><p>Ms Maria Gonzalez<br>12 Elm Street, Springfield</p>${'<p>Thank you for your letter regarding the outstanding balance on your account. We have reviewed the payments received and can confirm that the amount due has been adjusted. Please contact our office on 415-555-0132 if you have any questions about this statement.</p>'.repeat(3)}<p>Yours sincerely,<br>John Smith</p></div>`);
+  const letter = await sharp(await page.screenshot()).grayscale().linear(0.85, 20).rotate(181.2, { background: '#e8e8e8' }).blur(0.6).jpeg({ quality: 55 }).toBuffer();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { width: lw, height: lh } = await sharp(letter).metadata();
+  const scanned = await PDFDocument.create();
+  scanned.addPage([lw * 0.75, lh * 0.75]).drawImage(await scanned.embedJpg(letter), { x: 0, y: 0, width: lw * 0.75, height: lh * 0.75 });
+  writeFileSync(fx('letter-scan.pdf'), await scanned.save());
+  const letterFound = await run('redact-pdf', fx('letter-scan.pdf'));
+  check(letterFound.some((f) => f.includes('Maria Gonzalez')) && letterFound.some((f) => f.includes('415-555')), `upside-down letter scan findings: ${letterFound.join(', ')}`);
 }
 
 // Subtitles keep their numbering and timings
