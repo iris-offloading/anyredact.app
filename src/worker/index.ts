@@ -9,6 +9,7 @@ import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';
 import { handleTranscribe } from './transcribe.ts';
 import { turnstileSiteKey } from './turnstile.ts';
+import { handleOrient } from './orient.ts';
 import { handleVision } from './vision.ts';
 
 // Durable Object class for the free daily allowance; workerd allows class exports.
@@ -20,6 +21,7 @@ export default {
     if (url.pathname === '/api/detect') return handleDetect(request, env);
     if (url.pathname === '/api/check') return handleCheck(request, env);
     if (url.pathname === '/api/vision') return handleVision(request, env);
+    if (url.pathname === '/api/orient') return handleOrient(request, env);
     if (url.pathname === '/api/transcribe') return handleTranscribe(request, env);
     const account = (await handleAccounts(request, env, url)) ?? (await handleBilling(request, env, url));
     if (account) return account;
