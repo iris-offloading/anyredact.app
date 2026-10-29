@@ -3,12 +3,13 @@
 // their SHA-256 hashes are stored.
 import { recentActivity } from './activity.ts';
 import { stripe } from './billing.ts';
+import { loginEmail } from './email.ts';
 import { crossOrigin, hex, json, now, rateLimited, withCookies, type Limiter } from './http.ts';
 
 export interface AccountsEnv {
   DB?: D1Database;
   DETECT_LIMITER?: Limiter;
-  EMAIL?: { send(message: { from: string; to: string; subject: string; text: string }): Promise<{ messageId: string }> };
+  EMAIL?: { send(message: { from: string; to: string; subject: string; text: string; html?: string }): Promise<{ messageId: string }> };
   EMAIL_FROM?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
@@ -112,8 +113,7 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
     await env.EMAIL.send({
       from: env.EMAIL_FROM || 'sign-in@anyredact.app',
       to: email,
-      subject: 'Your AnyRedact sign-in link',
-      text: `Click to sign in to AnyRedact:\n\n${link}\n\nThe link works once and expires in ${LOGIN_MINUTES} minutes. If you didn't ask for it, ignore this email.`,
+      ...loginEmail(origin, link, LOGIN_MINUTES),
     });
   } catch (err) {
     console.error('email send failed', (err as { code?: string }).code, (err as Error).message);
