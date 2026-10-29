@@ -16,13 +16,26 @@ export const PUBLISHED = '2026-10-27';
 export const GUIDES = [
   {
     slug: 'what-is-redaction',
-    title: 'What Is Redaction? Meaning and Examples | AnyRedact',
-    description: 'Redaction removes sensitive details from a document before it is shared. The methods that hold up, the ones that leak, and when you need it.',
-    h1: 'What is redaction?',
-    summary: 'The meaning of the word, the methods that leak, and the situations that call for it.',
+    title: 'What Does Redacted Mean? Redaction Explained | AnyRedact',
+    description: 'Redacted means part of a file was removed before it was shared. What redaction looks like in text, photos and audio, why it is done and when it fails.',
+    h1: 'What does redacted mean?',
+    summary: 'The meaning of the word, what a redacted file looks like, and the methods that leak.',
     body: `
-<p>Redaction is the removal of sensitive details from a document, picture or recording before someone else sees it. The rest of the content stays readable, so the reader still gets what they need, minus the parts they have no right to.</p>
+<p>Redacted means that part of a document, picture or recording was taken out before someone else got to see it. The rest of the content stays readable, so the reader still gets what they need, minus the parts they have no right to. Redaction is the act of doing that, and a redacted copy is the version that gets handed over.</p>
 <p>The word comes from legal and government work, where court filings and released records have names, account numbers and other private details blacked out. Today it applies to any file: a screenshot sent to a support team, a spreadsheet handed to a contractor, a call recording used for training.</p>
+
+<h2>Where the word comes from</h2>
+<p>Redact goes back to the Latin <em>redigere</em>, to bring back or reduce. For centuries the English word meant to put a text into shape for publication, and an editor could be called a redactor. The sense of cutting out confidential parts took over in the twentieth century, as governments began releasing classified papers with passages withheld. When people now say a line was redacted, they mean it was removed, not edited.</p>
+
+<h2>What a redacted file looks like</h2>
+<p>The mark depends on the medium, but it always tells the reader that something used to be there:</p>
+<ul>
+<li><strong>Text documents.</strong> Solid black bars over words, or placeholders like [PERSON] or [ACCOUNT] where they stood. Released government papers sometimes print an exemption code next to the bar, citing the rule that allowed the removal. <a href="/redact-pdf">PDF</a>, <a href="/redact-word">Word</a> and <a href="/redact-text">plain text</a> files work this way.</li>
+<li><strong>Spreadsheets.</strong> Masked cell values, with the column headings left so the table still makes sense. See the <a href="/redact-excel">spreadsheet tool</a>.</li>
+<li><strong>Photos and scans.</strong> Boxes over faces, number plates, signatures, ID numbers and screens in the background, plus removal of the location data stored inside the image. See the <a href="/redact-image">image tool</a>.</li>
+<li><strong>Audio.</strong> A beep or silence over a spoken name or card number, with the matching words masked in the transcript. See the <a href="/redact-audio">audio tool</a>.</li>
+<li><strong>Video.</strong> Blurred or blocked faces and plates that follow the person or car from frame to frame, with the soundtrack treated like audio.</li>
+</ul>
 
 <h2>Redaction, deletion and anonymisation</h2>
 ${redactionKindsDiagram()}
@@ -50,15 +63,36 @@ ${redactionKindsDiagram()}
 <li>Is checked afterwards, by searching the output for the removed terms.</li>
 </ol>
 
+<h2>Why information gets redacted</h2>
+<ul>
+<li><strong>Privacy law.</strong> Rules such as GDPR in Europe and HIPAA for US health records require organisations to protect personal data, including when they disclose records to someone else.</li>
+<li><strong>Legal privilege.</strong> Advice between a lawyer and a client can be withheld from documents produced in a lawsuit, so mixed emails have those passages cut.</li>
+<li><strong>Court rules.</strong> Many courts require parties to mask identity numbers, birth dates, financial account numbers and the names of children in public filings.</li>
+<li><strong>Public records.</strong> Freedom of information laws open government files to the public, with listed exemptions for things like third-party privacy and ongoing investigations.</li>
+<li><strong>Security and trade secrets.</strong> Classified details, prices, supplier terms, passwords and API keys are kept back even when the rest of a document can go out.</li>
+</ul>
+
 <h2>When people redact</h2>
 <ul>
 <li>Answering a <a href="/guides/gdpr-subject-access-request-redaction">data subject access request</a> or a freedom of information request.</li>
 <li>Filing court documents or sharing evidence.</li>
-<li>Sending bank statements, payslips or ID to a landlord or lender, with the irrelevant parts removed.</li>
+<li>Sending <a href="/guides/how-to-redact-a-bank-statement">bank statements</a>, payslips or ID to a landlord or lender, with the irrelevant parts removed.</li>
 <li>Posting screenshots, bug reports or logs in public places.</li>
 <li>Giving datasets or recordings to vendors, researchers or AI tools.</li>
 </ul>
 <p>The <a href="/guides/personal-information-checklist">personal information checklist</a> lists what to look for in each case.</p>
+
+<h2>Common questions</h2>
+<h3>Can a redaction be undone?</h3>
+<p>Not if it was done properly: the original characters, pixels or sound are gone from the copy. Redactions are reversed when the removed content was only covered, for example by a drawn box, a highlight or a blur on a short number. The recipient can still object that too much was taken out and ask for a review.</p>
+<h3>Is redacting the same as censoring?</h3>
+<p>Both remove content, but for different reasons. Redaction protects a person, a legal privilege or a secret while releasing the rest of the record. Censorship suppresses content because someone objects to it being seen at all.</p>
+<h3>Who decides what gets redacted?</h3>
+<p>Whoever releases the file. In a company that is usually the privacy, legal or compliance team, in a lawsuit the lawyers under the court's rules, and for personal documents the person sending them. Their choices can be challenged, so they should be able to give a reason for each removal.</p>
+<h3>Is it legal to redact a document before sending it?</h3>
+<p>Usually yes, and it is often required. The exception is a legal duty to produce a complete record, such as a court order or a disclosure obligation in a lawsuit. Removing more than the rules allow there can lead to sanctions.</p>
+<h3>What does "redacted" mean in a text message or online post?</h3>
+<p>People write [redacted] in place of a word they choose not to share, often as a joke, to mimic the look of a declassified file. Nothing was removed from a file in that case; the writer simply left the word out.</p>
 `,
   },
   {
