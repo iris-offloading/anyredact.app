@@ -1,4 +1,4 @@
-import { CHECK_CREDITS, MAX_CHARS, CREDIT_CHARS } from '../shared/pricing.ts';
+import { CHECK_CREDITS, MAX_CHARS } from '../shared/pricing.ts';
 import { chargeUsage, runWithRetry, type Env } from './detect.ts';
 import { json, readAiPost, trialsAllowed } from './http.ts';
 import { grantFreeCheck, redeemFreeCheck } from './quota.ts';
@@ -50,7 +50,7 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
 
   // Each scan's first check is free; later ones cost credits like detection.
   const free = await redeemFreeCheck(env, checkToken, text.length);
-  const quota = free ? null : await chargeUsage(request, env, CHECK_CREDITS * CREDIT_CHARS, 'check');
+  const quota = free ? null : await chargeUsage(request, env, CHECK_CREDITS, 'check');
   if (quota instanceof Response) return quota;
 
   const questions = Object.fromEntries(

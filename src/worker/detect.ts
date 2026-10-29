@@ -224,11 +224,10 @@ export interface Charge {
 }
 
 /**
- * Charges the free daily allowance, then the account's paid credits. Returns a 402
+ * Charges `credits` to the free daily allowance, then the account's paid credits. Returns a 402
  * response when neither covers it. A signed-in account's activity records the cost.
  */
-export async function chargeUsage(request: Request, env: Env, chars: number, kind?: ActivityKind): Promise<Response | Charge> {
-  const credits = creditsFor(chars);
+export async function chargeUsage(request: Request, env: Env, credits: number, kind?: ActivityKind): Promise<Response | Charge> {
   const [user, quota] = await Promise.all([currentUser(request, env), chargeQuota(request, env, credits)]);
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
   if (user && user.credits < 0) {
@@ -270,7 +269,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   if (typeof text !== 'string' || !text.trim()) return json({ entities: [] });
   if (text.length > MAX_CHARS) return json({ error: `Text is too long (max ${MAX_CHARS} characters).` }, 413);
 
-  const quota = await chargeUsage(request, env, text.length);
+  const quota = await chargeUsage(request, env, creditsFor(text.length));
   if (quota instanceof Response) return quota;
 
   const usage: Usage = {};

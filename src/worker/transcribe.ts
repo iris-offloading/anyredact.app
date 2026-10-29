@@ -7,7 +7,7 @@
 // speech. When Azure is not configured or fails, Workers AI takes over: Nova-3
 // for English (outside its default English mode its word times run about 0.7 s
 // late) and Whisper turbo for other languages.
-import { audioCredits, CHUNK_OVERLAP, CHUNK_SECONDS, CREDIT_CHARS, SPEECH_RATE } from '../shared/pricing.ts';
+import { audioCredits, CHUNK_OVERLAP, CHUNK_SECONDS, SPEECH_RATE } from '../shared/pricing.ts';
 import { wordsFromAzure, wordsFromDeepgram, wordsFromWhisper, type Word } from '../shared/transcript.ts';
 import { chargeUsage, runWithRetry, type Env } from './detect.ts';
 import { aiGuard, base64, json } from './http.ts';
@@ -91,7 +91,7 @@ export async function handleTranscribe(request: Request, env: SpeechEnv): Promis
   const seconds = (wav.length - HEADER_BYTES) / (SPEECH_RATE * 2);
 
   // The overlap with the next chunk is not billed, so a full chunk costs CHUNK_SECONDS / 60 credits (with a little slack for rounding).
-  const quota = await chargeUsage(request, env, audioCredits(seconds - CHUNK_OVERLAP - 0.05) * CREDIT_CHARS);
+  const quota = await chargeUsage(request, env, audioCredits(seconds - CHUNK_OVERLAP - 0.05));
   if (quota instanceof Response) return quota;
 
   const asked = new URL(request.url).searchParams.get('language')?.toLowerCase() || null;
