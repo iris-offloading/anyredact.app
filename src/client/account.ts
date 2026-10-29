@@ -356,7 +356,7 @@ function confirmPayment(user: User | null) {
     setTimeout(render, PAID_CHECK_MS);
     return;
   } else {
-    say('Payment received. Your credits will appear shortly.');
+    say('Payment received. Credits not added yet.');
   }
   forgetPaidBase();
   history.replaceState(null, '', '/account');
