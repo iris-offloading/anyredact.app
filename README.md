@@ -40,6 +40,7 @@ npm run dev:local   # builds the site, no Cloudflare login needed; AI detection 
 npm run dev         # uses the real Workers AI binding (needs `wrangler login`)
 npm test            # unit tests
 npm run test:e2e    # with dev:local running; needs Playwright + Chromium installed (and LibreOffice for the ODS check)
+npm run test:fuzz   # with dev:local running: every format's odd and damaged files (test/fuzz/FINDINGS.md)
 npm run typecheck
 npm run deploy
 node scripts/indexnow.mjs   # after a deploy: submit the sitemap URLs to IndexNow
