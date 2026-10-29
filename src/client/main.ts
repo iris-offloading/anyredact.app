@@ -6,7 +6,7 @@ import { humanCheck, type HumanCheck } from './turnstile.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
 import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
-import { highlight, pieces, unitRange } from './highlight.ts';
+import { highlight, pieces, termRanges, unitRange } from './highlight.ts';
 import { clock, Timeline } from './timeline.ts';
 import { groupBy, isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
 import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
@@ -345,6 +345,27 @@ class App {
       const f = e.clipboardData?.files[0];
       if (f) this.open(f);
       else if (format === 'text' || format === 'all') pasteText(e.clipboardData?.getData('text/plain') ?? '');
+    });
+    // A drag can end outside the text, and phones adjust a selection with handles, so selections are also picked up page-wide.
+    document.addEventListener('mouseup', (e) => {
+      // The text's own listeners handle releases inside it.
+      if (![this.textHost, this.extras].some((el) => el.contains(e.target as Node))) this.onSelect(e);
+    });
+    let dragging = false;
+    let settle = 0;
+    document.addEventListener('pointerdown', (e) => (dragging = e.pointerType === 'mouse'));
+    document.addEventListener('pointerup', () => {
+      // The mouseup that follows offers the selection.
+      if (dragging) clearTimeout(settle);
+      dragging = false;
+    });
+    document.addEventListener('selectionchange', () => {
+      clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        const s = getSelection();
+        if (dragging || !s?.rangeCount || s.isCollapsed || !s.getRangeAt(0).intersectsNode(this.preview)) return;
+        this.onSelect();
+      }, 400);
     });
   }
 
@@ -817,18 +838,18 @@ class App {
     if ((e?.target as Element | null)?.closest?.('.sel-add')) return;
     const range = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0) : null;
     const sel = range?.toString().trim();
-    this.preview.querySelector('.sel-add')?.remove();
+    this.closePicks();
     if (!range || !sel || sel.length < 2 || sel.length > 200 || !this.doc || !hasText(this.doc)) return;
     this.offerPicks(this.selectedSpans(range), sel);
   };
 
   /** Offers to redact a selection at this spot only, or every match of its text. */
   private offerPicks(picks: { unitId: string; start: number; end: number }[], sel: string) {
-    this.preview.querySelector('.sel-add')?.remove();
+    this.closePicks();
     if (!picks.length || sel.trim().length < 2) return;
     const done = (fn: () => void) => () => {
       getSelection()?.removeAllRanges();
-      this.preview.querySelector('.sel-add')?.remove();
+      this.closePicks();
       fn();
     };
     this.textHost.append(
@@ -839,6 +860,15 @@ class App {
         h('button', { type: 'button', className: 'btn', textContent: 'Redact everywhere', onclick: done(() => this.addTerm(sel.trim())) }),
       ),
     );
+    // Marks the other places Redact everywhere covers.
+    if (typeof Highlight === 'undefined') return;
+    const blocks = [...this.preview.querySelectorAll<HTMLElement>('.unit'), ...[...(this.layout?.blocks.values() ?? [])].flat()];
+    CSS.highlights.set('same-text', new Highlight(...blocks.flatMap((b) => termRanges(b, sel))));
+  }
+
+  private closePicks() {
+    this.preview.querySelector('.sel-add')?.remove();
+    if (typeof Highlight !== 'undefined') CSS.highlights.delete('same-text');
   }
 
   /** Character ranges of the selection in each text unit it touches, without surrounding spaces. */
@@ -890,6 +920,8 @@ class App {
   private refreshPreview() {
     const doc = this.doc;
     if (!doc) return;
+    // Redrawing replaces the text a selection was in.
+    this.closePicks();
     for (const e of this.editors) e.draw();
     this.timeline?.draw();
     const loose = this.editors.filter((e) => !e.el.classList.contains('placed'));

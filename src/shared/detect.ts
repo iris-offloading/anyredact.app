@@ -103,6 +103,15 @@ function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Matches a term case-insensitively unless asked, with any run of whitespace between its words. */
+export function termRegExp(term: string, caseSensitive = false): RegExp | null {
+  const t = term.trim();
+  if (t.length < 2) return null;
+  const pattern = t.split(/\s+/).map(escapeRe).join('\\s+');
+  const wordy = /^\w/.test(t) && /\w$/.test(t);
+  return new RegExp(wordy ? `(?<![\\w])${pattern}(?![\\w])` : pattern, caseSensitive ? 'g' : 'gi');
+}
+
 /** Finds every occurrence of each term (case-insensitive unless asked, whitespace-tolerant). */
 export function findTerms(
   text: string,
@@ -112,11 +121,8 @@ export function findTerms(
 ): Span[] {
   const spans: Span[] = [];
   for (const term of terms) {
-    const t = term.text.trim();
-    if (t.length < 2) continue;
-    const pattern = t.split(/\s+/).map(escapeRe).join('\\s+');
-    const wordy = /^\w/.test(t) && /\w$/.test(t);
-    const re = new RegExp(wordy ? `(?<![\\w])${pattern}(?![\\w])` : pattern, caseSensitive ? 'g' : 'gi');
+    const re = termRegExp(term.text, caseSensitive);
+    if (!re) continue;
     for (const m of text.matchAll(re)) {
       spans.push({ start: m.index!, end: m.index! + m[0].length, type: term.type, source });
     }
