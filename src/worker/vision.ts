@@ -12,7 +12,7 @@ export const VISION_MODEL = '@cf/qwen/qwen3.8-27b';
 const VISION_OPTIONS = { chat_template_kwargs: { enable_thinking: false } };
 
 export const VISION_KINDS = {
-  face: 'faces, including small, turned or partly hidden ones',
+  face: 'faces, including small, turned or partly hidden ones, and faint one-colour portraits such as the second, see-through photo on passports and ID cards',
   screen: 'screens: monitors, TVs, laptops, tablets and phones',
   sign: 'road and street signs, and house numbers',
   plate: 'vehicle number plates',

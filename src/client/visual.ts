@@ -158,6 +158,28 @@ function scan(canvas: HTMLCanvasElement, levels: number[], detect: (c: HTMLCanva
   return out;
 }
 
+// A face takes up less than a tenth of a passport or ID page scan, and the faded
+// second portrait beside the photo even less, so faces get a finer zoom level too.
+// That level also sees faces in text and patterns, so each of its hits must be found
+// again, centred and with confidence, in a crop twice its size.
+const FINE_LEVEL = 8;
+const FINE_CONFIRM = 0.7;
+
+function confirmed(face: FaceDetector, canvas: HTMLCanvasElement, r: Rect): boolean {
+  const side = Math.max(r.w, r.h) * 2;
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.max(1, Math.round(side));
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(canvas, r.x + r.w / 2 - side / 2, r.y + r.h / 2 - side / 2, side, side, 0, 0, c.width, c.height);
+  return face.detect(c).detections.some((d) => {
+    const b = d.boundingBox;
+    const centre = b && Math.abs(b.originX + b.width / 2 - c.width / 2) < c.width / 4 && Math.abs(b.originY + b.height / 2 - c.height / 2) < c.height / 4;
+    return centre && (d.categories[0]?.score ?? 0) >= FINE_CONFIRM;
+  });
+}
+
 /** Finds faces, screens and stop signs on a page bitmap, without uploading it. */
 export async function detectVisual(canvas: HTMLCanvasElement, kinds: Set<VisualKind>): Promise<VisualHit[]> {
   if (!kinds.size) return [];
@@ -169,6 +191,9 @@ export async function detectVisual(canvas: HTMLCanvasElement, kinds: Set<VisualK
     hits.push(
       // The model's box covers eyes to chin; grow it to take in hair and ears.
       ...scan(canvas, [1, 2, 4], (c) => face.detect(c).detections, (d, rect) => ({ kind: 'face', rect: pad(rect, 0.3, width, height), score: d.categories[0]?.score ?? 0 })),
+      ...scan(canvas, [FINE_LEVEL], (c) => face.detect(c).detections, (d, rect) => ({ kind: 'face', rect, score: d.categories[0]?.score ?? 0 }))
+        .filter((hit) => confirmed(face, canvas, hit.rect))
+        .map((hit) => ({ ...hit, rect: pad(hit.rect, 0.3, width, height) })),
     );
   }
   if (objectModel) {
