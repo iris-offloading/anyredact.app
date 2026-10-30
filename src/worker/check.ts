@@ -71,6 +71,6 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
     console.error('check failed', err);
     if (free) await grantFreeCheck(env, text.length, checkToken as string);
     else await quota?.refund();
-    return json({ error: 'The final check is unavailable right now.' }, 502);
+    return json({ error: 'Final check is temporarily unavailable. Please try again in a moment.' }, 502);
   }
 }

@@ -119,6 +119,6 @@ export async function handleTranscribe(request: Request, env: SpeechEnv): Promis
   } catch (err) {
     console.error('transcription failed', err);
     await quota.refund();
-    return json({ error: 'Transcription is unavailable right now.' }, 502);
+    return json({ error: 'Audio transcription is temporarily unavailable. Please try again in a moment.' }, 502);
   }
 }

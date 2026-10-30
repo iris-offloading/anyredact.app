@@ -85,7 +85,7 @@ async function load(file: File, progress: (m: string) => void, askPassword: (wro
     case 'audio':
       return (await import('./formats/audio.ts')).loadAudio(file, progress);
     default:
-      throw new FileError('This file type is not supported yet. Try PDF, an image, DOCX, PPTX, XLSX, ODS, a text file or audio. Old .doc, .ppt and .xls files need to be saved as .docx, .pptx or .xlsx first.');
+      throw new FileError('This file format isn’t supported yet. Try a PDF, image, Word (.docx), PowerPoint (.pptx), spreadsheet (.xlsx or .ods), text file, or audio recording. Legacy .doc, .ppt, and .xls files need to be saved as .docx, .pptx, or .xlsx first.');
   }
 }
 
@@ -211,7 +211,7 @@ class App {
       }),
       h('span', { className: 'drop-title' }, h('u', {}, 'Choose a file'), ...(touch ? [] : [h('span', { className: 'drop-here' }, ' or drop it here')])),
       ...(touch ? [] : [h('span', { className: 'drop-or' }, 'or paste with ', h('kbd', {}, /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V'))]),
-      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, images, text or audio'),
+      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, images, text, or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, () => drop.classList.remove('over'));
@@ -227,9 +227,9 @@ class App {
     const paste = h(
       'div',
       { className: 'paste' + (format === 'text' || touch ? ' always' : '') },
-      h('label', { for: 'paste-text' }, 'Or paste text'),
+      h('label', { for: 'paste-text' }, 'Or paste text below'),
       pasteArea,
-      h('button', { type: 'button', className: 'btn', textContent: 'Find personal info', onclick: () => pasteText(pasteArea.value) }),
+      h('button', { type: 'button', className: 'btn', textContent: 'Scan for personal info', onclick: () => pasteText(pasteArea.value) }),
     );
 
     this.intake = h('div', { className: 'intake' }, drop, ...(format === 'text' || format === 'all' ? [paste] : []));
@@ -267,11 +267,11 @@ class App {
     this.pictureBox = h(
       'div',
       { hidden: true },
-      h('p', { className: 'panel-label' }, 'In pictures'),
+      h('p', { className: 'panel-label' }, 'In images'),
       pictureChips,
     );
 
-    const termsArea = h('textarea', { rows: 3, placeholder: 'One per line, e.g. a name or project', 'aria-label': 'Words to always redact' });
+    const termsArea = h('textarea', { rows: 3, placeholder: 'One term per line (e.g. a name, project, or ID)', 'aria-label': 'Words to always redact' });
     let termTimer = 0;
     termsArea.addEventListener('input', () => {
       clearTimeout(termTimer);
@@ -403,7 +403,7 @@ class App {
   async open(file: File) {
     if (this.busy) return;
     // Audio is read in pieces, so only its length is capped (in formats/audio.ts).
-    if (kindOf(file) !== 'audio' && file.size > 100 * 1024 * 1024) return this.say('That file is over 100 MB, which is too large to process in the browser.', true);
+    if (kindOf(file) !== 'audio' && file.size > 100 * 1024 * 1024) return this.say('This file is over 100 MB, which is too large to process in your browser.', true);
     this.busy = true;
     this.reset(false);
     this.say(`Opening ${file.name}…`);
@@ -443,7 +443,7 @@ class App {
 
   /** A locked PDF's password, typed under the file box; null when the visitor cancels. The password stays in the browser. */
   private askPassword(wrong: boolean): Promise<string | null> {
-    this.say(wrong ? 'Wrong password. Try again.' : 'This PDF is locked. Enter its password to open it.', wrong);
+    this.say(wrong ? 'Incorrect password. Please try again.' : 'This PDF is password-protected. Enter the password to unlock it.', wrong);
     return new Promise((resolve) => {
       const input = h('input', { type: 'password', autocomplete: 'off', 'aria-label': 'PDF password', required: true });
       const done = (password: string | null) => {
@@ -526,7 +526,7 @@ class App {
     if (this.consent === 'yes' && !this.aiEntities && !this.aiError) {
       const text = doc.units.map((u) => u.text).join('\n\n');
       if (text.trim()) {
-        this.say('Finding names, addresses and other personal details…');
+        this.say('Scanning for names, addresses, and other personal details…');
         try {
           const { entities, checkToken } = await (this.detecting ??= detectWithAi(text));
           if (this.doc === doc) {
@@ -584,7 +584,7 @@ class App {
     if (!kinds.size || !doc.pages.length) return [];
     const local = missingKinds(this.visualLocal, kinds);
     if (local.size) {
-      this.say('Looking for faces and screens on this device…');
+      this.say('Looking for faces and screens on your device…');
       try {
         const found: VisualHit[][] = [];
         for (const p of doc.pages) found[p.index] = await detectVisual(p.canvas, local);
@@ -592,7 +592,7 @@ class App {
         addHits(this.visualLocal, local, found);
       } catch (err) {
         console.warn(err);
-        this.visualError = 'The on-device picture detector could not start in this browser.';
+        this.visualError = 'On-device image detection isn’t available in this browser.';
       }
     }
     const ai = this.consent === 'yes' ? missingKinds(this.visualAi, aiKinds(kinds)) : new Set<VisualKind>();
@@ -601,14 +601,14 @@ class App {
       try {
         const found: VisualHit[][] = [];
         for (const p of pages) {
-          this.say(pages.length > 1 ? `Checking pictures with AI… page ${p.index + 1} of ${pages.length}` : 'Checking the picture with AI…');
+          this.say(pages.length > 1 ? `Scanning images with AI… page ${p.index + 1} of ${pages.length}` : 'Scanning image with AI…');
           found[p.index] = await detectVisualAi(p.canvas, ai);
           if (this.doc !== doc) return [];
         }
         addHits(this.visualAi, ai, found);
       } catch (err) {
         console.warn(err);
-        this.visualError = `${err instanceof Error ? err.message : 'Picture detection failed.'} Showing what this device found; review the pictures carefully.`;
+        this.visualError = `${err instanceof Error ? err.message : 'Image detection failed.'} Showing on-device matches only—please review images carefully.`;
       }
     }
     const out: Finding[] = [];
@@ -651,7 +651,7 @@ class App {
     if (!groups.size && !manual) {
       const visual = this.doc?.pages.length;
       this.list.replaceChildren(
-        h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw boxes, or add words below.' : this.doc?.audio ? 'Nothing detected. Drag on the timeline to bleep a stretch.' : 'Nothing detected. Add words below, or select text in the preview to redact it.'),
+        h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw redaction boxes, or add custom terms below.' : this.doc?.audio ? 'Nothing detected. Drag across the timeline to bleep or mute a section.' : 'Nothing detected. Add custom terms below, or select text in the preview to redact it.'),
       );
       return;
     }
@@ -674,7 +674,7 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.times ? clock(f.times[0]) : f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (isOffice(this.doc) ? `picture ${f.page + 1}` : `p${f.page + 1}`) : '';
+        const where = f.times ? clock(f.times[0]) : f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (isOffice(this.doc) ? `image ${f.page + 1}` : `p${f.page + 1}`) : '';
         const tag = [f.publicHint ? 'public?' : '', where].filter(Boolean).join(', ');
         const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, tag));
         // Only a moving mouse: mouseenter also fires when the list scrolls under a still pointer, and a tap fires it too, so the page jumped.
@@ -685,9 +685,9 @@ class App {
       out.push(h('details', { className: 'group', open: items.length <= 12 }, h('summary', {}, all, ` ${ENTITY_LABELS[type]} `, h('span', { className: 'count' }, `${on}/${items.length}`)), ...rows));
     }
     if (manual && this.timeline) {
-      out.push(h('p', { className: 'manual-count' }, `${manual} stretch${manual > 1 ? 'es' : ''} picked on the timeline. Click one to remove it.`));
+      out.push(h('p', { className: 'manual-count' }, `${manual} section${manual > 1 ? 's' : ''} marked on the timeline. Click any section to remove it.`));
     } else if (manual) {
-      out.push(h('p', { className: 'manual-count' }, `${manual} hand-drawn box${manual > 1 ? 'es' : ''}. Click a box on the preview to remove it.`));
+      out.push(h('p', { className: 'manual-count' }, `${manual} hand-drawn box${manual > 1 ? 'es' : ''}. Click any box on the preview to remove it.`));
     }
     this.list.replaceChildren(...out);
   }
@@ -699,7 +699,7 @@ class App {
     const key = fields.filter((f) => f.key);
     const rest = fields.filter((f) => !f.key);
     const body: HTMLElement[] = [];
-    if (!fields.length) body.push(h('p', { className: 'empty' }, 'None found.'));
+    if (!fields.length) body.push(h('p', { className: 'empty' }, 'No metadata found.'));
     else {
       body.push(dl(key.length ? key : rest));
       if (key.length && rest.length) body.push(h('details', {}, h('summary', {}, 'More fields'), dl(rest)));
@@ -718,7 +718,7 @@ class App {
   }
 
   private async layOut(doc: LoadedDoc) {
-    this.say('Laying out pages…');
+    this.say('Formatting pages…');
     const sheet = h('div', { className: 'sheet' });
     try {
       this.layout = await doc.render!(sheet);
@@ -756,7 +756,7 @@ class App {
       this.cellBar = h('div', { className: 'cell-bar' });
       this.cell = null;
       this.textHost = h('div', {}, this.cellBar);
-      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select a cell or its text to add more.'), this.textHost, host, this.extras);
+      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click any highlight to toggle redaction, or select a cell or text to redact more.'), this.textHost, host, this.extras);
       // The grid reports its own selection; text selection applies to the cell bar and the list under the grid.
       for (const el of [this.textHost, this.extras]) {
         el.addEventListener('mouseup', this.onSelect);
@@ -968,7 +968,7 @@ class App {
     this.timeline?.draw();
     const loose = this.editors.filter((e) => !e.el.classList.contains('placed'));
     const pictures = loose.length
-      ? [h('p', { className: 'hint' }, isOffice(doc) ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...loose.map((e) => e.el)]
+      ? [h('p', { className: 'hint' }, isOffice(doc) ? 'Drag on an image to draw a redaction box, or click a box to toggle or remove it.' : 'Drag on a page to draw a redaction box, or click a box to toggle or remove it.'), ...loose.map((e) => e.el)]
       : [];
     if (!hasText(doc)) {
       if (!this.preview.childElementCount) this.preview.replaceChildren(...pictures);
@@ -982,7 +982,7 @@ class App {
     const { sheet, layout } = this;
     if (sheet && layout) return this.refreshSheet(sheet, layout, byUnit, pictures);
     if (doc.audio && !doc.units.length) {
-      this.textHost.replaceChildren(h('p', { className: 'hint' }, 'Drag on the timeline to bleep a stretch.'));
+      this.textHost.replaceChildren(h('p', { className: 'hint' }, 'Drag across the timeline to bleep or mute a section.'));
       return;
     }
     let section: string | undefined;
@@ -1000,10 +1000,10 @@ class App {
     });
     const text = [
       h('div', { className: 'text-preview' + (isOffice(doc) || doc.kind === 'audio' ? ' flow' : '') }, ...blocks.slice(0, MAX_PREVIEW_BLOCKS)),
-      ...(blocks.length > MAX_PREVIEW_BLOCKS ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX_PREVIEW_BLOCKS} paragraphs; the download covers the whole file.`)] : []),
+      ...(blocks.length > MAX_PREVIEW_BLOCKS ? [h('p', { className: 'hint' }, `Showing the first ${MAX_PREVIEW_BLOCKS} paragraphs in the preview—your download will still include the entire file.`)] : []),
     ];
     if (doc.mountView) this.extras.replaceChildren(...(blocks.length ? text : []));
-    else this.textHost.replaceChildren(h('p', { className: 'hint' }, doc.audio ? 'Click a word to jump there, or a highlight to keep it. Select words to bleep them.' : 'Click a highlight to redact or keep it. Select text to add more.'), ...text, ...pictures);
+    else this.textHost.replaceChildren(h('p', { className: 'hint' }, doc.audio ? 'Click any word to jump to that moment, click a highlight to keep it, or select words to bleep them.' : 'Click any highlight to toggle redaction, or select text to redact more.'), ...text, ...pictures);
     if (!this.timeline) return;
     const els = groupBy(this.textHost.querySelectorAll<HTMLElement>('.w'), (el) => el.dataset.w!);
     this.spoken = doc.units.flatMap((u) => u.words ?? []).map((word, i) => ({ word, els: els.get(String(i)) ?? [] }));
@@ -1045,7 +1045,7 @@ class App {
     });
     const placed = this.editors.some((e) => e.el.classList.contains('placed'));
     this.textHost.replaceChildren(
-      h('p', { className: 'hint' }, placed ? 'Click a highlight or box to redact or keep it. Select text, or drag on a picture, to add more.' : 'Click a highlight to redact or keep it. Select text to add more.'),
+      h('p', { className: 'hint' }, placed ? 'Click any highlight or box to toggle redaction. Select text or drag on an image to redact more.' : 'Click any highlight to toggle redaction, or select text to redact more.'),
       sheet,
       ...(rest.length ? [h('h3', {}, 'Also in this file'), h('div', { className: 'text-preview flow' }, ...rest)] : []),
       ...pictures,
@@ -1130,7 +1130,7 @@ class App {
     try {
       // Ask a second model whether anything sensitive is still readable before handing over the file.
       if (!skipCheck && this.consent === 'yes' && this.checkBox.checked) {
-        this.say('Checking the redacted file for anything left…', false, true);
+        this.say('Running final check for missed details…', false, true);
         try {
           const { left, free } = await checkRemaining(remainingText(doc.units, this.findings, this.boxes), this.checkToken);
           if (this.doc !== doc) return;
@@ -1139,10 +1139,10 @@ class App {
           if (left.length) return this.warnLeft(left, transcript, free);
         } catch (err) {
           console.warn(err);
-          checkNote = err instanceof QuotaError ? ' Not enough credits for the final check, so review the file carefully.' : ' The final check could not run, so review the file carefully.';
+          checkNote = err instanceof QuotaError ? ' Not enough credits for the final check—please review the file carefully.' : ' Couldn’t run the final check—please review the file carefully.';
         }
       }
-      this.say('Preparing your redacted file…', false, true);
+      this.say('Preparing your redacted download…', false, true);
       const { blob, filename } =
         transcript && doc.exportTranscript
           ? await doc.exportTranscript(this.findings, this.boxes)
@@ -1152,8 +1152,8 @@ class App {
       h('a', { href: url, download: filename }).click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
-      if (this.consent !== 'yes') checkNote = ' The final check was skipped because the file was not uploaded, so review it carefully.';
-      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`, false, true);
+      if (this.consent !== 'yes') checkNote = ' Final check skipped because the file wasn’t scanned with AI—please review it carefully.';
+      this.say(`Done! Redacted ${n} item${n === 1 ? '' : 's'} in ${filename}.${checkNote || ' Please open and verify the file before sharing.'}`, false, true);
     } catch (err) {
       console.error(err);
       this.say(err instanceof Error ? err.message : 'Export failed.', true, true);
@@ -1175,15 +1175,15 @@ class App {
       this.human = null;
       return;
     }
-    const images = `${isOffice(doc) ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
-    const what = seconds ? `the recording (${clock(seconds)})` : words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
+    const images = `${isOffice(doc) ? 'embedded image' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
+    const what = seconds ? `this recording (${clock(seconds)})` : words && pictures ? `extracted text and ${images}` : words ? 'extracted text' : images;
     // Speech runs at about 900 characters a minute, which detection then reads.
     const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
     const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
-    const costText = (left: number | null) => (left === null ? `${cost}.` : `${cost}, ${left >= credits ? '' : 'only '}${left} left today.`);
+    const costText = (left: number | null) => (left === null ? `${cost}.` : `${cost} (${left >= credits ? '' : 'only '}${left} free left today).`);
     // Already showing: a picture option changed, so only the wording and price move.
     if (!this.consentBox.hidden && this.consentQuestion && this.consentCost) {
-      this.consentQuestion.textContent = `Upload ${what} to find personal info?`;
+      this.consentQuestion.textContent = `Upload ${what} to scan for personal details?`;
       this.consentCost.textContent = costText(this.freeLeft);
       return;
     }
@@ -1212,7 +1212,7 @@ class App {
     };
     this.freeLeft = null;
     const costLine = (this.consentCost = h('p', { className: 'hint' }, costText(null)));
-    const question = (this.consentQuestion = h('p', {}, `Upload ${what} to find personal info?`));
+    const question = (this.consentQuestion = h('p', {}, `Upload ${what} to scan for personal details?`));
     const slot = h('div', { className: 'human-slot' });
     const button = h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload });
     this.consentBox.replaceChildren(question, costLine, slot, button);
@@ -1229,7 +1229,7 @@ class App {
   /** The server asked for Turnstile the page didn't expect: run it in the consent box until it passes. */
   private askHuman(siteKey: string): Promise<string> {
     const slot = h('div', { className: 'human-slot' });
-    this.consentBox.replaceChildren(h('p', {}, 'Confirm you are human to continue.'), slot);
+    this.consentBox.replaceChildren(h('p', {}, 'Please complete the security check below to continue.'), slot);
     this.consentBox.hidden = false;
     return humanCheck(slot, siteKey, true)
       .token()
@@ -1240,7 +1240,7 @@ class App {
   private setFreeCheck(token: string | undefined) {
     this.checkToken = token;
     this.checkBox.checked = !!token;
-    this.checkRow.replaceChildren(this.checkBox, `Check for anything left (${token ? 'free' : credits(CHECK_CREDITS)})`);
+    this.checkRow.replaceChildren(this.checkBox, `Check for missed details (${token ? 'free' : credits(CHECK_CREDITS)})`);
   }
 
   private warnLeft(left: string[], transcript: boolean, free: boolean) {
@@ -1248,8 +1248,8 @@ class App {
     const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
     this.say('');
     this.warn.replaceChildren(
-      h('p', { className: 'warn-text' }, `The final check thinks some ${what} may still be readable. Look through the preview, tick anything that was missed, or select the text and redact it.`),
-      ...(free ? [h('p', { className: 'warn-text' }, `This check was free. To run it again, tick it above the download button (${credits(CHECK_CREDITS)}).`)] : []),
+      h('p', { className: 'warn-text' }, `Our final check found that some ${what} may still be readable. Review the preview, check anything that was missed, or select text to redact it.`),
+      ...(free ? [h('p', { className: 'warn-text' }, `This check was free. Check the box above the download button to run it again (${credits(CHECK_CREDITS)}).`)] : []),
       h(
         'div',
         { className: 'warn-actions' },
@@ -1265,26 +1265,26 @@ class App {
 const credits = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
 
 function aiFailure(err: unknown, fallback: string): string {
-  if (err instanceof QuotaError) return err.negative ? err.message : `${err.message} They reset tomorrow, or you can buy more under Pricing.`;
+  if (err instanceof QuotaError) return err.negative ? err.message : `${err.message} Free credits reset tomorrow, or you can purchase more under Pricing.`;
   return err instanceof Error ? err.message : fallback;
 }
 
 // Shown when a library fails on a file, instead of its own wording.
 const DAMAGED: Record<Kind, string> = {
-  pdf: 'This PDF could not be read. It may be damaged.',
-  image: 'This picture could not be opened. It may be damaged, or in a format this browser cannot read.',
-  docx: 'This Word file could not be read. It may be damaged.',
-  pptx: 'This PowerPoint file could not be read. It may be damaged.',
-  sheet: 'This spreadsheet could not be read. It may be damaged.',
-  text: 'This file could not be read.',
-  audio: 'This recording could not be read.',
+  pdf: 'Could not open this PDF. The file may be damaged or corrupted.',
+  image: 'Could not open this image. It may be damaged or in a format your browser does not support.',
+  docx: 'Could not open this Word document. The file may be damaged or corrupted.',
+  pptx: 'Could not open this PowerPoint presentation. The file may be damaged or corrupted.',
+  sheet: 'Could not open this spreadsheet. The file may be damaged or corrupted.',
+  text: 'Could not read this file.',
+  audio: 'Could not open this audio recording.',
 };
 
 function openFailure(err: unknown, kind: Kind | null): string {
   if (err instanceof FileError) return err.message;
   // pdf.js names its errors.
-  if ((err as Error)?.name === 'PasswordException') return 'This PDF is locked with a password. Save a copy without the password and try again.';
-  return kind ? DAMAGED[kind] : 'Could not open that file.';
+  if ((err as Error)?.name === 'PasswordException') return 'This PDF is password-protected. Please unlock it or save an unprotected copy and try again.';
+  return kind ? DAMAGED[kind] : 'Could not open this file.';
 }
 
 const root = document.getElementById('tool');

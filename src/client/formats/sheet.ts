@@ -84,7 +84,7 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
     return { zip, book: ods ? await readOds(zip) : await readXlsx(zip) };
   };
   const { book } = await open();
-  const notes = ['Pictures, text boxes and chart titles are not scanned. Author names and file properties are cleared from the download.'];
+  const notes = ['Embedded images, floating text boxes, and chart titles are not scanned. Author names and document properties are removed on download.'];
   const hidden = book.sheets.filter((s) => s.hidden).map((s) => s.name);
   if (hidden.length) notes.push(`Includes hidden sheets: ${hidden.join(', ')}.`);
   const units = book.blocks.map((b) => b.unit);
@@ -105,7 +105,7 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
       const { zip, book } = await open();
       const { changed, redacted } = applyFindings(book.blocks, findings, style);
       await book.finish(changed, redacted);
-      say('Packing spreadsheet…');
+      say('Saving spreadsheet…');
       if (ods) zip.file('mimetype', 'application/vnd.oasis.opendocument.spreadsheet', { compression: 'STORE' });
       const blob = await zip.generateAsync({
         type: 'blob',
@@ -305,7 +305,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
       }
     }
   }
-  if (!blocks.length && !sheets.length) throw new FileError('This workbook has no sheets.');
+  if (!blocks.length && !sheets.length) throw new FileError('This workbook does not contain any worksheets.');
 
   return {
     blocks,

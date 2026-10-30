@@ -238,7 +238,7 @@ export async function chargeUsage(request: Request, env: Env, credits: number, k
   // A refund or dispute after spending leaves the balance negative: no free credits until it is paid off.
   if (user && user.credits < 0) {
     await quota.refund();
-    return json({ error: 'Your credit balance is below zero after a refund or dispute. Buy credits under Account to continue.', code: 'negative', signedIn: true }, 402);
+    return json({ error: 'Your credit balance is negative following a refund or dispute. Purchase credits under Account to continue.', code: 'negative', signedIn: true }, 402);
   }
   const job = jobOf(request);
   if (kind) job.job += `:${kind}`;
@@ -293,6 +293,6 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     console.error('detect failed', err);
     await quota.refund();
     if (trial) return json({ error: String(err), model }, 502);
-    return json({ error: 'AI detection is unavailable right now.' }, 502);
+    return json({ error: 'AI detection is temporarily unavailable. Please try again in a moment.' }, 502);
   }
 }

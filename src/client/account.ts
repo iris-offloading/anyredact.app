@@ -47,7 +47,7 @@ async function checkout(product: Product) {
   say('Opening secure checkout…', 'busy');
   const r = await post('/api/checkout', { product: product.id });
   if (r.url) location.href = r.url;
-  else say(r.error || 'Checkout failed.', true);
+  else say(r.error || 'Could not start checkout. Please try again.', true);
 }
 
 const GOOGLE_G =
@@ -70,7 +70,7 @@ function signInForm(opts: { email: boolean; google: boolean; turnstile?: string 
   const human = opts.turnstile && opts.email ? humanCheck(slot, opts.turnstile) : null;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    say('Sending…');
+    say('Sending sign-in link…', 'busy');
     let turnstile: string | undefined;
     try {
       turnstile = await human?.token();
@@ -78,8 +78,8 @@ function signInForm(opts: { email: boolean; google: boolean; turnstile?: string 
       return say((err as Error).message, true);
     }
     const r = await post('/api/auth/email', { email: email.value, turnstile });
-    if (r.ok) say(`Check ${email.value} for a sign-in link. It expires in 15 minutes.`);
-    else say(r.error || 'Could not send the link.', true);
+    if (r.ok) say(`We sent a sign-in link to ${email.value}. It expires in 15 minutes.`);
+    else say(r.error || 'Could not send the sign-in link. Please try again.', true);
   });
   const google = h(
     'a',
@@ -100,7 +100,7 @@ function signInForm(opts: { email: boolean; google: boolean; turnstile?: string 
     google,
     h('div', { className: 'or' }, 'or'),
     form,
-    ...(!opts.email && !opts.google ? [h('p', { className: 'hint' }, 'Sign-in is being set up and will be available soon.')] : []),
+    ...(!opts.email && !opts.google ? [h('p', { className: 'hint' }, 'Sign-in is currently unavailable on this server.')] : []),
   );
 }
 
@@ -120,7 +120,7 @@ function offer(p: Product, button: string) {
   return h(
     'div',
     { className: 'offer' },
-    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.credits.toLocaleString('en-US')} credits`), h('span', {}, p.monthly ? `${p.credits.toLocaleString('en-US')} credits a month` : 'Paid once')),
+    h('div', {}, h('strong', {}, p.monthly ? p.name : `${p.credits.toLocaleString('en-US')} credits`), h('span', {}, p.monthly ? `${p.credits.toLocaleString('en-US')} credits / month` : 'One-time purchase')),
     h('span', { className: 'offer-price' }, price(p.cents), ...(p.monthly ? [h('small', {}, ' / month')] : [])),
     h('button', { type: 'button', className: 'btn', textContent: button, onclick: () => checkout(p) }),
   );
@@ -134,7 +134,7 @@ function manageButton() {
     onclick: async () => {
       const r = await post('/api/portal');
       if (r.url) location.href = r.url;
-      else say(r.error || 'Could not open billing.', true);
+      else say(r.error || 'Could not open the billing portal.', true);
     },
   });
 }
@@ -150,17 +150,17 @@ function deleteAccount() {
         textContent: 'Delete account',
         onclick: () =>
           row.replaceChildren(
-            h('p', {}, 'Your plan stops now and your credits are lost. This cannot be undone.'),
+            h('p', {}, 'Your subscription will end immediately and any remaining credits will be permanently lost. This cannot be undone.'),
             h('button', {
               type: 'button',
               className: 'btn danger',
               textContent: 'Delete account',
               onclick: async () => {
-                say('Deleting…', 'busy');
+                say('Deleting account…', 'busy');
                 const res = await fetch('/api/me', { method: 'DELETE' });
                 const r = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
                 if (r.ok) location.reload();
-                else say(r.error || 'Could not delete the account.', true);
+                else say(r.error || 'Could not delete your account.', true);
               },
             }),
             h('button', { type: 'button', className: 'btn', textContent: 'Keep account', onclick: ask }),
@@ -201,7 +201,7 @@ function activityRow(a: Activity) {
       case 'image':
         return ['image', 'Image', ''];
       case 'check':
-        return ['check', 'Check for anything left', ''];
+        return ['check', 'Check for missed details', ''];
       case 'credits':
         return ['plus', `Bought ${a.credits.toLocaleString('en-US')} credits`, a.cents ? price(a.cents) : ''];
       case 'free':
@@ -276,7 +276,7 @@ function balance(user: User, free: number | null) {
   const meters = [
     ...(free === null ? [] : [meter('Free today', free, FREE_CREDITS)]),
     sub
-      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft(user), sub.credits, sub.ending ? 'Lapse when the plan ends' : 'Reset each month')
+      ? meter(`${plan?.name ?? 'Monthly'} plan`, planLeft(user), sub.credits, sub.ending ? 'Expires when plan ends' : 'Resets monthly')
       : meter('Monthly plan', 'None', null),
     meter('Credits', user.credits, null, 'Never expire'),
   ];
@@ -299,8 +299,8 @@ function balance(user: User, free: number | null) {
           h(
             'div',
             {},
-            h('div', { className: 'plan-name' }, h('strong', {}, plan?.name ?? 'Monthly'), h('span', { className: sub.ending ? 'pill ending' : 'pill' }, sub.ending ? 'Cancelled' : 'Active')),
-            h('span', { className: 'plan-sub' }, `${sub.credits.toLocaleString('en-US')} credits a month`),
+            h('div', { className: 'plan-name' }, h('strong', {}, plan?.name ?? 'Monthly'), h('span', { className: sub.ending ? 'pill ending' : 'pill' }, sub.ending ? 'Canceled' : 'Active')),
+            h('span', { className: 'plan-sub' }, `${sub.credits.toLocaleString('en-US')} credits / month`),
           ),
           ...(plan ? [h('span', { className: 'plan-price' }, price(plan.cents), h('small', {}, ' / month'))] : []),
         ),
@@ -382,7 +382,7 @@ async function render(initial: Me | null = null) {
   const params = new URLSearchParams(location.search);
   const paid = !!params.get('paid');
   if (params.get('error') === 'google') {
-    say('Google sign-in did not work. Please try again or use email.', true);
+    say('Google sign-in couldn’t be completed. Please try again or sign in with email.', true);
     // Shown once: a reload, or the one after signing out, starts clean.
     params.delete('error');
     history.replaceState(null, '', '/account' + (params.size ? `?${params}` : '') + location.hash);

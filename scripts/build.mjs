@@ -230,7 +230,7 @@ function toolPage(page) {
     ${page.cost ? `<p class="cost">${esc(page.cost(plans))}. <a href="/pricing">${plans.FREE_CREDITS} free credits a day</a></p>` : ''}
   </div>
   <div id="tool" class="tool" data-format="${page.format}" data-hint="${esc(page.hint)}">
-    <noscript><p class="status error">AnyRedact runs in your browser and needs JavaScript enabled.</p></noscript>
+    <noscript><p class="status error">AnyRedact runs in your browser—please enable JavaScript to open and redact files.</p></noscript>
   </div>
 </section>
 <section class="band"><div class="wrap points">${points}</div></section>
@@ -249,10 +249,10 @@ function homeSections(page) {
   const steps = page.steps.map(([t, d]) => `<li><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join('');
   const formats = TOOLS.map((t) => `<a class="card" href="/${t.slug}"><strong>${esc(t.name)}</strong><span>${esc(t.card)}</span></a>`).join('');
   const finds = page.finds.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join('');
-  return `<section class="wrap section"><h2>Redact a file in three steps</h2><ol class="steps">${steps}</ol></section>
-<section class="wrap section"><h2>Pick a format</h2><div class="cards">${formats}</div></section>
-<section class="wrap section"><h2>What the AI looks for</h2><dl class="finds">${finds}</dl></section>
-<section class="wrap section"><h2>Guides</h2>${guideCards(GUIDES.slice(0, 6))}<p class="more"><a href="/guides">All ${GUIDES.length} guides</a></p></section>`;
+  return `<section class="wrap section"><h2>Redact any file in three steps</h2><ol class="steps">${steps}</ol></section>
+<section class="wrap section"><h2>Choose a format</h2><div class="cards">${formats}</div></section>
+<section class="wrap section"><h2>What our AI detects</h2><dl class="finds">${finds}</dl></section>
+<section class="wrap section"><h2>Guides</h2>${guideCards(GUIDES.slice(0, 6))}<p class="more"><a href="/guides">Browse all ${GUIDES.length} guides</a></p></section>`;
 }
 
 function relatedGuides(slug) {
@@ -327,8 +327,8 @@ for (const g of GUIDES) {
 await writeFile(
   path.join(dist, '404.html'),
   layout(
-    { slug: '404', title: 'Page not found | AnyRedact', description: 'Page not found.' },
-    `<article class="wrap solo"><h1>Page not found</h1><p>Try the <a href="/">redaction tool</a> instead.</p></article>`,
+    { slug: '404', title: 'Page not found | AnyRedact', description: 'The page you requested could not be found.' },
+    `<article class="wrap solo"><h1>Page not found</h1><p>That page doesn’t exist—head back to the <a href="/">redaction tool</a> or browse our <a href="/guides">guides</a>.</p></article>`,
   ).replace('<link rel="canonical" href="https://anyredact.app/404">', '<meta name="robots" content="noindex">'),
 );
 
@@ -338,7 +338,7 @@ await writeFile(
     {
       slug: 'account',
       title: 'Account | AnyRedact',
-      description: 'Sign in to see your balance, manage your plan or buy more credits.',
+      description: 'Sign in to check your credit balance, manage your subscription, or buy additional credits.',
       script: accountSrc,
     },
     `<article class="wrap solo"><div id="account"></div></article>`,

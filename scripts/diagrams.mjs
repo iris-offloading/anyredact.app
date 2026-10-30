@@ -109,10 +109,10 @@ function art(kind, stage) {
   return b;
 }
 
-const SUBJECTS = { pdf: 'PDF page', image: 'photo', doc: 'Word page', slide: 'slide', sheet: 'spreadsheet', text: 'text file', audio: 'recording' };
+const SUBJECTS = { pdf: 'PDF page', image: 'photo', doc: 'Word document', slide: 'presentation slide', sheet: 'spreadsheet', text: 'text file', audio: 'audio recording' };
 const stageLabel = (kind, i) => {
   const subject = SUBJECTS[kind];
-  return [`A ${subject} as opened`, `The ${subject} with findings marked`, `The redacted ${subject}`][i];
+  return [`Original ${subject}`, `${subject[0].toUpperCase() + subject.slice(1)} with detected items highlighted`, `Redacted ${subject}`][i];
 };
 export const howItWorks = (kind, steps) =>
   `<ol class="how">${steps
@@ -129,7 +129,7 @@ function layer(x, y, cls) {
 // Grey lines of body text on a page layer.
 const pageLines = (x, y) => `<path class="dg-arrow" d="M${x + 52} ${y + 10}h40M${x + 104} ${y + 10}h50M${x + 30} ${y + 30}h60M${x + 146} ${y + 30}h20"/>`;
 function pdfPanel(x, y, flat, compact = false) {
-  let b = text(x, y + 16, flat ? 'Rebuilt as one image' : 'Box drawn on top', 'dg-title');
+  let b = text(x, y + 16, flat ? 'Flattened to one image' : 'Black box drawn on top', 'dg-title');
   if (flat) {
     const ly = y + (compact ? 44 : 112);
     b += layer(x, ly, 'dg-page') + pageLines(x, ly) + `<path class="dg-bar" d="M${x + 74} ${ly + 12}h70l-10 14h-70z"/>`;
@@ -140,22 +140,22 @@ function pdfPanel(x, y, flat, compact = false) {
     b += layer(x, y + 148, 'dg-page') + pageLines(x, y + 148) + text(x + 214, y + 173, 'Page', 'dg-sub');
   }
   const cy = y + (compact ? 118 : 222);
-  b += text(x, cy, 'Copied out:', 'dg-sub');
+  b += text(x, cy, 'Copied text:', 'dg-sub');
   b += flat
-    ? text(x + 82, cy, 'nothing', 'dg-sub dg-strong')
-    : `<rect class="dg-leak-box" x="${x + 78}" y="${y + 205}" width="92" height="25" rx="6"/>` + text(x + 124, y + 222, 'Jane Smith', 'dg-leak', 'middle');
+    ? text(x + 86, cy, 'nothing', 'dg-sub dg-strong')
+    : `<rect class="dg-leak-box" x="${x + 82}" y="${y + 205}" width="92" height="25" rx="6"/>` + text(x + 128, y + 222, 'Jane Smith', 'dg-leak', 'middle');
   return b;
 }
 export const pdfLayersDiagram = () =>
   figure(
-    'A black box drawn on a PDF sits above a text layer that still says Jane Smith. A page rebuilt as one image has no text to copy.',
+    'A black box drawn on a PDF sits above a live text layer that still contains Jane Smith. A page flattened into a single image leaves no hidden text to copy.',
     { w: 640, h: 240, body: pdfPanel(10, 0, false) + pdfPanel(350, 0, true) },
     { w: 300, h: 390, body: pdfPanel(10, 0, false) + pdfPanel(10, 264, true, true) },
   );
 
 // Guide: a photo file before and after re-encoding.
 function photoFile(x, y, clean) {
-  let b = `<rect class="dg-node" x="${x}" y="${y}" width="270" height="236" rx="12"/>` + text(x + 16, y + 28, clean ? 'Downloaded copy' : 'Original photo', 'dg-title');
+  let b = `<rect class="dg-node" x="${x}" y="${y}" width="270" height="236" rx="12"/>` + text(x + 16, y + 28, clean ? 'Cleaned download' : 'Original photo', 'dg-title');
   b += `<rect class="dg-lane" x="${x + 16}" y="${y + 42}" width="238" height="86" rx="8"/>`;
   b += `<path class="dg-hill" d="M${x + 16} ${y + 110}l60-40 40 26 34-18 104 42V${y + 120}a8 8 0 0 1-8 8H${x + 24}a8 8 0 0 1-8-8z"/><circle class="dg-hill" cx="${x + 216}" cy="${y + 66}" r="10"/>`;
   const rows = [['Location', '48.8584 N, 2.2945 E'], ['Device', 'Phone model, serial'], ['Taken', '2026-05-02 09:14']];
@@ -168,7 +168,7 @@ function photoFile(x, y, clean) {
 }
 export const photoMetadataDiagram = () =>
   figure(
-    'The original photo carries its location, device and time. The downloaded copy keeps the picture and drops those fields.',
+    'The original photo stores GPS coordinates, device info, and timestamp metadata. Re-encoding keeps the image pixels and strips all hidden metadata fields.',
     { w: 640, h: 240, body: photoFile(1, 2, false) + path('M282 120H356') + arrowHead(358, 120, 'right') + text(320, 108, 'Re-encoded', 'dg-sub', 'middle') + photoFile(368, 2, true) },
     { w: 280, h: 560, body: photoFile(5, 2, false) + path('M140 246V310') + arrowHead(140, 312, 'down') + text(150, 284, 'Re-encoded', 'dg-sub') + photoFile(5, 320, true) },
   );
@@ -189,13 +189,13 @@ function sheet(x, y, kind) {
   return b;
 }
 const KINDS = [
-  ['deleted', 'Deletion', 'Whole file gone'],
-  ['redacted', 'Redaction', 'Chosen parts removed'],
-  ['anonymised', 'Anonymisation', 'Nobody can be singled out'],
+  ['deleted', 'Deletion', 'Entire file removed'],
+  ['redacted', 'Redaction', 'Sensitive parts removed'],
+  ['anonymised', 'Anonymization', 'No one can be identified'],
 ];
 export const redactionKindsDiagram = () =>
   figure(
-    'Deletion removes the whole file. Redaction removes chosen parts and leaves visible marks. Anonymisation generalises the data until no one can be singled out.',
+    'Deletion removes the entire file. Redaction removes selected details while leaving visible marks. Anonymization generalizes data until no individual can be identified.',
     {
       w: 640,
       h: 176,
@@ -218,17 +218,17 @@ export const redactionKindsDiagram = () =>
 export const sarTimelineDiagram = () => {
   const wide = (() => {
     let b = `<rect class="dg-span" x="20" y="60" width="300" height="10" rx="5"/><path class="dg-arrow dg-dash" d="M326 65H616"/>`;
-    b += text(170, 48, 'One month', 'dg-title', 'middle') + text(470, 48, 'Up to two more months', 'dg-sub', 'middle');
-    b += [[20, 'Request in'], [320, 'Reply due'], [620, 'Latest with extension']].map(([x, t], i) => `<circle class="${i < 2 ? 'dg-badge' : 'dg-dot'}" cx="${x}" cy="65" r="8"/>` + text(x, 100, t, i < 2 ? 'dg-title' : 'dg-sub', i ? (i === 2 ? 'end' : 'middle') : 'start')).join('');
-    b += text(320, 124, 'Extending? Tell the requester before this date.', 'dg-sub', 'middle');
+    b += text(170, 48, '1 month', 'dg-title', 'middle') + text(470, 48, 'Up to 2 more months', 'dg-sub', 'middle');
+    b += [[20, 'Request received'], [320, 'Response due'], [620, 'Extended deadline']].map(([x, t], i) => `<circle class="${i < 2 ? 'dg-badge' : 'dg-dot'}" cx="${x}" cy="65" r="8"/>` + text(x, 100, t, i < 2 ? 'dg-title' : 'dg-sub', i ? (i === 2 ? 'end' : 'middle') : 'start')).join('');
+    b += text(320, 124, 'Need an extension? Notify the requester before this date.', 'dg-sub', 'middle');
     return { w: 640, h: 140, body: b };
   })();
   const narrow = (() => {
     let b = `<rect class="dg-span" x="15" y="20" width="10" height="100" rx="5"/><path class="dg-arrow dg-dash" d="M20 126V300"/>`;
-    b += [[20, 'Request in', ''], [120, 'Reply due', 'One month later. Extending? Tell the requester before this date.'], [304, 'Latest with extension', 'Up to two more months']]
+    b += [[20, 'Request received', ''], [120, 'Response due', '1 month later. Need an extension? Notify the requester before this date.'], [304, 'Extended deadline', 'Up to 2 additional months for complex requests']]
       .map(([y, t, d], i) => `<circle class="${i < 2 ? 'dg-badge' : 'dg-dot'}" cx="20" cy="${y}" r="8"/>` + text(44, y + 5, t, i < 2 ? 'dg-title' : 'dg-sub') + lines(44, y + 27, d ? wrap(d, 240, DETAIL) : [], 'dg-sub', 17))
       .join('');
     return { w: 300, h: 320, body: b };
   })();
-  return figure('A reply is due one month after the request. It can be extended by up to two more months if the requester is told within the first month.', wide, narrow);
+  return figure('A GDPR subject access request response is due within one month, and may be extended by up to two additional months if you notify the requester within the first month.', wide, narrow);
 };

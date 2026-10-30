@@ -51,7 +51,7 @@ export async function loadPictures(zip: JSZip, folder: string, progress: Progres
       out.unreadable++;
       continue;
     }
-    progress(`Opening pictures… ${out.pictures.length + 1} of ${media.length}`);
+    progress(`Reading embedded images… ${out.pictures.length + 1} of ${media.length}`);
     const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
     let canvas: HTMLCanvasElement;
     try {
@@ -307,7 +307,7 @@ export async function readXml(zip: JSZip, name: string): Promise<Document | null
   const f = zip.file(name);
   if (!f) return null;
   const xml = new DOMParser().parseFromString(xmlText(await f.async('uint8array')), 'application/xml');
-  if (xml.getElementsByTagName('parsererror').length) throw new FileError(`This file has a damaged part (${name}), so it cannot be redacted safely.`);
+  if (xml.getElementsByTagName('parsererror').length) throw new FileError(`This file contains a damaged part (${name}) and cannot be redacted safely.`);
   return xml;
 }
 
@@ -431,7 +431,7 @@ export async function scrubProperties(zip: JSZip) {
 /** The load notes Word and PowerPoint files share. */
 export function officeNotes(zip: JSZip, root: 'word' | 'ppt', unreadable: number, extra: string[] = []): string[] {
   const notes = ['Author names and document properties are removed on download.', ...extra];
-  if (unreadable) notes.push(`${unreadable} picture${unreadable > 1 ? 's' : ''} could not be opened and stay${unreadable > 1 ? '' : 's'} as ${unreadable > 1 ? 'they are' : 'it is'}.`);
+  if (unreadable) notes.push(`${unreadable} embedded image${unreadable > 1 ? 's' : ''} could not be opened and will be left unchanged.`);
   if (Object.keys(zip.files).some((n) => new RegExp(`^${root}/embeddings/[^/]+$`).test(n))) notes.push('Embedded files and chart data are removed on download.');
   return notes;
 }
@@ -443,12 +443,12 @@ export async function packOffice(
 ): Promise<{ blob: Blob; filename: string }> {
   const { root, progress } = opts;
   await dropEmbeddings(zip, opts.parts, root);
-  progress('Redacting pictures…');
+  progress('Redacting embedded images…');
   await writePictures(zip, opts.pictures, opts.findings, opts.marks);
   await scrubRelationships(zip, opts.redacted, new RegExp(`^${root}/.*_rels/.*\\.rels$`));
   await scrubProperties(zip);
   await removeThumbnail(zip);
-  progress(root === 'word' ? 'Packing document…' : 'Packing presentation…');
+  progress(root === 'word' ? 'Saving document…' : 'Saving presentation…');
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: opts.mime });
   return { blob, filename: outputName(opts.name, root === 'word' ? 'docx' : 'pptx') };
 }

@@ -127,11 +127,11 @@ export async function loadPdf(file: File, progress: Progress, askPassword?: AskP
       });
   }
   const doc = await task.promise.catch((err) => {
-    throw cancelled ? new FileError('This PDF is locked with a password.') : err;
+    throw cancelled ? new FileError('This PDF is password-protected. Enter its password to open it.') : err;
   });
   progress('Opening PDF…');
   const notes: string[] = [
-    'Pages are flattened into images when you download, so hidden text, links, form fields and metadata are removed. The result is not text-searchable.',
+    'Each page is flattened into an image on download, permanently removing hidden text, links, form fields, and metadata. The exported PDF will not be text-searchable.',
   ];
   const count = Math.min(doc.numPages, MAX_PAGES);
   if (doc.numPages > MAX_PAGES) notes.push(`Only the first ${MAX_PAGES} of ${doc.numPages} pages were loaded.`);
@@ -179,7 +179,7 @@ export async function loadPdf(file: File, progress: Progress, askPassword?: AskP
     page.cleanup();
   }
   await doc.destroy();
-  if (ocrPages) notes.push(`${ocrPages} scanned page${ocrPages > 1 ? 's were' : ' was'} read with OCR. Check them carefully.`);
+  if (ocrPages) notes.push(`${ocrPages} scanned page${ocrPages > 1 ? 's were' : ' was'} read with OCR—please review ${ocrPages > 1 ? 'them' : 'it'} carefully.`);
 
   return {
     kind: 'pdf',
@@ -192,7 +192,7 @@ export async function loadPdf(file: File, progress: Progress, askPassword?: AskP
       const { PDFDocument } = await import('pdf-lib');
       const out = await PDFDocument.create();
       for (const p of pages) {
-        say(`Writing page ${p.index + 1} of ${pages.length}…`);
+        say(`Building redacted PDF… page ${p.index + 1} of ${pages.length}`);
         const burned = burnBoxes(p.canvas, rectsForPage(p.index, findings, boxes));
         const jpg = await out.embedJpg(await (await canvasToBlob(burned, 'image/jpeg', 0.9)).arrayBuffer());
         const { w, h } = sizes[p.index];

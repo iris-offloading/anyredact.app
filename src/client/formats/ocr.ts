@@ -10,9 +10,9 @@ function getWorker(): Promise<TesseractWorker> {
     // tesseract.js is CommonJS, so the bundle may expose it under `default`.
     (mod.createWorker ?? (mod as unknown as { default: typeof mod }).default.createWorker)('eng', 1, {
       logger: (m: { status: string; progress: number }) => {
-        if (checking) report('Checking which way up the page is…');
+        if (checking) report('Checking page orientation…');
         else if (m.status === 'recognizing text') report(`Reading text… ${Math.round(m.progress * 100)}%`);
-        else if (m.status.startsWith('loading')) report('Loading the text recognizer (first time only)…');
+        else if (m.status.startsWith('loading')) report('Loading OCR engine (first time only)…');
       },
     }),
   );

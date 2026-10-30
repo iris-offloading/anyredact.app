@@ -6,9 +6,9 @@ import { pdfLayersDiagram, photoMetadataDiagram, redactionKindsDiagram, sarTimel
 export const GUIDES_INDEX = {
   slug: 'guides',
   title: 'Redaction Guides and How-Tos | AnyRedact',
-  description: 'Guides to redacting PDFs, Word files, images, spreadsheets, slides, audio and logs, plus what to remove and why cover-up boxes fail.',
+  description: 'Step-by-step guides to redacting PDFs, Word documents, images, Excel spreadsheets, PowerPoint slides, audio, and logs—plus how to avoid common redaction leaks.',
   h1: 'Redaction guides',
-  lead: 'Step-by-step help for each file type, and the background on doing redaction properly.',
+  lead: 'Practical step-by-step tutorials for every file format, plus best practices for permanent, leak-free redaction.',
 };
 
 export const PUBLISHED = '2026-10-27';
@@ -17,622 +17,622 @@ export const GUIDES = [
   {
     slug: 'what-is-redaction',
     title: 'What Does Redacted Mean? Redaction Explained | AnyRedact',
-    description: 'Redacted means part of a file was removed before it was shared. What redaction looks like in text, photos and audio, why it is done and when it fails.',
+    description: 'Redacted means sensitive parts of a document, photo, or recording were permanently removed before sharing. Learn how redaction works and why DIY cover-ups fail.',
     h1: 'What does redacted mean?',
-    summary: 'The meaning of the word, what a redacted file looks like, and the methods that leak.',
+    summary: 'What redaction means, how redacted files look across formats, and why simple cover-up methods leak data.',
     body: `
-<p>Redacted means that part of a document, picture or recording was taken out before someone else got to see it. The rest of the content stays readable, so the reader still gets what they need, minus the parts they have no right to. Redaction is the act of doing that, and a redacted copy is the version that gets handed over.</p>
-<p>The word comes from legal and government work, where court filings and released records have names, account numbers and other private details blacked out. Today it applies to any file: a screenshot sent to a support team, a spreadsheet handed to a contractor, a call recording used for training.</p>
+<p>When a document, image, or recording is <strong>redacted</strong>, sensitive details have been permanently removed before the file is shared. The rest of the record stays intact so the recipient gets the context they need without seeing confidential information they aren’t entitled to view.</p>
+<p>Although the practice originated in legal filings and declassified government records—where names, Social Security numbers, and classified passages are blacked out—it now applies to everyday files: screenshots attached to support tickets, spreadsheets shared with contractors, bank statements sent to landlords, and call recordings used for training.</p>
 
 <h2>Where the word comes from</h2>
-<p>Redact goes back to the Latin <em>redigere</em>, to bring back or reduce. For centuries the English word meant to put a text into shape for publication, and an editor could be called a redactor. The sense of cutting out confidential parts took over in the twentieth century, as governments began releasing classified papers with passages withheld. When people now say a line was redacted, they mean it was removed, not edited.</p>
+<p><em>Redact</em> comes from the Latin <em>redigere</em>, meaning to bring back, collect, or reduce. For centuries in English, redacting simply meant editing or preparing a manuscript for publication. Its modern meaning—removing confidential passages before releasing a document—took hold in the twentieth century as governments began publishing declassified records with sensitive lines blacked out.</p>
 
-<h2>What a redacted file looks like</h2>
-<p>The mark depends on the medium, but it always tells the reader that something used to be there:</p>
+<h2>What redaction looks like in different files</h2>
+<p>How redaction appears depends on the file format, though it almost always leaves a clear cue that information was intentionally withheld:</p>
 <ul>
-<li><strong>Text documents.</strong> Solid black bars over words, or placeholders like [PERSON] or [ACCOUNT] where they stood. Released government papers sometimes print an exemption code next to the bar, citing the rule that allowed the removal. <a href="/redact-pdf">PDF</a>, <a href="/redact-word">Word</a> and <a href="/redact-text">plain text</a> files work this way.</li>
-<li><strong>Spreadsheets.</strong> Masked cell values, with the column headings left so the table still makes sense. See the <a href="/redact-excel">spreadsheet tool</a>.</li>
-<li><strong>Photos and scans.</strong> Boxes over faces, number plates, signatures, ID numbers and screens in the background, plus removal of the location data stored inside the image. See the <a href="/redact-image">image tool</a>.</li>
-<li><strong>Audio.</strong> A beep or silence over a spoken name or card number, with the matching words masked in the transcript. See the <a href="/redact-audio">audio tool</a>.</li>
-<li><strong>Video.</strong> Blurred or blocked faces and plates that follow the person or car from frame to frame, with the soundtrack treated like audio.</li>
+<li><strong>Text documents.</strong> Solid black bars over words, or bracketed placeholders such as <code>[NAME]</code> or <code>[ACCOUNT]</code>. Government Freedom of Information releases often print a legal exemption code beside each bar. Our <a href="/redact-pdf">PDF</a>, <a href="/redact-word">Word</a>, and <a href="/redact-text">plain text</a> tools work this way.</li>
+<li><strong>Spreadsheets.</strong> Sensitive cell values are masked in place while column headers and table structure stay readable. Try our <a href="/redact-excel">Excel &amp; ODS tool</a>.</li>
+<li><strong>Photos and scans.</strong> Solid opaque boxes cover faces, license/number plates, signatures, ID numbers, and background screens, while embedded GPS and camera metadata are stripped out. Try our <a href="/redact-image">image redaction tool</a>.</li>
+<li><strong>Audio recordings.</strong> A tone (bleep) or silence replaces spoken names, addresses, or card numbers, paired with a matching masked transcript. Try our <a href="/redact-audio">audio redaction tool</a>.</li>
+<li><strong>Video.</strong> Opaque boxes or heavy masks track faces and plates frame by frame while spoken details on the audio track are muted or bleeped.</li>
 </ul>
 
-<h2>Redaction, deletion and anonymisation</h2>
+<h2>Redaction vs. deletion vs. anonymization</h2>
 ${redactionKindsDiagram()}
 <ul>
-<li><strong>Deletion</strong> gets rid of a whole file or record.</li>
-<li><strong>Redaction</strong> keeps the file and removes selected parts of it, usually leaving a visible mark (a black bar, a label such as [NAME], or a beep) so the reader knows something was taken out.</li>
-<li><strong>Anonymisation</strong> goes further: a dataset is changed until nobody in it can be identified, even by combining fields. Redacting names alone often falls short of that.</li>
+<li><strong>Deletion</strong> removes an entire file or database record altogether.</li>
+<li><strong>Redaction</strong> preserves the document while removing specific passages, typically leaving visible marks (such as black bars, <code>[NAME]</code> tags, or bleeps) so readers can see where details were withheld.</li>
+<li><strong>Anonymization</strong> transforms an entire dataset so no individual can be re-identified—even by combining indirect fields like age, postal code, and job title. Simply redacting names rarely achieves full anonymization on its own.</li>
 </ul>
 
-<h2>Methods that leave the data behind</h2>
-<p>Most failed redactions look fine on screen. The sensitive text is still in the file, just out of sight:</p>
+<h2>Common cover-up mistakes that still leak data</h2>
+<p>Most high-profile redaction failures look completely blacked out on screen, yet leave the original data intact inside the file:</p>
 <ul>
-<li><strong>Black highlighter or a shape on top.</strong> The words underneath can be selected, copied or found with search. See <a href="/guides/pdf-black-box-mistakes">why black boxes in PDFs fail</a>.</li>
-<li><strong>White or tiny text.</strong> Changing the colour or size hides nothing from a copy and paste.</li>
-<li><strong>Blur and pixelation.</strong> Short strings such as numbers can sometimes be rebuilt by trying every candidate and comparing the blurred result.</li>
-<li><strong>Cropping.</strong> Some apps keep the cropped area inside the file, so it can be restored.</li>
-<li><strong>Forgetting the hidden parts.</strong> Comments, tracked changes, speaker notes, hidden sheets, document properties and photo location data travel with the file.</li>
+<li><strong>Drawing a black box or black highlighter over text.</strong> Underneath the shape, the text can still be selected, copied, or found with search. Read more in <a href="/guides/pdf-black-box-mistakes">why black boxes in PDFs fail</a>.</li>
+<li><strong>Changing text color to white.</strong> White text on a white page is invisible to the eye, but anyone can highlight and paste it in seconds.</li>
+<li><strong>Blurring or pixelating short strings.</strong> Blurred numbers, names, and email addresses can often be reconstructed by comparing candidate strings blurred with the same filter.</li>
+<li><strong>Non-destructive cropping.</strong> Certain editors hide cropped areas off-canvas rather than discarding those pixels, allowing them to be restored later.</li>
+<li><strong>Overlooking hidden metadata.</strong> Review comments, tracked deletions, speaker notes, hidden worksheets, author properties, and photo EXIF GPS coordinates travel silently inside the file.</li>
 </ul>
 
-<h2>What a proper redaction does</h2>
+<h2>What proper redaction requires</h2>
 <ol>
-<li>Replaces the sensitive characters, pixels or sound in the file itself, not in a layer above them.</li>
-<li>Covers every copy: headers, footers, alt text, chart labels, cached values and earlier versions.</li>
-<li>Strips metadata such as author names, GPS coordinates and editing history.</li>
-<li>Is checked afterwards, by searching the output for the removed terms.</li>
+<li>Destroying the underlying characters, pixels, or audio samples inside the file itself—never just placing a visual layer on top.</li>
+<li>Catching secondary copies in headers, footers, alt text, chart caches, pivot tables, and incremental save history.</li>
+<li>Stripping hidden metadata such as author names, GPS coordinates, and revision history.</li>
+<li>Inspecting and searching the exported file afterward to confirm the sensitive values are truly gone.</li>
 </ol>
 
-<h2>Why information gets redacted</h2>
+<h2>Why organizations and individuals redact</h2>
 <ul>
-<li><strong>Privacy law.</strong> Rules such as GDPR in Europe and HIPAA for US health records require organisations to protect personal data, including when they disclose records to someone else.</li>
-<li><strong>Legal privilege.</strong> Advice between a lawyer and a client can be withheld from documents produced in a lawsuit, so mixed emails have those passages cut.</li>
-<li><strong>Court rules.</strong> Many courts require parties to mask identity numbers, birth dates, financial account numbers and the names of children in public filings.</li>
-<li><strong>Public records.</strong> Freedom of information laws open government files to the public, with listed exemptions for things like third-party privacy and ongoing investigations.</li>
-<li><strong>Security and trade secrets.</strong> Classified details, prices, supplier terms, passwords and API keys are kept back even when the rest of a document can go out.</li>
+<li><strong>Data privacy laws.</strong> Regulations like GDPR in Europe and HIPAA in the United States require organizations to safeguard personal and medical data whenever records are disclosed.</li>
+<li><strong>Legal privilege.</strong> Attorney–client advice can be withheld during litigation discovery even when surrounding sections of an email or memo must be produced.</li>
+<li><strong>Court filing rules.</strong> Courts routinely require filers to mask Social Security numbers, dates of birth, financial account numbers, and minors’ names in public dockets.</li>
+<li><strong>Public records requests.</strong> Freedom of Information laws open government records to the public while exempting personal privacy, law enforcement sources, and national security details.</li>
+<li><strong>Security and trade secrets.</strong> API keys, passwords, pricing terms, and vendor contracts can be stripped before sharing logs or business decks externally.</li>
 </ul>
 
-<h2>When people redact</h2>
+<h2>Everyday situations where redaction helps</h2>
 <ul>
-<li>Answering a <a href="/guides/gdpr-subject-access-request-redaction">data subject access request</a> or a freedom of information request.</li>
-<li>Filing court documents or sharing evidence.</li>
-<li>Sending <a href="/guides/how-to-redact-a-bank-statement">bank statements</a>, payslips or ID to a landlord or lender, with the irrelevant parts removed.</li>
-<li>Posting screenshots, bug reports or logs in public places.</li>
-<li>Giving datasets or recordings to vendors, researchers or AI tools.</li>
+<li>Responding to a <a href="/guides/gdpr-subject-access-request-redaction">GDPR data subject access request (SAR)</a> or Freedom of Information request.</li>
+<li>Preparing court exhibits, HR bundles, or legal discovery documents.</li>
+<li>Sharing <a href="/guides/how-to-redact-a-bank-statement">bank statements</a>, pay stubs, or ID scans with a landlord or lender while hiding unrelated transactions.</li>
+<li>Posting screenshots, crash logs, or configuration files in bug trackers or public forums.</li>
+<li>Sanitizing documents, spreadsheets, or transcripts <a href="/guides/redact-before-sharing-with-ai">before pasting them into AI chatbots</a> or sending them to vendors.</li>
 </ul>
-<p>The <a href="/guides/personal-information-checklist">personal information checklist</a> lists what to look for in each case.</p>
+<p>Not sure what to look for? Check our <a href="/guides/personal-information-checklist">personal information checklist</a>.</p>
 
-<h2>Common questions</h2>
-<h3>Can a redaction be undone?</h3>
-<p>Not if it was done properly: the original characters, pixels or sound are gone from the copy. Redactions are reversed when the removed content was only covered, for example by a drawn box, a highlight or a blur on a short number. The recipient can still object that too much was taken out and ask for a review.</p>
-<h3>Is redacting the same as censoring?</h3>
-<p>Both remove content, but for different reasons. Redaction protects a person, a legal privilege or a secret while releasing the rest of the record. Censorship suppresses content because someone objects to it being seen at all.</p>
-<h3>Who decides what gets redacted?</h3>
-<p>Whoever releases the file. In a company that is usually the privacy, legal or compliance team, in a lawsuit the lawyers under the court's rules, and for personal documents the person sending them. Their choices can be challenged, so they should be able to give a reason for each removal.</p>
+<h2>Frequently asked questions</h2>
+<h3>Can a redacted document be un-redacted?</h3>
+<p>Not when redacted properly—the original characters, pixels, or audio samples no longer exist in the exported copy. "Reversed" redactions happen when someone merely covered text with a movable PDF rectangle, black highlighter, or reversible blur. Always keep your unredacted original stored separately in case you need it later.</p>
+<h3>Is redaction the same thing as censorship?</h3>
+<p>Both remove content, but for very different purposes. Redaction withholds narrowly defined personal, privileged, or confidential details so the rest of a document can be safely shared. Censorship suppresses expression or ideas to prevent people from reading or publishing them.</p>
+<h3>Who decides what should be redacted?</h3>
+<p>Whoever is disclosing the file: a privacy or compliance team in an organization, legal counsel following court rules in a lawsuit, or you yourself when sharing personal paperwork. In legal and regulatory contexts, you should be ready to justify each redaction under the applicable rule or exemption.</p>
 <h3>Is it legal to redact a document before sending it?</h3>
-<p>Usually yes, and it is often required. The exception is a legal duty to produce a complete record, such as a court order or a disclosure obligation in a lawsuit. Removing more than the rules allow there can lead to sanctions.</p>
-<h3>What does "redacted" mean in a text message or online post?</h3>
-<p>People write [redacted] in place of a word they choose not to share, often as a joke, to mimic the look of a declassified file. Nothing was removed from a file in that case; the writer simply left the word out.</p>
+<p>In most everyday situations, yes—and privacy laws often require it. The main exception is when you are under a legal obligation to produce an unaltered record, such as a subpoena, court order, or mortgage underwriting check. Removing information without disclosing or justifying it in legal proceedings can result in sanctions.</p>
+<h3>What does "[redacted]" mean in casual messages or social posts?</h3>
+<p>Online, writers often type <code>[redacted]</code> as a playful nod to declassified government memos when skipping a name, company, or spoiler. Nothing was technically stripped from a file—the author simply chose not to type the word.</p>
 `,
   },
   {
     slug: 'pdf-black-box-mistakes',
     title: 'Why Black Boxes in PDFs Fail | AnyRedact',
-    description: 'A rectangle drawn over PDF text leaves the words in the file. Where hidden text survives and a two-minute test for any redacted PDF.',
+    description: 'Drawing a black rectangle over PDF text leaves the underlying words selectable and searchable. Learn where hidden PDF text survives and how to test any file in two minutes.',
     h1: 'Why black boxes in PDFs fail',
     tools: ['redact-pdf'],
-    summary: 'Text under a drawn rectangle can still be copied. Where it hides and how to test a file.',
+    summary: 'Text underneath a drawn PDF rectangle can still be copied out. See where hidden text survives and how to test your files.',
     body: `
-<p>A PDF stores its text and its drawings separately. A black rectangle added with a comment or drawing tool is one more object on the page, painted after the text. Readers see a bar. Anything that reads the text layer (copy and paste, search, screen readers, text extraction tools) still gets the original words.</p>
+<p>A PDF stores text, vector shapes, and images as independent layers on a page. When you draw a black rectangle using a markup or comment tool, the editor simply paints a dark shape above the existing text. Visually, the words disappear—but anything that reads the underlying text layer (copy-and-paste, Ctrl+F search, screen readers, or automated scrapers) still sees every original character.</p>
 ${pdfLayersDiagram()}
 
-<h2>Where hidden text survives</h2>
+<h2>Where hidden text survives inside a PDF</h2>
 <ul>
-<li><strong>Under annotations.</strong> Rectangles, highlights and stamps can be moved or deleted by anyone who opens the file.</li>
-<li><strong>In the OCR layer of a scan.</strong> A scanned page often has invisible text behind the image so it can be searched. Covering the picture leaves that text alone.</li>
-<li><strong>In form fields.</strong> A filled field keeps its value even when a box is drawn over it.</li>
-<li><strong>In earlier versions.</strong> PDFs can be saved incrementally, appending changes to the end of the file, so an older copy of the page may still be inside.</li>
-<li><strong>In bookmarks, link targets, attachments and properties.</strong> None of these appear on the page, and all of them can hold names or addresses.</li>
+<li><strong>Underneath markup annotations.</strong> Drawn rectangles, black highlighter strokes, and stamps sit in an annotation layer that anyone can drag aside, delete, or copy right through.</li>
+<li><strong>In the invisible OCR layer of scanned pages.</strong> Scanners and PDF apps often place an invisible searchable text layer behind the page image. Painting over the image alone leaves that hidden OCR text intact.</li>
+<li><strong>Inside interactive form fields.</strong> Filled PDF form inputs retain their stored field values even if an opaque box is placed on top of them.</li>
+<li><strong>In incremental save history.</strong> Many PDF editors append edits to the end of the file rather than rewriting it cleanly, leaving earlier unredacted versions of a page embedded in the raw bytes.</li>
+<li><strong>In bookmarks, hyperlink URLs, attachments, and metadata.</strong> None of these show up on the printed page, yet all of them routinely carry full names, email addresses, and internal file paths.</li>
 </ul>
 
-<h2>Test a redacted PDF in two minutes</h2>
+<h2>How to test any redacted PDF in two minutes</h2>
 <ol>
-<li>Open it in a browser or PDF reader, press Ctrl+A (Cmd+A on a Mac) and paste into a plain text editor. Anything readable there is still in the file.</li>
-<li>Search the PDF for a word you removed, such as a surname.</li>
-<li>Open the document properties and look at the author, title and keywords.</li>
-<li>Check the attachments or bookmarks panel if your reader has one.</li>
+<li>Open the PDF in your browser or reader, press <strong>Ctrl+A</strong> (or <strong>Cmd+A</strong> on Mac), copy everything, and paste it into a plain text editor. Anything readable there is still inside the PDF.</li>
+<li>Press <strong>Ctrl+F</strong> (or <strong>Cmd+F</strong>) and search for a name or number you redacted.</li>
+<li>Check <strong>Document Properties</strong> for the author, title, subject, and keywords fields.</li>
+<li>Inspect the bookmarks, comments, and attachments panels in your PDF viewer to make sure nothing extra is riding along.</li>
 </ol>
 
-<h2>Redacting so it holds</h2>
-<p>A dedicated redaction tool removes the content under the mark instead of adding a layer. AnyRedact goes one step further and rebuilds each page as an image on download, which drops the text layer, form fields, links, attachments and metadata in one go. <a href="/guides/how-to-redact-a-pdf">How to redact a PDF</a> walks through it.</p>
+<h2>How to redact a PDF permanently</h2>
+<p>True redaction removes the underlying data rather than masking it visually. AnyRedact goes a step further by flattening every page into a fresh bitmap image on export—eliminating the text layer, form fields, annotations, links, attachments, and metadata in a single pass. Follow our step-by-step guide on <a href="/guides/how-to-redact-a-pdf">how to redact a PDF</a> to try it free.</p>
 `,
   },
   {
     slug: 'how-to-redact-a-pdf',
     title: 'How to Redact a PDF for Free | AnyRedact',
-    description: 'Redact a PDF online in three steps: let AI mark names and numbers, review the list, and download a flattened copy with nothing left underneath.',
+    description: 'Redact a PDF online for free in minutes: let AI detect names and account numbers, review every match, and download a flattened PDF with zero hidden text.',
     h1: 'How to redact a PDF',
     tools: ['redact-pdf'],
-    summary: 'From upload to a flattened download, scanned pages included.',
+    summary: 'Go from raw PDF—digital or scanned—to a permanently flattened, clean download.',
     body: `
-<p>These steps use the free <a href="/redact-pdf">PDF redaction tool</a>. They work the same for typed PDFs, scans and exported forms, up to 60 pages per file.</p>
+<p>Follow these steps with our free <a href="/redact-pdf">online PDF redaction tool</a>. The same workflow handles digital PDFs, interactive forms, and scanned documents up to 60 pages per file.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Open the PDF.</strong> Choose it or drag it onto the upload box. Pages appear in the preview, and scanned pages are read with OCR in your browser.</li>
-<li><strong>Agree to the scan.</strong> The text is sent for AI detection only after you confirm. Decline and you can still mark everything by hand.</li>
-<li><strong>Go through the Found list.</strong> Each finding is highlighted on its page. Untick anything that should stay, such as your own company name.</li>
-<li><strong>Add what was missed.</strong> Select text and pick "Redact here" for one spot or "Redact everywhere" for every occurrence. Drag on the page to box out a signature, stamp or photo.</li>
-<li><strong>Download.</strong> Leave "Check for anything left" ticked to have a second model read the result, then save the redacted copy.</li>
+<li><strong>Open your PDF.</strong> Choose a file or drop it onto the upload area. Each page renders in your browser, and any scanned pages without selectable text are read automatically using local OCR.</li>
+<li><strong>Confirm AI detection.</strong> Extracted text is sent for AI detection only after you click <strong>Upload</strong>. Prefer to keep everything local? Skip the upload and draw redaction boxes manually.</li>
+<li><strong>Review the Found list.</strong> Every detected item is highlighted on its page. Uncheck anything that should stay visible, such as your own company name or dates needed for context.</li>
+<li><strong>Add anything else.</strong> Drag directly on any page to draw solid black boxes over signatures, stamps, QR codes, or photos—or list recurring names and IDs under <strong>Always redact</strong>.</li>
+<li><strong>Download your clean PDF.</strong> Leave <strong>Check for missed details</strong> checked to have a second AI model verify the masked text, then save your redacted copy.</li>
 </ol>
 
-<h2>What the download contains</h2>
-<p>Every page is rendered to an image with solid black bars burned in. Text, form fields, links, bookmarks, attachments and document properties are left out, so there is nothing to copy back out.</p>
-<p>The trade-off is that the copy cannot be searched or edited as text. If the recipient needs searchable text, run OCR on the redacted copy afterwards: it can only read what is visible.</p>
+<h2>What you get in the downloaded PDF</h2>
+<p>Every page is flattened into a clean image with solid black redaction boxes burned permanently into the pixels. Underlying text layers, interactive form fields, hyperlinks, bookmarks, embedded attachments, and document metadata are all stripped out—leaving nothing underneath to copy or extract.</p>
+<p>Because each page becomes a flat image, the downloaded PDF is not text-searchable. If a recipient needs searchable text, you can safely run OCR on the exported PDF afterward—it will only see the visible, unredacted text.</p>
 
-<h2>Tips</h2>
+<h2>Practical tips</h2>
 <ul>
-<li>Scans with handwriting or low contrast are harder for OCR. Zoom in and draw boxes over anything the list did not pick up.</li>
-<li>Add recurring names or case numbers under "Always redact" so they are caught on every page.</li>
-<li>Split files over 60 pages and redact each part.</li>
-<li>Company and public service contacts are found but start unticked. Tick "Redact company and public contacts" to remove them too.</li>
+<li>Low-contrast scans and handwritten notes are harder for OCR to read accurately. Zoom in and drag manual boxes over handwritten fields or faint stamps.</li>
+<li>Enter case numbers, internal codes, or unusual spellings under <strong>Always redact</strong> so every page is matched automatically.</li>
+<li>For PDFs longer than 60 pages, split the document into sections first and redact each part separately.</li>
+<li>Business switchboards and public helplines are detected automatically but left unchecked by default. Check <strong>Redact company and public contacts</strong> at the top of the list if you want those removed too.</li>
 </ul>
 `,
   },
   {
     slug: 'how-to-redact-a-word-document',
     title: 'How to Redact a Word Document (DOCX) | AnyRedact',
-    description: 'Redact a .docx without losing its formatting. Covers comments, tracked changes, headers, pictures and author names that Word keeps.',
+    description: 'Redact a Word (.docx) file online without breaking its formatting. Automatically scrub body text, comments, tracked changes, headers, images, and author metadata.',
     h1: 'How to redact a Word document',
     tools: ['redact-word'],
-    summary: 'Keep the formatting while clearing comments, tracked changes and author names.',
+    summary: 'Preserve your Word layout while scrubbing body text, comments, tracked changes, and author names.',
     body: `
-<p>Word has no built-in redaction. Find and Replace changes the body text but misses pictures and leaves the old wording in tracked changes, and Inspect Document removes comments without touching the text. The <a href="/redact-word">Word redaction tool</a> handles both in one pass.</p>
+<p>Microsoft Word doesn’t include a true built-in redaction tool. Using Find &amp; Replace misses text inside images and leaves deleted phrases visible in Track Changes, while Word’s Document Inspector strips comments wholesale without touching sensitive names in the body. Our <a href="/redact-word">Word redaction tool</a> handles all of it in a single pass while keeping your formatting intact.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Open the .docx.</strong> Pages render in the preview much as Word shows them. Old .doc files need saving as .docx first.</li>
-<li><strong>Allow the scan</strong> and wait for the Found list to fill in.</li>
-<li><strong>Review.</strong> Click any highlight to switch it off or on. Text that is not on the page, such as comments and alt text, is listed under "Also in this file".</li>
-<li><strong>Pick a style.</strong> "Black out" swaps each character for a block. "Replace with label" writes [NAME], [EMAIL] and so on, which keeps sentences readable.</li>
-<li><strong>Download</strong> the redacted .docx.</li>
+<li><strong>Open your .docx file.</strong> Your document renders right in the browser with its pages and layout intact. (If you have an older <code>.doc</code> file, save it as <code>.docx</code> in Word, LibreOffice, or Google Docs first.)</li>
+<li><strong>Click Upload to scan</strong> and wait a moment for the <strong>Found</strong> list to populate.</li>
+<li><strong>Review highlights.</strong> Click any highlighted span on the page—or toggle its checkbox in the sidebar—to keep or redact it. Off-page text like comments and image alt text appears below the pages under <strong>Also in this file</strong>.</li>
+<li><strong>Choose a redaction style.</strong> Pick <strong>Black out</strong> to replace characters with solid <code>█</code> blocks, or <strong>Replace with label</strong> to insert clean tags like <code>[NAME]</code> and <code>[EMAIL]</code> so sentences still flow naturally.</li>
+<li><strong>Download</strong> your redacted <code>.docx</code> file.</li>
 </ol>
 
-<h2>Places Word hides text</h2>
+<h2>Hidden places where Word stores text</h2>
 <ul>
-<li>Headers, footers, footnotes and text boxes.</li>
-<li>Comments and the names of their authors.</li>
-<li>Tracked insertions and deletions, including text that was deleted but not accepted.</li>
-<li>Hyperlink addresses, which can contain email addresses or account IDs.</li>
-<li>Charts, and the spreadsheet stored behind each one.</li>
-<li>Pictures, including scanned signatures, and their alt text.</li>
-<li>Document properties: author, last modified by, company and template path.</li>
+<li>Page headers, footers, footnotes, endnotes, and floating text boxes.</li>
+<li>Review comments and the names/initials of everyone who commented.</li>
+<li>Tracked insertions and deletions—including text someone deleted earlier without accepting revisions.</li>
+<li>Hyperlink URLs and <code>mailto:</code> addresses hidden behind link text.</li>
+<li>Charts and the embedded Excel spreadsheets stored behind them.</li>
+<li>Embedded images (such as scanned signatures) and their accessibility alt text.</li>
+<li>Document metadata: author, last modified by, company, manager, custom DMS fields, and template paths.</li>
 </ul>
-<p>All of these are scanned. Embedded files and chart data are removed, and the thumbnail Word saves of the first page is dropped.</p>
+<p>AnyRedact scans all of these locations automatically, strips embedded attachments and chart workbooks, scrubs author names, and removes the cached first-page thumbnail.</p>
 
-<h2>Before sending</h2>
-<p>Open the download in Word, turn on All Markup under Review, and search for a couple of the removed names. Then check File, Info, Properties.</p>
+<h2>Double-check before sending</h2>
+<p>Open your downloaded <code>.docx</code> in Word, switch <strong>Review → Tracking</strong> to <strong>All Markup</strong>, and search for a couple of the redacted names. Finally, glance at <strong>File → Info → Properties</strong> to confirm author fields are blank.</p>
 `,
   },
   {
     slug: 'how-to-redact-a-screenshot',
     title: 'How to Redact a Screenshot or Photo | AnyRedact',
-    description: 'Black out text, faces and number plates in a screenshot or photo, and strip its location data. Works with PNG, JPG, iPhone HEIC, TIFF and more.',
+    description: 'Black out sensitive text, faces, and license/number plates in screenshots or photos—and strip hidden EXIF GPS metadata. Supports PNG, JPG, iPhone HEIC, TIFF, and SVG.',
     h1: 'How to redact a screenshot or photo',
     tools: ['redact-image'],
-    summary: 'Solid boxes over text, faces and plates, with location data stripped.',
+    summary: 'Paint permanent solid boxes over text, faces, and plates while stripping hidden GPS metadata.',
     body: `
-<p>Screenshots leak more than people expect: browser tabs, notification previews, email addresses in a sidebar, the last digits of a card. Photos add faces, house numbers and GPS coordinates. The <a href="/redact-image">image redaction tool</a> deals with all of it.</p>
+<p>Screenshots reveal far more than most people realize: open browser tabs, notification banners, customer emails in a sidebar, session tokens in the address bar, or the last digits of a card. Camera photos add bystanders’ faces, street signs, license plates, and embedded GPS coordinates. Our <a href="/redact-image">image redaction tool</a> cleans all of them in one place.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Paste or upload.</strong> Copy the screenshot and press Ctrl+V (Cmd+V on a Mac) on the page, or choose the image file.</li>
-<li><strong>Let OCR read it.</strong> Text in the picture is read in your browser and then checked by AI once you agree.</li>
-<li><strong>Turn on picture redaction if needed.</strong> Under "In pictures", pick faces, screens, road signs or number plates.</li>
-<li><strong>Fix the boxes.</strong> Untick anything to keep, and drag on the image to cover avatars, QR codes or anything else.</li>
-<li><strong>Download.</strong> HEIC photos come back as JPG.</li>
+<li><strong>Paste or upload your image.</strong> Copy a screenshot and press <strong>Ctrl+V</strong> (or <strong>Cmd+V</strong> on Mac) right on the page, or choose an image file from your device.</li>
+<li><strong>Scan text with OCR + AI.</strong> Built-in OCR reads visible text in your browser, and AI highlights personal details once you click <strong>Upload</strong>.</li>
+<li><strong>Enable visual detection if needed.</strong> Under <strong>In images</strong>, toggle <strong>Faces</strong>, <strong>Screens</strong>, <strong>Road signs</strong>, or <strong>Number plates</strong>.</li>
+<li><strong>Fine-tune the boxes.</strong> Click any box to toggle it off, or drag directly on the image to black out avatars, QR codes, barcodes, or handwritten notes.</li>
+<li><strong>Download your clean image.</strong> iPhone HEIC photos automatically export as widely compatible JPG files.</li>
 </ol>
 
-<h2>Boxes, not blur</h2>
-<p>Blur and pixelation keep a trace of the original. For short values like phone numbers or PINs, that trace can be enough to guess the text. A solid box replaces the pixels, so there is nothing to work back from.</p>
+<h2>Always use solid boxes—never blur</h2>
+<p>Gaussian blur, mosaic filters, and pixelation smear the original pixels in predictable ways. For short strings like phone numbers, email addresses, or amounts, attackers can test candidate text under the same blur filter until the pattern matches. Painting a solid black box overwrites those pixels completely so nothing can be reconstructed.</p>
 
-<h2>Metadata</h2>
-<p>Photos carry EXIF data: where and when they were taken, the camera or phone model and sometimes its serial number. The editor lists what it found, and the download is re-encoded without any of it. More in <a href="/guides/remove-photo-metadata">removing location and camera data from photos</a>.</p>
+<h2>Automatic EXIF &amp; GPS removal</h2>
+<p>Smartphone and camera photos embed EXIF metadata recording the exact GPS coordinates, date and time, phone model, and sometimes lens or body serial numbers. The editor displays any metadata found in your original file and re-encodes the downloaded image from raw pixels so none of those tags carry over. Learn more in <a href="/guides/remove-photo-metadata">how to remove location and camera data from photos</a>.</p>
 
-<h2>Easy to miss</h2>
+<h2>Details people often overlook</h2>
 <ul>
-<li>Reflections in windows, glasses and screens.</li>
-<li>Name badges, parcel labels and post on a desk.</li>
-<li>URLs with session tokens or account IDs in the address bar.</li>
-<li>Profile pictures and user names in chat screenshots.</li>
+<li>Reflections in eyeglasses, windows, or glossy monitor bezels.</li>
+<li>Employee badges, shipping labels, sticky notes, and mail sitting on a desk.</li>
+<li>URLs containing account IDs, reset links, or API tokens in the browser address bar.</li>
+<li>Avatars, @handles, and quoted replies in chat screenshots.</li>
 </ul>
 `,
   },
   {
     slug: 'how-to-redact-an-excel-spreadsheet',
     title: 'How to Redact an Excel Spreadsheet | AnyRedact',
-    description: 'Redact names, emails and account numbers in XLSX and ODS files while keeping styles and formulas. Hidden sheets, comments and caches included.',
+    description: 'Redact names, emails, and account numbers in Excel (XLSX) and ODS workbooks while preserving styles, column widths, and formulas—hidden sheets and caches included.',
     h1: 'How to redact an Excel spreadsheet',
     tools: ['redact-excel'],
-    summary: 'Clear personal data from workbooks without breaking styles, formulas or charts.',
+    summary: 'Scrub personal data from Excel and ODS workbooks without breaking styles, formulas, or charts.',
     body: `
-<p>Deleting a column in Excel is quick, but workbooks keep copies of values in places that are easy to overlook. The <a href="/redact-excel">spreadsheet redaction tool</a> edits the workbook in place, so the layout survives and those copies are cleaned too.</p>
+<p>Deleting a column in Excel feels quick, until a formula breaks or an unredacted copy resurfaces inside a hidden tab or pivot cache. Our <a href="/redact-excel">Excel redaction tool</a> edits workbooks in place—preserving cell formatting and layout while cleaning hidden copies automatically.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Open the .xlsx or .ods file.</strong> The workbook appears in a read-only grid with its sheet tabs.</li>
-<li><strong>Allow the scan.</strong> Findings are highlighted in their cells, and several can sit in one cell.</li>
-<li><strong>Review cell by cell.</strong> Click a highlight to keep or redact it. The cell bar above the grid shows the full text of the selected cell.</li>
-<li><strong>Add what the scan missed</strong> by typing it under "Always redact", or select text in the cell bar.</li>
-<li><strong>Download</strong> the workbook in its original format.</li>
+<li><strong>Open your .xlsx or .ods workbook.</strong> Your spreadsheet loads into an interactive read-only grid complete with worksheet tabs.</li>
+<li><strong>Click Upload to scan.</strong> Personal details are highlighted right inside their cells—even when a single cell contains multiple items.</li>
+<li><strong>Review cell by cell.</strong> Click any highlight in the grid to keep or redact it. Selecting a cell shows its full contents in the formula-style bar above the grid.</li>
+<li><strong>Add custom redactions.</strong> Type recurring terms under <strong>Always redact</strong>, click an unhighlighted cell to redact it, or highlight specific words in the cell bar and choose <strong>Redact here</strong> or <strong>Redact everywhere</strong>.</li>
+<li><strong>Download</strong> the cleaned spreadsheet in its original <code>.xlsx</code> or <code>.ods</code> format.</li>
 </ol>
 
-<h2>Copies that survive a delete</h2>
+<h2>Where spreadsheets hide duplicate data</h2>
 <ul>
-<li><strong>Hidden and very hidden sheets.</strong> They are scanned and listed in the editor.</li>
-<li><strong>Formulas.</strong> A formula can rebuild a value from another cell. A redacted formula cell becomes plain text.</li>
-<li><strong>Chart and pivot caches.</strong> Charts and pivot tables store their own copy of the source data, which is updated to match.</li>
-<li><strong>Comments, notes, headers and footers.</strong> All scanned.</li>
-<li><strong>Properties.</strong> Author, company, comment authors and the folder the file was saved in are left out.</li>
+<li><strong>Hidden and "very hidden" worksheets.</strong> Both are automatically scanned, revealed in the preview tabs, and flagged in the file notes.</li>
+<li><strong>Formulas.</strong> A formula could otherwise recalculate a redacted name or ID from other cells, so any redacted formula cell is safely converted to plain text while untouched formulas keep working.</li>
+<li><strong>Chart and PivotTable caches.</strong> Excel and Calc store cached snapshots of source data inside charts and pivot tables; AnyRedact updates those caches to match your redactions.</li>
+<li><strong>Cell comments, notes, headers, and footers.</strong> Every one of these is scanned alongside worksheet cells.</li>
+<li><strong>Workbook metadata.</strong> Author names, company fields, comment authors, thumbnails, and local save-folder paths are stripped on export.</li>
 </ul>
 
-<h2>CSV files</h2>
-<p>A CSV has no styles or sheets, so it opens in the <a href="/redact-text">text tool</a>, which keeps every comma and line in place.</p>
+<h2>Working with CSV files</h2>
+<p>Because CSV files contain plain delimited text rather than worksheet styles or formulas, they open in our <a href="/redact-text">text redaction tool</a>, which preserves every comma, quote, and row break.</p>
 
-<h2>Sharing a dataset</h2>
-<p>Removing names does not always make a dataset anonymous. A postcode, birth date and job title together can point to one person. The <a href="/guides/personal-information-checklist">personal information checklist</a> covers these indirect identifiers.</p>
+<h2>Sharing datasets safely</h2>
+<p>Keep in mind that masking names and emails doesn’t automatically make a spreadsheet anonymous: combining a ZIP/postal code, birth date, and job title can still single out an individual. Review our <a href="/guides/personal-information-checklist">personal information checklist</a> before publishing raw datasets.</p>
 `,
   },
   {
     slug: 'how-to-redact-a-powerpoint',
     title: 'How to Redact a PowerPoint Presentation | AnyRedact',
-    description: 'Redact a .pptx deck with its design intact: slide text, speaker notes, comments, charts and pictures. Old .ppt files need converting first.',
+    description: 'Redact a PowerPoint (.pptx) presentation online while keeping its slide design intact: slides, speaker notes, comments, charts, and embedded images.',
     h1: 'How to redact a PowerPoint presentation',
     tools: ['redact-powerpoint'],
-    summary: 'Slides, notes and charts cleaned before a deck leaves the team.',
+    summary: 'Scrub client names, notes, comments, and chart data before sharing a slide deck externally.',
     body: `
-<p>Decks get forwarded far beyond the room they were made for, often with client names in the notes and real figures behind the charts. The <a href="/redact-powerpoint">PowerPoint redaction tool</a> changes only the sensitive text and leaves the design alone.</p>
+<p>Slide decks routinely get repurposed and forwarded far beyond the meeting they were created for—often still carrying client names in speaker notes, internal comments, hidden backup slides, and full Excel workbooks embedded behind charts. Our <a href="/redact-powerpoint">PowerPoint redaction tool</a> cleans every layer while leaving your visual slide design untouched.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Open the .pptx.</strong> Slides render in the preview. Save .ppt or Keynote files as .pptx first.</li>
-<li><strong>Allow the scan.</strong> Slide text, notes and comments go to AI detection together.</li>
-<li><strong>Review the findings.</strong> Off-slide text, such as speaker notes, is listed below the slides.</li>
-<li><strong>Choose black blocks or labels</strong>, then download.</li>
+<li><strong>Open your .pptx deck.</strong> Each slide renders directly in the preview. (Convert older <code>.ppt</code> or Keynote files to <code>.pptx</code> first.)</li>
+<li><strong>Click Upload to scan.</strong> Slide copy, speaker notes, comments, charts, and OCR text from slide images are analyzed together.</li>
+<li><strong>Review detected items.</strong> Click highlights on the slides to keep or redact them. Off-slide content like speaker notes, comments, and alt text is listed right below the slides under <strong>Also in this file</strong>.</li>
+<li><strong>Pick black blocks or labels</strong>, then download your cleaned <code>.pptx</code> presentation.</li>
 </ol>
 
-<h2>What gets checked</h2>
+<h2>Everything that gets checked and cleaned</h2>
 <ul>
-<li>Text on every slide, hidden slides included, with tables and SmartArt.</li>
-<li>Speaker notes and comments.</li>
-<li>Chart titles and labels. The workbook stored behind each chart is removed, so the chart still shows but its data cannot be opened.</li>
-<li>Pictures, which are read with OCR and boxed where needed.</li>
-<li>Alt text, author names and the preview thumbnail of the first slide.</li>
+<li>Visible slide text, tables, SmartArt diagrams, slide layouts/masters, and hidden slides.</li>
+<li>Speaker notes and review comments (with comment author names scrubbed).</li>
+<li>Chart titles, series names, and axis labels—plus automatic removal of the underlying embedded Excel workbooks so recipients see the chart without accessing raw source sheets.</li>
+<li>Embedded slide images, scanned with OCR so you can black out screenshots, faces, or logos right in place.</li>
+<li>Image alt text, document properties, slide-title metadata, and the cached first-slide thumbnail image.</li>
 </ul>
 
-<h2>Before presenting</h2>
-<p>Open the download, switch to the Notes view and step through a few slides. Then check File, Info for remaining properties.</p>
+<h2>Quick check before sharing</h2>
+<p>Open the exported deck in PowerPoint, switch to <strong>Notes Page</strong> or <strong>Normal</strong> view to spot-check speaker notes, and glance at <strong>File → Info</strong> to verify author properties are clear.</p>
 `,
   },
   {
     slug: 'how-to-redact-audio',
     title: 'How to Redact an Audio Recording | AnyRedact',
-    description: 'Bleep names, card numbers and addresses in calls, interviews and voice notes. Transcribe, review the words, then save new audio and a transcript.',
+    description: 'Automatically bleep or mute spoken names, phone numbers, and card details in MP3, M4A, and WAV recordings—and download clean audio with a matching transcript.',
     h1: 'How to redact an audio recording',
     tools: ['redact-audio'],
-    summary: 'Bleep spoken details in calls and interviews, with a matching transcript.',
+    summary: 'Detect and bleep spoken personal details in calls and interviews, complete with a redacted transcript.',
     body: `
-<p>Call recordings and interviews are full of details said out loud: card numbers read to an agent, a home address, a date of birth for security checks. The <a href="/redact-audio">audio redaction tool</a> finds them in a transcript and covers them in the sound.</p>
+<p>Support calls, research interviews, and voice notes are packed with spoken PII: payment card numbers read aloud to an agent, home addresses, and dates of birth used for identity verification. Searching a waveform by ear takes forever—our <a href="/redact-audio">audio redaction tool</a> transcribes the recording with word-level timestamps so AI can pinpoint and bleep sensitive speech automatically.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Open the recording.</strong> MP3, M4A, WAV, FLAC, OGG and Opus files up to 2 hours work.</li>
-<li><strong>Agree to transcription.</strong> The speech is written out with a time for every word, and each paragraph shows when it starts.</li>
-<li><strong>Review the transcript.</strong> Click a highlighted word to keep or bleep it, and press a paragraph's time to hear it.</li>
-<li><strong>Mark anything missed.</strong> Select words in the transcript, or drag across the timeline for a stretch with no clear words.</li>
-<li><strong>Pick Beep or Silence</strong> under Style and download. "Download redacted transcript" saves the text with the same parts masked.</li>
+<li><strong>Open your audio file.</strong> Upload an MP3, M4A, WAV, FLAC, OGG, or Opus recording up to 2 hours long.</li>
+<li><strong>Click Upload to transcribe and scan.</strong> Speech is transcribed with word-by-word timestamps, and each paragraph links directly to its position in the audio.</li>
+<li><strong>Review the transcript.</strong> Click any highlighted word to toggle its bleep on or off, or click a word or timestamp to listen back from that spot.</li>
+<li><strong>Mark anything extra.</strong> Highlight words in the transcript to bleep them, or click and drag directly across the audio timeline to cover mumbled speech, background voices, or crosstalk.</li>
+<li><strong>Choose Beep or Silence</strong> under <strong>Style</strong> and download your clean audio file. Need text too? Click <strong>Download redacted transcript</strong> for a matching masked transcript.</li>
 </ol>
 
-<h2>Tips for calls</h2>
+<h2>Tips for call recordings</h2>
 <ul>
-<li>Card numbers are often read in groups with pauses. Listen to the section around each one and widen the mark on the timeline if a digit falls outside.</li>
-<li>Spelled-out names ("S, M, I, T, H") may not be joined into one word. Look for runs of single letters in the transcript.</li>
-<li>Listen to the first and last minute too: greetings and sign-offs often include full names.</li>
+<li>People often read credit card and phone numbers with pauses between digit groups. Play back the seconds around each number and drag on the timeline if a stray digit wasn’t caught.</li>
+<li>Names spelled out letter by letter (like "S-M-I-T-H") can transcribe as separate letters—scan the transcript for short runs of single letters.</li>
+<li>Double-check the opening and closing 30 seconds of a call, where speakers introduce themselves cleanly.</li>
 </ul>
 
-<h2>File tags</h2>
-<p>Audio files can hold a title, artist, comments, cover art and recording location. None of these are written to the new file.</p>
+<h2>Audio metadata is stripped automatically</h2>
+<p>Audio files often carry ID3 or MP4 metadata tags—title, artist, comments, cover art, and even smartphone GPS coordinates where a voice memo was recorded. Your exported audio file is freshly encoded without any of those tags.</p>
 `,
   },
   {
     slug: 'how-to-redact-logs-and-json',
     title: 'How to Redact Logs and JSON Before Sharing | AnyRedact',
-    description: 'Mask emails, IPs, API keys and tokens in log, JSON, YAML and .env files before posting them in a bug report, while keeping them valid.',
+    description: 'Mask emails, IP addresses, API keys, and tokens in logs, JSON, XML, YAML, and .env files before sharing bug reports—while keeping structured files valid.',
     h1: 'How to redact logs and JSON before sharing',
     tools: ['redact-text'],
-    summary: 'Mask keys, tokens and customer data in logs, configs and payloads.',
+    summary: 'Scrub API keys, tokens, IPs, and customer PII from logs, JSON payloads, and config files without breaking syntax.',
     body: `
-<p>Bug reports, support tickets and forum posts often need a log or a config. Those files tend to hold customer emails, IP addresses, session cookies and live API keys. The <a href="/redact-text">text redaction tool</a> masks them and keeps the file usable.</p>
+<p>Debugging an issue with a vendor, teammate, or AI assistant usually means sharing application logs, JSON payloads, or config files—the exact places where customer emails, client IPs, session cookies, and live API keys hide. Our <a href="/redact-text">text redaction tool</a> masks sensitive values while keeping structured syntax intact.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Paste the text</strong> or open a .log, .txt, .csv, .json, .jsonl, .xml, .yaml, .toml, .ini or .env file.</li>
-<li><strong>Allow the scan</strong> to find emails, phone numbers, IPs, card numbers, keys and tokens.</li>
-<li><strong>Add your own terms</strong> under "Always redact": internal host names, customer IDs, project code names.</li>
-<li><strong>Pick a style.</strong> "Black out" keeps each line the same length, which helps with aligned columns. "Replace with label" makes the result easier to read.</li>
-<li><strong>Download</strong> the result.</li>
+<li><strong>Paste text or upload a file.</strong> Open <code>.log</code>, <code>.txt</code>, <code>.csv</code>, <code>.json</code>, <code>.jsonl</code>, <code>.xml</code>, <code>.yaml</code>, <code>.toml</code>, <code>.ini</code>, <code>.env</code>, or source code files.</li>
+<li><strong>Click Upload to scan</strong> for emails, phone numbers, IP addresses, payment cards, private keys, and tokens.</li>
+<li><strong>Add internal identifiers</strong> under <strong>Always redact</strong>—such as internal hostnames, tenant IDs, S3 bucket names, or project codenames.</li>
+<li><strong>Pick your style.</strong> <strong>Black out</strong> preserves exact character counts (ideal for aligned log columns), while <strong>Replace with label</strong> swaps values for readable tags like <code>[IP ADDRESS]</code> or <code>[EMAIL]</code>.</li>
+<li><strong>Download</strong> the sanitized file.</li>
 </ol>
 
-<h2>Valid output</h2>
-<p>JSON and XML stay parseable: quotes, brackets and tags are untouched, and a redacted JSON number turns into a string. YAML and .env files keep their keys, so a reader can still see which setting held the secret.</p>
+<h2>Syntax-aware structured output</h2>
+<p>Unlike naive search-and-replace, AnyRedact understands structured formats: JSON and XML stay 100% parseable, quotes, escape sequences, brackets, and tags are never corrupted, and redacted numeric JSON fields are quoted as strings so <code>JSON.parse()</code> still succeeds. YAML and <code>.env</code> files keep their key names intact so readers can see which variable was masked.</p>
 
-<h2>What to look for</h2>
+<h2>Secrets &amp; identifiers to watch for</h2>
 <ul>
-<li>Authorization headers, bearer tokens, cookies and signed URLs.</li>
-<li>Connection strings with a password inside.</li>
-<li>Email addresses and user IDs in request paths.</li>
-<li>Client IP addresses and device identifiers.</li>
-<li>Stack traces with home directory paths that include a user name.</li>
+<li><code>Authorization</code> headers, Bearer JWTs, session cookies, and pre-signed storage URLs.</li>
+<li>Database connection strings containing embedded usernames and passwords.</li>
+<li>PEM, OpenSSH, and PGP private keys (even when escaped with <code>\n</code> inside JSON).</li>
+<li>Customer email addresses, UUIDs, and account numbers inside URL query strings.</li>
+<li>Local filesystem paths in stack traces that expose an employee’s username.</li>
 </ul>
 
-<h2>Rotate leaked secrets</h2>
-<p>If a key or password was already posted somewhere, redacting the copy you share next does not undo the leak. Revoke the key and issue a new one.</p>
+<h2>Already leaked a live key? Rotate it immediately</h2>
+<p>Redacting a log before sending it to the next person won’t protect a secret that was already pasted into a public issue or chat room. If a live credential ever leaked, revoke and rotate it right away.</p>
 `,
   },
   {
     slug: 'remove-photo-metadata',
     title: 'Remove Location and EXIF Data from Photos | AnyRedact',
-    description: 'Photos record where they were taken and on which device. See that EXIF and GPS data on any computer or phone, and save a copy without it.',
+    description: 'Photos silently record GPS coordinates, timestamps, and device details in EXIF metadata. Learn how to inspect photo metadata and save a clean copy on any device.',
     h1: 'Remove location and camera data from photos',
     tools: ['redact-image'],
-    summary: 'See the EXIF and GPS data a photo carries and save a copy without it.',
+    summary: 'Inspect the hidden EXIF and GPS tags inside a photo and save a clean copy without them.',
     body: `
-<p>Most phone cameras write EXIF metadata into each photo: the time, the GPS position, the device model and settings, and sometimes the owner's name or the camera's serial number. Some sites strip it on upload, but email, messaging apps that send files and cloud links usually keep it.</p>
+<p>Every time you snap a photo on a phone or digital camera, it embeds hidden EXIF metadata inside the file: the exact date and time, GPS latitude and longitude, camera or phone model, lens settings, and sometimes the owner’s name or body serial number. While some social networks strip EXIF on upload, email attachments, file-sharing links, AirDrop, and messaging apps sent "as file" preserve all of it.</p>
 
-<h2>See what a photo contains</h2>
+<h2>How to inspect a photo’s metadata</h2>
 <ul>
-<li><strong>Windows:</strong> right-click the file, choose Properties, then the Details tab.</li>
-<li><strong>Mac:</strong> open it in Preview and choose Tools, Show Inspector, then the info tab.</li>
-<li><strong>iPhone:</strong> open the photo in Photos and swipe up to see the place and device.</li>
-<li><strong>Android:</strong> in Google Photos, open the photo and swipe up for details.</li>
-<li><strong>Any device:</strong> open it in the <a href="/redact-image">image tool</a>, which lists EXIF, GPS, XMP and IPTC fields beside the picture.</li>
+<li><strong>Windows:</strong> Right-click the image, select <strong>Properties</strong>, and open the <strong>Details</strong> tab.</li>
+<li><strong>Mac:</strong> Open the image in <strong>Preview</strong>, choose <strong>Tools → Show Inspector</strong>, and click the <strong>(i)</strong> info tab (plus the EXIF and GPS sub-tabs).</li>
+<li><strong>iPhone / iPad:</strong> Open the photo in <strong>Photos</strong> and swipe up (or tap the <strong>i</strong> button) to see the map pin and camera details.</li>
+<li><strong>Android:</strong> Open the photo in <strong>Google Photos</strong> and swipe up to view location and device metadata.</li>
+<li><strong>Any browser:</strong> Drop the photo into our <a href="/redact-image">image redaction tool</a> to view its EXIF, GPS, XMP, and IPTC tags right in the sidebar.</li>
 </ul>
 
-<h2>Save a copy without it</h2>
+<h2>How to strip metadata from a photo</h2>
 ${photoMetadataDiagram()}
 <ul>
-<li><strong>AnyRedact:</strong> open the photo and download it. The file is re-encoded from the pixels, so no metadata is carried over. Redacting text or faces is optional.</li>
-<li><strong>Windows:</strong> in Properties, Details, use "Remove Properties and Personal Information" and choose to create a copy.</li>
-<li><strong>iPhone:</strong> in the share sheet, tap Options and turn off Location before sending.</li>
+<li><strong>In AnyRedact (any device):</strong> Open the photo and click <strong>Download redacted image</strong>. Because the image is freshly re-encoded from canvas pixels, all EXIF, GPS, XMP, and IPTC metadata is left behind—even if you don’t draw any redaction boxes.</li>
+<li><strong>On Windows:</strong> In <strong>Properties → Details</strong>, click <strong>Remove Properties and Personal Information</strong> and choose <strong>Create a copy with all possible properties removed</strong>.</li>
+<li><strong>On iPhone before sharing:</strong> In the iOS Share Sheet, tap <strong>Options</strong> at the top and toggle off <strong>Location</strong> before sending.</li>
 </ul>
 
-<h2>Location without metadata</h2>
-<p>Stripping EXIF does not hide what is in the frame. Street signs, house numbers, number plates, school logos and views from a window can place a photo just as well. Turn on picture redaction for road signs and number plates, and box out the rest by hand.</p>
+<h2>Don’t forget visual location clues</h2>
+<p>Stripping EXIF tags won’t hide landmarks visible inside the photo itself. Street signs, house numbers, license plates, delivery labels, school uniforms, and distinctive skylines can pinpoint a location just as accurately as GPS coordinates. Toggle on <strong>Road signs</strong> and <strong>Number plates</strong> under <strong>In images</strong>, and drag manual boxes over anything else that gives away where the photo was taken.</p>
 `,
   },
   {
     slug: 'personal-information-checklist',
     title: 'What Personal Information to Redact: Checklist | AnyRedact',
-    description: 'A checklist of personal information to redact: direct identifiers, details that identify people in combination, special category data and common misses.',
+    description: 'A practical PII redaction checklist covering direct identifiers, indirect combinations, GDPR special-category data, and easy-to-miss metadata.',
     h1: 'What personal information to redact',
-    summary: 'Direct identifiers, risky combinations and the details people forget.',
+    summary: 'A practical checklist of direct identifiers, risky combinations, sensitive categories, and commonly missed details.',
     body: `
-<p>Personal information, or PII, is anything that identifies a person on its own or together with other details. What to remove depends on who will read the file, but this list covers the usual suspects.</p>
+<p>Personally identifiable information (PII)—called "personal data" under GDPR—includes any detail that identifies an individual either on its own or when combined with other facts. Exactly what you need to remove depends on who will receive the document, but this checklist covers what to check before sharing.</p>
 
 <h2>Direct identifiers</h2>
 <ul>
-<li>Full names, user names and signatures.</li>
-<li>Home and postal addresses.</li>
-<li>Email addresses and phone numbers.</li>
-<li>Government numbers: Social Security, National Insurance, passport, driving licence, tax IDs.</li>
-<li>Financial details: card numbers, IBANs, account numbers and sort codes.</li>
-<li>Customer, patient, employee and case numbers.</li>
-<li>Photos of faces, and voice recordings.</li>
+<li>Full names, maiden names, usernames, @handles, initials, and handwritten signatures.</li>
+<li>Street addresses, apartment numbers, and postal/ZIP codes.</li>
+<li>Personal email addresses and mobile or home phone numbers.</li>
+<li>Government ID numbers: Social Security numbers (SSN), ITINs, National Insurance numbers, passport numbers, driver’s licenses, and tax IDs.</li>
+<li>Financial identifiers: payment card numbers, IBANs, bank account numbers, and routing/sort codes.</li>
+<li>Internal record IDs: patient numbers, employee IDs, customer IDs, policy numbers, and case numbers.</li>
+<li>Clear photos of faces and recordings of identifiable voices.</li>
 </ul>
 
-<h2>Details that identify in combination</h2>
-<p>None of these name anyone, yet together they often point to one person:</p>
+<h2>Indirect identifiers that single people out in combination</h2>
+<p>None of these name a person directly, yet two or three of them together often narrow a record down to one specific individual:</p>
 <ul>
-<li>Date of birth, age or graduation year.</li>
-<li>Postcode or ZIP code, town and workplace.</li>
-<li>Job title, especially a unique one.</li>
-<li>Rare events, conditions or family situations.</li>
-<li>IP addresses, device IDs, cookies and vehicle number plates.</li>
+<li>Date of birth, exact age, or graduation/hire dates.</li>
+<li>Postal code, neighborhood, or workplace location.</li>
+<li>Specific job titles (especially one-of-a-kind roles like "VP of Legal, EMEA").</li>
+<li>Uncommon diagnoses, life events, or family circumstances.</li>
+<li>IP addresses, device IDs, session identifiers, and vehicle license/number plates.</li>
 </ul>
 
-<h2>Special category data</h2>
-<p>Health, ethnicity, religion, sexual orientation, political views, trade union membership, biometrics and criminal records get extra protection under GDPR and similar laws. Remove them unless the reader has a clear reason to see them.</p>
+<h2>Special-category &amp; high-sensitivity data</h2>
+<p>Medical and health records, racial or ethnic origin, religious beliefs, political opinions, trade union membership, sexual orientation, biometric data, and criminal history carry heightened legal protection under GDPR, HIPAA, and similar frameworks. Always redact these unless the recipient has a clear, lawful basis to see them.</p>
 
-<h2>Often missed</h2>
+<h2>Places people routinely forget to check</h2>
 <ul>
-<li>Email headers and signatures quoted at the bottom of a thread.</li>
-<li>File names, such as "Smith_J_payslip.pdf".</li>
-<li>Comments, tracked changes and speaker notes.</li>
-<li>Document properties and photo metadata.</li>
-<li>QR codes and barcodes on letters and labels.</li>
-<li>Partially masked numbers, where another document shows the rest.</li>
+<li>Quoted email headers and signature blocks buried halfway down a forwarded thread.</li>
+<li>The file name itself (for example, renaming <code>Jane_Smith_Payslip_Oct.pdf</code> before sending).</li>
+<li>Word/Excel review comments, tracked deletions, hidden sheets, and PowerPoint speaker notes.</li>
+<li>Document author properties and embedded EXIF GPS coordinates in photos.</li>
+<li>QR codes and barcodes on letters, boarding passes, badges, and shipping labels.</li>
+<li>Partially masked numbers (like <code>**** 4821</code>) when another page reveals the rest or confirms a match.</li>
 </ul>
 
-<h2>What to keep</h2>
-<p>Over-redaction has a cost too. A redacted file should still answer the question it was shared for, so keep the dates, amounts and context the reader needs. Public contacts, such as a company switchboard or a helpline, rarely need removing. AnyRedact finds them but leaves them unticked.</p>
+<h2>Avoid over-redacting</h2>
+<p>Removing too much can make a document useless—or trigger pushback in a regulatory or legal disclosure. Leave dates, totals, headings, and surrounding context intact wherever they don’t identify anyone. Public business details—such as a company’s main switchboard or a government helpline—rarely need redacting, which is why AnyRedact flags them as public and leaves them unchecked by default.</p>
 `,
   },
   {
     slug: 'gdpr-subject-access-request-redaction',
     title: 'Redacting Documents for a GDPR Access Request | AnyRedact',
-    description: 'When answering a GDPR subject access request, redact other people\'s data and keep the requester\'s. What to remove, deadlines and a simple workflow.',
+    description: 'Responding to a GDPR subject access request (SAR)? Learn how to redact third-party personal data while keeping the requester’s information, plus SAR deadlines and workflow tips.',
     h1: 'Redacting documents for a GDPR access request',
-    summary: 'Whose data to remove when answering a subject access request, and how to keep a record.',
+    summary: 'Whose data to redact in a GDPR subject access request (SAR), statutory deadlines, and a repeatable workflow.',
     body: `
-<p>Under the UK and EU GDPR, people can ask an organisation for a copy of the personal data it holds about them. This is a subject access request, or SAR. The copies usually include emails, notes and reports that also mention colleagues, customers or other third parties, and those parts need redacting before release.</p>
-<p>This guide is general information, not legal advice.</p>
+<p>Under EU and UK GDPR, individuals have the right to request a copy of the personal data an organization holds about them—known as a <strong>data subject access request (DSAR or SAR)</strong>. Because real-world emails, support tickets, HR notes, and spreadsheets almost always mention colleagues, customers, or other third parties alongside the requester, those third-party details usually must be redacted before disclosure.</p>
+<p><em>Note: This guide provides practical background information, not legal advice.</em></p>
 
-<h2>What to redact</h2>
+<h2>What to redact—and what to leave visible</h2>
 <ul>
-<li><strong>Third-party personal data.</strong> Names, contact details and opinions about other people, unless they agree to disclosure or it is reasonable to share without their consent.</li>
-<li><strong>Information covered by an exemption,</strong> such as legal privilege, or data whose release would prejudice crime prevention.</li>
-<li><strong>Content unrelated to the requester,</strong> where a long document is only partly about them.</li>
+<li><strong>Third-party personal data.</strong> Redact names, contact details, and identifying facts about other individuals unless they have consented to disclosure or it is reasonable to disclose without their consent.</li>
+<li><strong>Legally exempt material.</strong> Withhold passages covered by a statutory GDPR exemption, such as legal professional privilege, confidential references, or information that would prejudice crime prevention or ongoing negotiations.</li>
+<li><strong>Out-of-scope sections.</strong> In long multi-topic reports or spreadsheets, remove rows or sections that have nothing to do with the requester.</li>
 </ul>
-<p>Do not redact the requester's own data, even if it is unflattering. Their name, their opinions and opinions about them are what the request is for.</p>
+<p><strong>Never redact the requester’s own personal data</strong> simply because it is awkward or critical. Their name, statements they made, and others’ recorded opinions about them are part of their personal data (subject to third-party Balancing Test rules).</p>
 
-<h2>Deadlines</h2>
-<p>A response is due within one calendar month of receiving the request. It can be extended by up to two further months for complex or numerous requests, as long as the requester is told within the first month.</p>
+<h2>Statutory SAR deadlines</h2>
+<p>You must respond within <strong>one calendar month</strong> of receiving the request. If a request is genuinely complex or involves a large volume of records, you may extend the deadline by up to <strong>two additional months</strong>—provided you notify the requester and explain why before the first month expires.</p>
 ${sarTimelineDiagram()}
 
-<h2>A workflow that scales</h2>
+<h2>A practical SAR redaction workflow</h2>
 <ol>
-<li>Collect the documents and remove duplicates, such as the same email in several mailboxes.</li>
-<li>Run each file through the matching tool: <a href="/redact-pdf">PDF</a>, <a href="/redact-word">Word</a>, <a href="/redact-excel">Excel</a> or <a href="/redact-text">text</a> for email exports.</li>
-<li>Untick findings that belong to the requester. Add colleagues' names under "Always redact" so they are caught everywhere.</li>
-<li>Use "Replace with label" in Word and text files where the reader needs to know a person was mentioned, such as [NAME].</li>
-<li>Keep a log of what was redacted in each document and why. Regulators may ask for it if the requester complains.</li>
+<li>Gather responsive records and deduplicate identical items (such as the same email chain saved across three mailboxes).</li>
+<li>Open each file in the matching AnyRedact tool: <a href="/redact-pdf">PDF</a>, <a href="/redact-word">Word</a>, <a href="/redact-excel">Excel</a>, <a href="/redact-image">Images</a>, <a href="/redact-audio">Audio</a>, or <a href="/redact-text">Text</a>.</li>
+<li>Uncheck detections that belong to the requester so their own details remain readable. Add coworkers’ and other customers’ names under <strong>Always redact</strong> so every mention—including first names and initials—is caught consistently.</li>
+<li>In Word and text files, consider choosing <strong>Replace with label</strong> (such as <code>[NAME]</code> or <code>[EMAIL]</code>) so sentences still make sense to the requester.</li>
+<li>Keep an internal exemption log recording which files were redacted and the legal basis for each category of withholding, in case the supervisory authority asks to review your handling.</li>
 </ol>
 
-<h2>Checks before release</h2>
+<h2>Final checks before disclosure</h2>
 <ul>
-<li>Search each output for the third parties' names.</li>
-<li>Check attachments inside emails, not only the email body.</li>
-<li>Make sure the files cannot be un-redacted. See <a href="/guides/pdf-black-box-mistakes">why black boxes in PDFs fail</a>.</li>
+<li>Spot-search exported files for key third-party names and email addresses.</li>
+<li>Remember to check email attachments, embedded spreadsheets, and call recordings—not just email bodies.</li>
+<li>Verify that PDF redactions are truly flattened rather than covered with movable shapes; see <a href="/guides/pdf-black-box-mistakes">why black boxes in PDFs fail</a>.</li>
 </ul>
 `,
   },
   {
     slug: 'how-to-redact-a-bank-statement',
     title: 'How to Redact a Bank Statement | AnyRedact',
-    description: 'Hide account numbers, payees and spending you do not need to share before sending a bank statement to a landlord, employer or agency.',
+    description: 'Safely hide account numbers, payees, and private spending before sharing a bank statement as proof of income or address with a landlord, employer, or agency.',
     h1: 'How to redact a bank statement',
     tools: ['redact-pdf', 'redact-image'],
-    summary: 'Share proof of income or address without your account numbers and spending.',
+    summary: 'Prove your address or income without exposing full account numbers or personal spending.',
     body: `
-<p>Landlords, letting agents, visa offices and new employers often ask for a bank statement when all they need is your name, your address or proof that a salary arrives. A full statement also shows where you shop, who you pay and your account details. Redacting the rest keeps the part they asked for and nothing more.</p>
+<p>Landlords, letting agents, visa agencies, and prospective employers frequently ask for a recent bank statement when all they really need to verify is your home address or recurring salary deposits. Sharing an unedited statement exposes your full account number, where you shop, medical or religious donations, and everyone you pay. Redacting unrelated details lets you verify what they asked for without oversharing.</p>
 
-<h2>Ask what they need first</h2>
-<p>Some recipients only accept an untouched statement, and mortgage lenders in particular may want it straight from your bank. Others are happy with a redacted copy as long as certain lines stay visible. Asking up front saves sending it twice.</p>
+<h2>Check the recipient’s rules first</h2>
+<p>Before redacting, confirm what your recipient accepts. Mortgage underwriters, courts, and certain visa authorities require completely unaltered statements (or direct open-banking verification) and will reject edited files. Landlords, property managers, and many HR checks, on the other hand, gladly accept redacted statements as long as your name, bank header, and relevant deposits remain clear.</p>
 
-<h2>Usually keep</h2>
+<h2>What you typically keep visible</h2>
 <ul>
-<li>Your name and address, if the statement is proof of address.</li>
-<li>The bank's name and logo, and the statement period.</li>
-<li>Salary or benefit payments and the opening and closing balances, if the statement is proof of income.</li>
+<li>Your full name and residential address (especially for proof-of-address checks).</li>
+<li>Your bank’s name, logo, and the statement date range.</li>
+<li>Relevant salary or benefit deposits—plus opening and closing balances if required for affordability checks.</li>
 </ul>
 
-<h2>Usually remove</h2>
+<h2>What you typically redact</h2>
 <ul>
-<li>The full account number, sort code, IBAN and card number. Leaving the last four digits is common when the recipient needs to match the account.</li>
-<li>Payee and merchant names, which can reveal health, religion, politics or relationships.</li>
-<li>Names of other people you send money to or receive money from.</li>
-<li>Payment references, which often hold invoice numbers, phone numbers or notes.</li>
+<li>Full bank account numbers, routing/sort codes, IBANs, and card numbers (leaving the last four digits visible is helpful if they need to match a payment method).</li>
+<li>Everyday merchant and payee names, which can reveal medical visits, travel habits, subscriptions, or personal beliefs.</li>
+<li>Names of friends, family members, or clients on incoming and outgoing transfers.</li>
+<li>Transaction reference notes, invoice numbers, and running balances if not required.</li>
 </ul>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Open the statement</strong> in the <a href="/redact-pdf">PDF tool</a>, or a photo or screenshot of it in the <a href="/redact-image">image tool</a>.</li>
-<li><strong>Allow the scan.</strong> Account numbers, card numbers, IBANs and names are marked on each page.</li>
-<li><strong>Untick what must stay</strong>, such as your own name and address.</li>
-<li><strong>Box out transaction rows</strong> by dragging over them. One box can cover a whole block of lines.</li>
-<li><strong>Download</strong> and open the copy to check every page.</li>
+<li><strong>Open your statement</strong> in our <a href="/redact-pdf">PDF redaction tool</a> (or use the <a href="/redact-image">image tool</a> for mobile banking screenshots and photos).</li>
+<li><strong>Click Upload to scan.</strong> Account numbers, IBANs, card numbers, addresses, and names are highlighted automatically across every page.</li>
+<li><strong>Uncheck details that need to stay visible</strong>—such as your own name, your address, and your employer’s payroll line.</li>
+<li><strong>Drag boxes over unrelated transactions.</strong> You can drag one solid box across an entire block of private spending rows in seconds.</li>
+<li><strong>Download</strong> your flattened PDF and inspect each page before sending.</li>
 </ol>
 
-<h2>Why the copy is an image</h2>
-<p>The PDF comes back with each page flattened, so the hidden account number cannot be copied from under a bar. The flip side is that the recipient cannot search it or check it against the bank's digital signature. If they need that, ask your bank whether it can issue a statement for a shorter period or a letter confirming your address or income instead.</p>
+<h2>Why AnyRedact flattens your statement</h2>
+<p>Exported PDF statements are rebuilt as flat page images so nobody can copy hidden account numbers or merchant names from underneath a black bar. Keep in mind that flattening also removes any cryptographic bank signature embedded in the original PDF—if an institution requires a digitally signed PDF, ask your bank whether they can export a filtered deposit confirmation letter instead.</p>
 `,
   },
   {
     slug: 'how-to-redact-a-chat-export',
     title: 'How to Redact a WhatsApp or Slack Chat Export | AnyRedact',
-    description: 'Mask names, phone numbers and addresses in exported WhatsApp, Telegram or Slack chats before using them as evidence, research data or a bug report.',
+    description: 'Mask names, phone numbers, and private links in exported WhatsApp, Telegram, or Slack chat logs before sharing them as evidence, research data, or support tickets.',
     h1: 'How to redact a chat export',
     tools: ['redact-text'],
-    summary: 'Mask names and numbers in WhatsApp, Telegram and Slack exports, line by line.',
+    summary: 'Scrub names, phone numbers, and links from WhatsApp, Telegram, and Slack chat exports.',
     body: `
-<p>Exported chats end up in court bundles, HR complaints, research datasets and support tickets. They name everyone in the conversation, and the messages themselves are full of phone numbers, addresses and links. The <a href="/redact-text">text redaction tool</a> works through the export and keeps one message per line.</p>
+<p>Exported chat histories frequently end up in legal bundles, HR investigations, academic studies, and customer support tickets. Raw exports name every participant on every line—and messages themselves are full of phone numbers, home addresses, shared pins, and links. Our <a href="/redact-text">text redaction tool</a> scans the entire conversation while keeping its message-by-message structure intact.</p>
 
-<h2>Getting the export</h2>
+<h2>How to export your chat</h2>
 <ul>
-<li><strong>WhatsApp:</strong> open the chat, choose Export chat from the menu and pick Without media. You get a .txt file, sometimes inside a .zip that needs unzipping first.</li>
-<li><strong>Telegram Desktop:</strong> Export chat history, with the format set to machine-readable JSON.</li>
-<li><strong>Slack:</strong> a workspace export is a folder of JSON files, one per channel per day. Open the days you need.</li>
+<li><strong>WhatsApp:</strong> Open the conversation, tap the menu → <strong>More → Export chat</strong>, and choose <strong>Without media</strong>. Unzip the archive if needed to get the <code>.txt</code> transcript.</li>
+<li><strong>Telegram Desktop:</strong> Open the chat menu → <strong>Export chat history</strong>, and select <strong>Machine-readable JSON</strong> (or plain text).</li>
+<li><strong>Slack:</strong> Workspace exports produce a folder of daily <code>.json</code> files per channel—open whichever daily files you need to share.</li>
 </ul>
 
-<h2>Steps</h2>
+<h2>Step-by-step instructions</h2>
 <ol>
-<li><strong>Open the .txt or .json file</strong>, or paste the part of the chat you need.</li>
-<li><strong>Allow the scan.</strong> Names, phone numbers, emails, addresses and links are found in the messages and in the sender names at the start of each line.</li>
-<li><strong>Add nicknames</strong> under "Always redact". People rarely use full names in a chat, so first names and nicknames may need listing by hand.</li>
-<li><strong>Pick a style.</strong> "Replace with label" turns every person into [NAME]. If the reader has to tell people apart, swap each name for a stand-in such as "Person A" with find and replace in a text editor before opening the file, and let the scan catch the rest.</li>
-<li><strong>Download</strong> the redacted file.</li>
+<li><strong>Open the <code>.txt</code> or <code>.json</code> export</strong> in the text tool, or paste the relevant excerpt directly.</li>
+<li><strong>Click Upload to scan.</strong> AI detects names, phone numbers, email addresses, street addresses, and private URLs in both sender headers and message bodies.</li>
+<li><strong>Add nicknames and handles</strong> under <strong>Always redact</strong>. Casual chats use first names, nicknames, and Slack <code>@handles</code> that you’ll want stripped consistently everywhere.</li>
+<li><strong>Choose a style.</strong> <strong>Replace with label</strong> swaps names for <code>[NAME]</code> and numbers for <code>[PHONE]</code>. (Tip: if readers need to distinguish Speaker A from Speaker B, replace each participant’s name with <code>Person A</code> and <code>Person B</code> in a text editor first, then run AnyRedact to catch remaining numbers, emails, and addresses.)</li>
+<li><strong>Download</strong> your sanitized chat log—JSON exports stay valid JSON automatically.</li>
 </ol>
 
-<h2>Easy to miss</h2>
+<h2>Chat details that are easy to miss</h2>
 <ul>
-<li>Phone numbers shown in place of names for people who are not in your contacts.</li>
-<li>Group names and "added" or "left" system lines.</li>
-<li>Shared locations, which appear as map links with coordinates.</li>
-<li>Usernames, @mentions and email signatures pasted into messages.</li>
+<li>Raw phone numbers displayed as sender names for unsaved WhatsApp contacts.</li>
+<li>Group subject changes and system messages like <em>"Alex added +1 415-555-0199"</em>.</li>
+<li>Shared live-location or Google/Apple Maps URLs containing exact GPS coordinates.</li>
+<li>Slack user IDs, email signatures pasted into messages, and invite links.</li>
 </ul>
-<p>Photos and voice notes are not part of a text export. If you need them, redact each one in the <a href="/redact-image">image</a> or <a href="/redact-audio">audio</a> tool.</p>
+<p>Need to share screenshots or voice notes from the same thread? Redact them separately using our <a href="/redact-image">image</a> and <a href="/redact-audio">audio</a> tools.</p>
 `,
   },
   {
     slug: 'redact-before-sharing-with-ai',
     title: 'Remove Personal Data Before Pasting into ChatGPT | AnyRedact',
-    description: 'Strip names, emails and account numbers from documents before giving them to ChatGPT, Claude or Gemini, while keeping enough context for a good answer.',
+    description: 'Strip client names, emails, and account numbers from documents before pasting them into ChatGPT, Claude, or Gemini—while keeping the context AI needs.',
     h1: 'Remove personal data before pasting into an AI chatbot',
     tools: ['redact-text', 'redact-pdf'],
-    summary: 'Give chatbots the content they need without customer names, emails or account numbers.',
+    summary: 'Get great answers from ChatGPT, Claude, or Gemini without exposing client names, emails, or secrets.',
     body: `
-<p>Summarising a contract, rewriting a complaint or analysing a spreadsheet with an AI chatbot means handing it the whole document. Depending on the service and your settings, what you paste may be kept in your history, reviewed or used for training. Your employer's policy may also forbid sharing customer data with outside tools. Redacting first lets you get the help without passing the personal details on.</p>
+<p>Summarizing a contract, drafting a reply to a customer complaint, or analyzing a spreadsheet with ChatGPT, Claude, or Gemini usually means handing over the entire document. Depending on the AI service and plan you use, prompts may be stored in chat history, reviewed by human contractors, or used to train future models—and most workplace policies prohibit pasting unredacted customer or employee PII into external chatbots. Redacting first lets you use AI productively without leaking private data.</p>
 
-<h2>Labels keep the meaning</h2>
-<p>A chatbot answers better when it can tell people and things apart. "Replace with label" turns "Anna Novak emailed anna@example.com" into "[NAME] emailed [EMAIL]", so the sentence still makes sense and the model can still reason about it. Black bars make the text harder for the model to follow.</p>
+<h2>Use placeholder labels so the AI keeps full context</h2>
+<p>Chatbots reason much better when sentences keep their grammatical roles. Choosing <strong>Replace with label</strong> turns <em>"Anna Novak emailed anna@example.com on 04/12/2026"</em> into <em>"[NAME] emailed [EMAIL] on [DATE]"</em>—so the assistant still understands who contacted whom and when, without ever seeing real personal data.</p>
 
-<h2>Steps</h2>
+<h2>Step-by-step workflow</h2>
 <ol>
-<li><strong>Paste the text</strong> into the <a href="/redact-text">text tool</a>, or open the file in the tool for its format (PDF, Word, Excel and the rest).</li>
-<li><strong>Allow the scan</strong> and check the Found list.</li>
-<li><strong>Add company terms</strong> under "Always redact": client names, project code names, internal host names.</li>
-<li><strong>Choose "Replace with label"</strong> and download the result.</li>
-<li><strong>Paste the redacted copy</strong> into the chatbot.</li>
+<li><strong>Paste your text</strong> into our <a href="/redact-text">text redaction tool</a>, or open your file in the tool for its format (<a href="/redact-word">Word</a>, <a href="/redact-excel">Excel</a>, <a href="/redact-pdf">PDF</a>, and more).</li>
+<li><strong>Click Upload to scan</strong> and review the <strong>Found</strong> list.</li>
+<li><strong>Add proprietary terms</strong> under <strong>Always redact</strong>—such as client company names, deal codenames, or internal URLs.</li>
+<li><strong>Select "Replace with label"</strong> under Style and download (or copy) the sanitized output.</li>
+<li><strong>Paste the redacted version</strong> into ChatGPT, Claude, or Gemini.</li>
 </ol>
-<p>If the answer comes back with labels in it, put the real names back yourself in your own copy. Keep the original file: the redacted one cannot be turned back.</p>
+<p>When the chatbot gives you its draft or summary, simply swap the real names back into your local copy. Always keep your original file on your computer—redacted exports cannot be reversed.</p>
 
-<h2>Detection uses AI too</h2>
-<p>To find what to remove, AnyRedact sends the text it reads from your file to its own server, where an AI model running on Cloudflare marks the personal details. Nothing is sent until you agree, the text is not stored or used for training, and you can decline and mark everything by hand. The <a href="/privacy">privacy policy</a> has the details.</p>
+<h2>How AnyRedact’s own AI handles your data</h2>
+<p>To find PII automatically, AnyRedact sends extracted text over HTTPS to our Cloudflare Worker, where an AI model running on Cloudflare Workers AI identifies sensitive spans in memory. Nothing is sent until you click <strong>Upload</strong>, your content is never stored, logged, or used to train models, and you can always skip the upload to redact manually. Read our <a href="/privacy">privacy policy</a> for full details.</p>
 
-<h2>Worth removing even when it seems harmless</h2>
+<h2>Extra details worth stripping before prompting</h2>
 <ul>
-<li>Signatures at the bottom of emails, with phone numbers and job titles.</li>
-<li>Customer and order IDs, which can be looked up in your systems.</li>
-<li>File paths and URLs that contain user names.</li>
-<li>Health, salary and disciplinary details about named staff.</li>
+<li>Email signature blocks containing direct phone numbers, titles, and office addresses.</li>
+<li>Internal customer IDs, ticket numbers, and order references.</li>
+<li>API keys, database URLs, and internal hostnames in code snippets.</li>
+<li>Salary figures, medical notes, and HR performance details tied to identifiable staff.</li>
 </ul>
 `,
   },
   {
     slug: 'remove-metadata-from-docx',
     title: 'How to Remove Metadata from a DOCX File | AnyRedact',
-    description: 'Clear the author, company, comment names and custom properties from a Word file, with Word\'s Inspect Document or online with nothing to install.',
+    description: 'Clear author names, company details, reviewer names, and custom properties from a Word (.docx) file using Word’s Document Inspector or free online.',
     h1: 'How to remove metadata from a DOCX file',
     tools: ['redact-word'],
-    summary: 'Clear author names, company and hidden properties, in Word or online.',
+    summary: 'Strip hidden author names, company info, reviewer identities, and custom fields from Word files.',
     body: `
-<p>A .docx is a zip of XML files, and a few of them describe the document rather than hold its text. Send the file to someone and they can read who wrote it, who edited it last, which company their copy of Office is registered to, and everyone who commented. None of it shows on the page.</p>
+<p>Under the hood, every <code>.docx</code> file is a ZIP archive of XML parts—and several of those files describe <em>who</em> created and edited the document rather than what’s written on the page. When you email a Word file externally, anyone who checks its properties can see who originally drafted it, who edited it last, which organization their Office license belongs to, and everyone who left comments.</p>
 
-<h2>What a DOCX records about you</h2>
+<h2>What a Word document records behind the scenes</h2>
 <ul>
-<li><strong>Author and last modified by</strong>, taken from the name set up in Office.</li>
-<li><strong>Company and manager</strong>, often filled in by an organisation's Office setup.</li>
-<li><strong>Title, subject, keywords and comments</strong> in the file properties, which may still describe an older version.</li>
-<li><strong>Custom properties</strong> added by document management systems, such as a client name, matter number or file path.</li>
-<li><strong>Names on comments and tracked changes</strong>, plus a list of everyone who edited.</li>
-<li><strong>A thumbnail of the first page</strong>, if the file was saved with one.</li>
-<li><strong>Camera and location data</strong> inside photos placed in the document.</li>
+<li><strong>Author and Last Modified By</strong> names pulled automatically from Microsoft Office account settings.</li>
+<li><strong>Company and Manager</strong> fields populated by corporate Office installations.</li>
+<li><strong>Title, Subject, Keywords, and Category</strong> properties—which often still reflect an old template or earlier client’s document.</li>
+<li><strong>Custom XML and DMS properties</strong> added by legal or enterprise document management tools (such as client IDs, matter numbers, or server paths).</li>
+<li><strong>Reviewer names and initials</strong> attached to every comment and tracked change, plus a hidden list of contributors in <code>word/people.xml</code>.</li>
+<li><strong>A preview thumbnail image</strong> of the first page, if saved with one.</li>
+<li><strong>EXIF GPS and camera metadata</strong> embedded inside photos pasted into the document.</li>
 </ul>
-<p>To see what your file holds, open File, Info in Word and look at the Properties panel. "Show All Properties" and Advanced Properties list the rest.</p>
+<p>To inspect these in Word, open <strong>File → Info</strong> and look at the <strong>Properties</strong> column on the right (click <strong>Show All Properties</strong> or <strong>Advanced Properties</strong> to see custom fields).</p>
 
-<h2>In Word on Windows: Inspect Document</h2>
+<h2>Option 1: Word on Windows (Inspect Document)</h2>
 <ol>
-<li>Save a copy first. The inspector's removals cannot be undone once the file is saved.</li>
-<li>Go to File, Info, Check for Issues, Inspect Document.</li>
-<li>Leave "Document Properties and Personal Information" ticked, along with "Comments, Revisions and Versions" if those should go too, and click Inspect.</li>
-<li>Click Remove All next to each result you want cleared, then save.</li>
+<li>Save a backup copy first—changes made by Document Inspector cannot be undone after saving.</li>
+<li>Open <strong>File → Info → Check for Issues → Inspect Document</strong>.</li>
+<li>Make sure <strong>Document Properties and Personal Information</strong> is checked (along with <strong>Comments, Revisions, and Versions</strong> if you want markup deleted completely), then click <strong>Inspect</strong>.</li>
+<li>Click <strong>Remove All</strong> next to each category you want cleared, then save the file.</li>
 </ol>
-<p>Inspect Document deletes comments and tracked changes outright instead of keeping them under a neutral name, so reviewers lose the discussion. It also leaves the text itself alone: a name typed in the body or a header is still there.</p>
+<p>Keep two caveats in mind: Document Inspector deletes comments and tracked changes outright rather than anonymizing their authors (wiping out useful review context), and it never touches names or emails written inside the document text itself.</p>
 
-<h2>In Word for Mac</h2>
-<p>Word for Mac has no Inspect Document. On the Review tab, choose Protect Document and tick "Remove personal information from this file on save", then save. That clears the author names from the properties, comments and tracked changes. Check File, Properties afterwards for a company, title or custom fields left behind.</p>
+<h2>Option 2: Word for Mac</h2>
+<p>Word for Mac doesn’t include the full Windows Document Inspector. Instead, go to <strong>Tools → Protect Document</strong> (or the <strong>Review</strong> tab → <strong>Protect → Protect Document</strong>), check <strong>Remove personal information from this file on save</strong>, and save. That scrubs author and reviewer names, though you should still open <strong>File → Properties</strong> afterward to clear any lingering Company, Title, or Custom fields manually.</p>
 
-<h2>Online, without Word</h2>
-<p>The <a href="/redact-word">Word redaction tool</a> clears the metadata on every download, and you can redact names in the text at the same time.</p>
+<h2>Option 3: Online without Word (plus text redaction)</h2>
+<p>Our free <a href="/redact-word">online Word redaction tool</a> scrubs hidden metadata automatically on every download—whether or not you also redact names in the body text:</p>
 <ol>
-<li><strong>Open the .docx</strong> in your browser.</li>
-<li><strong>Allow the scan</strong> if the text also needs redacting, or decline it to clear only the metadata.</li>
-<li><strong>Download.</strong> The copy has the author, last modified by, title, subject, keywords, category, company and manager emptied, custom properties deleted and the first-page thumbnail removed.</li>
+<li><strong>Open your .docx file</strong> right in your browser.</li>
+<li><strong>Click Upload</strong> if you also want AI to find personal details in the text—or skip the upload if you only want to strip metadata.</li>
+<li><strong>Download your clean .docx.</strong> Core properties (author, last modified by, title, subject, keywords, category, company, and manager) are emptied, custom properties are deleted, embedded files are dropped, and the first-page thumbnail is removed.</li>
 </ol>
-<p>Comments and tracked changes stay in the file, with every author shown as "Redacted", so the review history still reads. Photos in the document are saved again without their camera and location data (EMF, WMF and TIFF pictures are left as they are), and embedded files are dropped.</p>
+<p>Unlike Word’s inspector, AnyRedact preserves your comments and tracked changes while replacing every reviewer’s name with <code>Redacted</code>, so collaborators keep the markup without exposing who wrote what. Standard embedded photos are also re-encoded to strip camera and GPS tags (vector EMF/WMF and TIFF graphics stay untouched).</p>
 
-<h2>Check the result</h2>
-<p>Open the cleaned copy and look at File, Info, Properties again, then hover over a comment to see its author. For photos taken on a phone, the <a href="/guides/remove-photo-metadata">photo metadata guide</a> covers the same data in picture files.</p>
+<h2>Verify your cleaned file</h2>
+<p>Open the downloaded <code>.docx</code>, check <strong>File → Info → Properties</strong>, and hover over any comment to confirm the author reads <em>Redacted</em>. Working with standalone image files too? See our guide on <a href="/guides/remove-photo-metadata">removing EXIF and location metadata from photos</a>.</p>
 `,
   },
 ];

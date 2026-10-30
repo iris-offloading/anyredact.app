@@ -100,10 +100,10 @@ const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 const MAX_OPEN_LINKS = 3;
 
 async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): Promise<Response> {
-  if (!env.EMAIL) return json({ error: 'Email sign-in is not set up yet.' }, 503);
+  if (!env.EMAIL) return json({ error: 'Email sign-in is not configured on this server.' }, 503);
   await env.DB!.prepare('DELETE FROM login_tokens WHERE expires_at < ?').bind(now()).run();
   const open = await env.DB!.prepare('SELECT COUNT(*) AS n FROM login_tokens WHERE email = ?').bind(email).first<{ n: number }>();
-  if ((open?.n ?? 0) >= MAX_OPEN_LINKS) return json({ error: 'Too many sign-in links for this address. Use the latest one or try again in 15 minutes.' }, 429);
+  if ((open?.n ?? 0) >= MAX_OPEN_LINKS) return json({ error: 'Too many sign-in links requested for this address. Please use the latest link or try again in 15 minutes.' }, 429);
   const token = randomToken();
   await env.DB!.prepare('INSERT INTO login_tokens (token_hash, email, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), email, now() + LOGIN_MINUTES * 60)
@@ -118,7 +118,7 @@ async function sendLoginEmail(env: AccountsEnv, origin: string, email: string): 
     });
   } catch (err) {
     console.error('email send failed', (err as { code?: string }).code, (err as Error).message);
-    return json({ error: 'Could not send the email. Please try again.' }, 502);
+    return json({ error: 'Could not send the sign-in email. Please try again.' }, 502);
   }
   return json({ ok: true });
 }
@@ -133,14 +133,14 @@ async function deleteAccount(request: Request, env: AccountsEnv): Promise<Respon
   const user = await currentUser(request, env);
   if (!user) return json({ error: 'Please sign in first.' }, 401);
   if (user.stripe_customer) {
-    if (!env.STRIPE_SECRET_KEY) return json({ error: 'Could not delete the account. Please try again.' }, 503);
+    if (!env.STRIPE_SECRET_KEY) return json({ error: 'Could not delete your account. Please try again.' }, 503);
     try {
       await stripe(env, `customers/${encodeURIComponent(user.stripe_customer)}`, {}, { method: 'DELETE' });
     } catch (err) {
       // Already deleted in Stripe: nothing left to cancel.
       if (!/No such customer/i.test((err as Error).message)) {
         console.error('stripe customer delete failed', err);
-        return json({ error: 'Could not delete the account. Please try again.' }, 502);
+        return json({ error: 'Could not delete your account. Please try again.' }, 502);
       }
     }
   }
@@ -187,7 +187,7 @@ export async function me(request: Request, env: AccountsEnv) {
 export async function handleAccounts(request: Request, env: AccountsEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
   if (!path.startsWith('/api/auth/') && path !== '/api/me') return null;
-  if (!env.DB) return json({ error: 'Accounts are not set up on this server.' }, 503);
+  if (!env.DB) return json({ error: 'Accounts are not configured on this server.' }, 503);
   const origin = url.origin;
 
   if (path === '/api/me' && request.method === 'DELETE') return deleteAccount(request, env);
@@ -196,11 +196,11 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
 
   if (path === '/api/auth/email' && request.method === 'POST') {
     if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
-    if (await rateLimited(request, env.DETECT_LIMITER, 'login:')) return json({ error: 'Too many requests. Please wait a minute.' }, 429);
+    if (await rateLimited(request, env.DETECT_LIMITER, 'login:')) return json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
     const { email, turnstile } = (await request.json().catch(() => ({}))) as { email?: unknown; turnstile?: unknown };
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) return json({ error: 'Please enter a valid email address.' }, 400);
     // Every link needs a fresh pass, so nobody can script sign-in emails to other people.
-    if (turnstileSiteKey(env) && !(await verifyTurnstile(request, env, turnstile))) return turnstileRequired(env, 'Please complete the check below and try again.');
+    if (turnstileSiteKey(env) && !(await verifyTurnstile(request, env, turnstile))) return turnstileRequired(env, 'Please complete the security check below and try again.');
     return sendLoginEmail(env, origin, email.trim().toLowerCase());
   }
 
@@ -210,7 +210,7 @@ export async function handleAccounts(request: Request, env: AccountsEnv, url: UR
     const row = await env.DB.prepare('DELETE FROM login_tokens WHERE token_hash = ? RETURNING email, expires_at')
       .bind(await sha256(typeof token === 'string' ? token : ''))
       .first<{ email: string; expires_at: number }>();
-    if (!row || row.expires_at < now()) return json({ error: 'That sign-in link has expired or was already used. Ask for a new one.' }, 400);
+    if (!row || row.expires_at < now()) return json({ error: 'This sign-in link has expired or has already been used. Please request a new one.' }, 400);
     const userId = await upsertUser(env, row.email);
     return json({ ok: true }, 200, [await startSession(env, userId), signedInHint(true)]);
   }

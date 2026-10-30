@@ -216,7 +216,7 @@ export async function detectVisualAi(canvas: HTMLCanvasElement, kinds: Set<Visua
   const data = await postApi<{ regions?: { kind: VisualKind; box: number[] }[] }>(
     '/api/vision',
     { image: small.toDataURL('image/jpeg', 0.85), kinds: [...kinds] },
-    'Picture detection failed',
+    'Image detection failed',
   );
   const { width, height } = canvas;
   return (data.regions ?? []).map(({ kind, box: [x0, y0, x1, y1] }) => ({

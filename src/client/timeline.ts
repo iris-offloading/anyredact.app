@@ -41,7 +41,7 @@ export class Timeline {
     this.head = h('div', { className: 'playhead' });
     this.ghost = h('div', { className: 'stretch ghost', hidden: true });
     this.pointer = h('div', { className: 'pointer', hidden: true });
-    this.bar = h('div', { className: 'timeline', 'aria-label': 'Recording timeline. Drag to bleep a stretch.' }, this.marks, this.ghost, this.pointer, this.head);
+    this.bar = h('div', { className: 'timeline', 'aria-label': 'Audio timeline. Drag to bleep or mute a section.' }, this.marks, this.ghost, this.pointer, this.head);
     this.el = h('div', { className: 'audio-view' }, this.player, this.bar, h('div', { className: 'timeline-ends' }, h('span', {}, '0:00'), h('span', {}, clock(opts.duration))));
     // timeupdate fires only a few times a second, too slow to follow words, so follow frames while playing.
     let frame = 0;

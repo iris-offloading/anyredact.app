@@ -68,7 +68,7 @@
     bar.setAttribute('role', 'region');
     bar.setAttribute('aria-label', 'Cookies');
     bar.innerHTML =
-      '<p>Google Analytics cookies help us see which pages people use. <a href="/privacy">Privacy</a></p>' +
+      '<p>We use Google Analytics cookies to understand which pages are most helpful. <a href="/privacy">Privacy policy</a></p>' +
       '<div class="consent-actions"><button type="button" class="btn" data-choice="no">Decline</button>' +
       '<button type="button" class="btn dark" data-choice="yes">Accept</button></div>';
     bar.addEventListener('click', (e) => {

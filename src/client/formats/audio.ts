@@ -41,10 +41,10 @@ const TONE_HZ = 1000;
 const TONE_GAIN = 0.3;
 // Chunks in flight at once once the language is known.
 const PARALLEL = 3;
-const UNREADABLE = 'This recording could not be read in this browser.';
+const UNREADABLE = 'This audio file could not be read in your browser.';
 
 export async function loadAudio(file: File, progress: Progress): Promise<LoadedDoc> {
-  progress('Opening recording…');
+  progress('Opening audio…');
   // One reader for the whole document, so the file is indexed once for every chunk and the export.
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   let duration: number;
@@ -56,11 +56,11 @@ export async function loadAudio(file: File, progress: Progress): Promise<LoadedD
     format = await input.getFormat();
   } catch {
     input.dispose();
-    throw new FileError('No audio could be read from this file. Try MP3, M4A, WAV, FLAC, OGG or Opus.');
+    throw new FileError('No audio track was found in this file. Try an MP3, M4A, WAV, FLAC, OGG, or Opus file.');
   }
   if (duration > MAX_AUDIO_SECONDS) {
     input.dispose();
-    throw new FileError('Recordings up to 2 hours can be redacted.');
+    throw new FileError('Recordings up to 2 hours can be redacted. Please trim or split longer files.');
   }
   const metadata = describeTags(await input.getMetadataTags().catch(() => ({}) as MetadataTags));
   const url = URL.createObjectURL(file);
@@ -144,7 +144,7 @@ async function transcribe(input: Input, duration: number, progress: Progress): P
   const wavs: (Promise<ArrayBuffer> | null)[] = chunks.map(() => null);
   const wav = (i: number) => (wavs[i] ??= speechChunk(input, chunks[i].start, chunks[i].end));
   let done = 0;
-  const say = () => progress(chunks.length > 1 ? `Writing out the recording… ${done} of ${chunks.length} parts` : 'Writing out the recording…');
+  const say = () => progress(chunks.length > 1 ? `Transcribing audio… part ${done + 1} of ${chunks.length}` : 'Transcribing audio…');
   say();
   for (let i = 1; i <= PARALLEL && i < chunks.length; i++) wav(i).catch(() => {});
   // The first chunk names the language, so the rest go straight to the right model.
@@ -199,7 +199,7 @@ async function exportAudio(input: Input, inputFormat: InputFormat, ranges: [numb
     audio: { codec: target.codec, forceTranscode: true, process: (sample) => bleep(sample, ranges, style === 'silence' ? 'silence' : 'beep') },
     showWarnings: false,
   });
-  if (!conversion.isValid) throw new FileError('This recording could not be re-encoded in this browser.');
+  if (!conversion.isValid) throw new FileError('This audio file could not be re-encoded in your browser.');
   if (progress) conversion.onProgress = (p) => progress(`Preparing your redacted file… ${Math.round(p * 100)}%`);
   await conversion.execute();
   return { blob: new Blob([output.target.buffer!], { type: target.type }), ext: target.ext };
