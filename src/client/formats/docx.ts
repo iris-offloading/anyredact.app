@@ -1,8 +1,8 @@
 import { parseAsync, renderDocument } from 'docx-preview';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { enabledTexts, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
-import { collectAlts, drawingText, editXml, enabledByUnit, maskStrings, loadPictures, officeNotes, packOffice, readXml, renamePictures, writeAlts, writeRun, type Alt, type Picture, type TextRun } from './office.ts';
+import { enabledTexts, FileError, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { checkParts, collectAlts, drawingText, editXml, enabledByUnit, loadPictures, maskStrings, officeNotes, packOffice, readXml, renamePictures, writeAlts, writeRun, xmlString, type Alt, type Picture, type TextRun } from './office.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const TEXT_PARTS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
@@ -33,6 +33,7 @@ function ownParagraph(el: Element): Element | null {
 export async function loadDocx(file: File, progress: Progress): Promise<LoadedDoc> {
   progress('Opening Word document…');
   const zip = await JSZip.loadAsync(file);
+  await checkParts(zip);
   const parts = new Map<string, Document>();
   const paras: Para[] = [];
   const alts = new Map<string, Alt>();
@@ -40,8 +41,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
   // Body first, then headers/footers/notes, so the preview reads naturally.
   names.sort((a, b) => Number(b === 'word/document.xml') - Number(a === 'word/document.xml') || a.localeCompare(b));
   for (const name of names) {
-    const xml = new DOMParser().parseFromString(await zip.file(name)!.async('string'), 'application/xml');
-    if (xml.getElementsByTagName('parsererror').length) continue;
+    const xml = (await readXml(zip, name))!;
     parts.set(name, xml);
     const byPara = new Map<Element, Element[]>();
     for (const el of Array.from(xml.getElementsByTagNameNS(W, '*'))) {
@@ -62,7 +62,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
     // Word writes the same description on docPr and cNvPr; one unit covers both.
     collectAlts(xml, alts);
   }
-  if (!parts.has('word/document.xml')) throw new Error('This does not look like a Word (.docx) document.');
+  if (!parts.has('word/document.xml')) throw new FileError('This does not look like a Word (.docx) document.');
   // Chart titles, labels and series names.
   const charts: TextRun[] = [];
   for (const name of Object.keys(zip.files).filter((n) => CHART_PARTS.test(n))) {
@@ -100,7 +100,6 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
         writeRun(c, spans, style);
       }
       writeAlts(alts, byUnit, style, redacted);
-      const ser = new XMLSerializer();
       for (const [name, xml] of parts) {
         // Tracked changes and comments carry their authors' names.
         for (const el of Array.from(xml.getElementsByTagNameNS(W, '*'))) {
@@ -112,7 +111,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
           if (el.localName === 'dataBinding') el.remove();
         }
         renamePictures(xml);
-        zip.file(name, ser.serializeToString(xml));
+        zip.file(name, xmlString(xml));
       }
       await maskCustomXml(zip, redacted);
       return packOffice(zip, { root: 'word', parts, pictures, findings, marks: boxes, redacted, name: file.name, progress: say, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -158,8 +157,7 @@ async function render(file: File, parts: Map<string, Document>, paras: Para[], p
     return b;
   });
   const copy = await JSZip.loadAsync(file);
-  const ser = new XMLSerializer();
-  for (const [name, xml] of parts) copy.file(name, ser.serializeToString(xml));
+  for (const [name, xml] of parts) copy.file(name, xmlString(xml));
   for (const b of marks) b.remove();
 
   // Tracked deletions stay in the file until redacted, so show them as Word does.

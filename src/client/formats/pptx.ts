@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { enabledTexts, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
-import { collectAlts, drawingText, enabledByUnit, loadPictures, officeNotes, packOffice, readRels, readXml, renamePictures, writeAlts, writeRun, type Alt, type Picture, type Rel, type TextRun } from './office.ts';
+import { enabledTexts, FileError, TEXT_STYLES, type Layout, type LoadedDoc, type Progress, type Unit } from '../types.ts';
+import { checkParts, collectAlts, drawingText, enabledByUnit, loadPictures, officeNotes, packOffice, readRels, readXml, renamePictures, writeAlts, writeRun, xmlString, type Alt, type Picture, type Rel, type TextRun } from './office.ts';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -42,8 +42,9 @@ function bodiesOf(xml: Document, name: string, skip: (el: Element) => boolean): 
 export async function loadPptx(file: File, progress: Progress): Promise<LoadedDoc> {
   progress('Opening PowerPoint file…');
   const zip = await JSZip.loadAsync(file);
+  await checkParts(zip);
   const presentation = await readXml(zip, 'ppt/presentation.xml');
-  if (!presentation) throw new Error('This does not look like a PowerPoint (.pptx) file.');
+  if (!presentation) throw new FileError('This does not look like a PowerPoint (.pptx) file.');
   const presRels = await relsFor(zip, 'ppt/presentation.xml');
   const slides = Array.from(presentation.getElementsByTagNameNS(P, 'sldId'), (s) => presRels.get(s.getAttributeNS(R, 'id') ?? '')?.target).filter((t): t is string => !!t && !!zip.file(t));
 
@@ -121,10 +122,9 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
         writeRun(b, spans, style);
       }
       writeAlts(alts, byUnit, style, redacted);
-      const ser = new XMLSerializer();
       for (const [name, xml] of parts) {
         renamePictures(xml);
-        zip.file(name, ser.serializeToString(xml));
+        zip.file(name, xmlString(xml));
       }
       // The file properties list each slide title.
       const app = await readXml(zip, 'docProps/app.xml');
@@ -135,7 +135,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
           for (const f of found) text = text.split(f.text).join(rewriteSegments([f.text], [{ start: 0, end: f.text.length, type: f.type }], style)[0]);
           s.textContent = text;
         }
-        zip.file('docProps/app.xml', ser.serializeToString(app));
+        zip.file('docProps/app.xml', xmlString(app));
       }
       return packOffice(zip, { root: 'ppt', parts, pictures, findings, marks: boxes, redacted, name: file.name, progress: say, mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
     },

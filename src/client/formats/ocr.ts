@@ -116,10 +116,39 @@ async function readUpright(worker: TesseractWorker, canvas: HTMLCanvasElement): 
  * Runs OCR on a bitmap and returns a text unit whose ranges map to word boxes, with the
  * clockwise quarter turns that made it upright. The boxes sit on the canvas turned that way.
  */
+/**
+ * A copy with transparent areas filled, for Tesseract, which reads them as black. Light
+ * marks (white text on a transparent logo or screenshot) get a black backdrop, others white.
+ */
+export function opaque(src: HTMLCanvasElement): HTMLCanvasElement {
+  const { data } = src.getContext('2d')!.getImageData(0, 0, src.width, src.height);
+  const step = 4 * Math.max(1, Math.floor(data.length / 4 / 200_000));
+  let clear = 0;
+  let marks = 0;
+  let light = 0;
+  for (let i = 0; i < data.length; i += step) {
+    if (data[i + 3] < 128) {
+      clear++;
+      continue;
+    }
+    marks++;
+    if (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 > 160) light++;
+  }
+  if (!clear) return src;
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext('2d')!;
+  ctx.fillStyle = marks && light > marks / 2 ? '#000' : '#fff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(src, 0, 0);
+  return out;
+}
+
 export async function readText(id: string, page: number, canvas: HTMLCanvasElement, progress: Progress): Promise<{ unit: Unit; quarters: number }> {
   report = progress;
   const worker = await getWorker();
-  const { data, quarters } = await readUpright(worker, canvas);
+  const { data, quarters } = await readUpright(worker, opaque(canvas));
   let text = '';
   const words: WordBox[] = [];
   (data.lines ?? []).forEach((line, li) => {
