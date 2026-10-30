@@ -69,6 +69,10 @@ for (const c of cases) {
   try {
     await page.goto(`${BASE}/${c.slug}`);
     await page.setInputFiles('#file-input', path.join(files, c.file));
+    if (c.password) {
+      await page.fill('.pdf-password input', c.password, { timeout: STEP_TIMEOUT });
+      await page.press('.pdf-password input', 'Enter');
+    }
     // Opened (consent, findings or an empty list) or refused with a message.
     const state = await page.waitForFunction(
       () => {

@@ -68,10 +68,10 @@ function kindOf(file: File): Kind | null {
   return null;
 }
 
-async function load(file: File, progress: (m: string) => void): Promise<LoadedDoc> {
+async function load(file: File, progress: (m: string) => void, askPassword: (wrong: boolean) => Promise<string | null>): Promise<LoadedDoc> {
   switch (kindOf(file)) {
     case 'pdf':
-      return (await import('./formats/pdf.ts')).loadPdf(file, progress);
+      return (await import('./formats/pdf.ts')).loadPdf(file, progress, askPassword);
     case 'image':
       return (await import('./formats/image.ts')).loadImage(file, progress);
     case 'docx':
@@ -410,7 +410,7 @@ class App {
     try {
       // Before loading: audio is transcribed while it loads.
       startJob(kindOf(file) ?? 'text');
-      this.doc = await load(file, (m) => this.say(m));
+      this.doc = await load(file, (m) => this.say(m), (wrong) => this.askPassword(wrong));
       this.docName.textContent = file.name;
       const styles = this.doc.styles ?? [];
       this.styleRow.hidden = !styles.length;
@@ -439,6 +439,32 @@ class App {
       this.busy = false;
       this.fileInput.value = '';
     }
+  }
+
+  /** A locked PDF's password, typed under the file box; null when the visitor cancels. The password stays in the browser. */
+  private askPassword(wrong: boolean): Promise<string | null> {
+    this.say(wrong ? 'Wrong password. Try again.' : 'This PDF is locked. Enter its password to open it.', wrong);
+    return new Promise((resolve) => {
+      const input = h('input', { type: 'password', autocomplete: 'off', 'aria-label': 'PDF password', required: true });
+      const done = (password: string | null) => {
+        form.remove();
+        this.say(password === null ? '' : 'Opening PDF…');
+        resolve(password);
+      };
+      const form = h(
+        'form',
+        { className: 'pdf-password' },
+        input,
+        h('button', { type: 'submit', className: 'btn primary', textContent: 'Open' }),
+        h('button', { type: 'button', className: 'btn', textContent: 'Cancel', onclick: () => done(null) }),
+      );
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        done(input.value);
+      });
+      this.status.after(form);
+      input.focus();
+    });
   }
 
   reset(clearStatus = true) {

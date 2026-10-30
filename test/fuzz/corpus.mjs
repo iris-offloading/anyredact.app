@@ -203,7 +203,7 @@ export async function build(out) {
     for (const [name, user] of [['encrypted-open.pdf', ''], ['encrypted-password.pdf', 'secret']]) {
       try {
         execFileSync('python3', ['-I', '-c', `import sys,pypdf\nr=pypdf.PdfReader(sys.argv[1]);w=pypdf.PdfWriter(clone_from=r)\nw.encrypt(user_password=sys.argv[3],owner_password='owner',algorithm='AES-256')\nw.write(sys.argv[2])`, plain, path.join(out, name), user]);
-        cases.push({ file: name, slug: '', opens: !user, secrets: user ? [] : SECRETS, note: user ? 'needs a password to open' : 'owner password only', group: 'pdf' });
+        cases.push({ file: name, slug: '', opens: true, password: user || undefined, secrets: SECRETS, note: user ? `opens with the password "${user}"` : 'owner password only', group: 'pdf' });
       } catch {
         /* pypdf missing */
       }

@@ -1,6 +1,6 @@
 import * as pdfjs from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, FileError, MAX_PAGES, outputName, partialPages, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
 import { pad, readText, turned } from './ocr.ts';
 
 declare const __PDF_WORKER_SRC__: string;
@@ -110,10 +110,26 @@ async function formFields(page: pdfjs.PDFPageProxy, viewport: pdfjs.PageViewport
   return fields;
 }
 
-export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc> {
+/** Asks the visitor for a locked PDF's password, again after a wrong one; null when they cancel. */
+export type AskPassword = (wrong: boolean) => Promise<string | null>;
+
+export async function loadPdf(file: File, progress: Progress, askPassword?: AskPassword): Promise<LoadedDoc> {
   progress('Opening PDF…');
   const data = new Uint8Array(await file.arrayBuffer());
-  const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
+  const task = pdfjs.getDocument({ data, isEvalSupported: false });
+  let cancelled = false;
+  if (askPassword) {
+    task.onPassword = (update: (password: string) => void, reason: number) =>
+      askPassword(reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD).then((password) => {
+        if (password !== null) return update(password);
+        cancelled = true;
+        task.destroy();
+      });
+  }
+  const doc = await task.promise.catch((err) => {
+    throw cancelled ? new FileError('This PDF is locked with a password.') : err;
+  });
+  progress('Opening PDF…');
   const notes: string[] = [
     'Pages are flattened into images when you download, so hidden text, links, form fields and metadata are removed. The result is not text-searchable.',
   ];
