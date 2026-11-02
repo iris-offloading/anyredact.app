@@ -439,41 +439,97 @@ ${photoMetadataDiagram()}
   },
   {
     slug: 'gdpr-subject-access-request-redaction',
-    title: 'Redacting Documents for a GDPR Access Request | AnyRedact',
-    description: 'Responding to a GDPR subject access request (SAR)? Learn how to redact third-party personal data while keeping the requester’s information, plus SAR deadlines and workflow tips.',
-    h1: 'Redacting documents for a GDPR access request',
-    summary: 'Whose data to redact in a GDPR subject access request (SAR), statutory deadlines, and a repeatable workflow.',
+    title: 'Subject Access Request Redaction: GDPR Guide | AnyRedact',
+    description: 'Redacting a GDPR subject access request (SAR): whose data to remove, which exemptions apply, deadlines, and a workflow for emails, PDFs, and recordings.',
+    h1: 'Subject access request redaction',
+    summary: 'Whose data to remove from a GDPR subject access request (SAR), the exemptions, the deadlines, and a repeatable workflow.',
+    tools: ['redact-pdf', 'redact-word'],
     body: `
-<p>Under EU and UK GDPR, individuals have the right to request a copy of the personal data an organization holds about them—known as a <strong>data subject access request (DSAR or SAR)</strong>. Because real-world emails, support tickets, HR notes, and spreadsheets almost always mention colleagues, customers, or other third parties alongside the requester, those third-party details usually must be redacted before disclosure.</p>
-<p><em>Note: This guide provides practical background information, not legal advice.</em></p>
+<p>Under Article 15 of the EU and UK GDPR, anyone can ask an organization for a copy of the personal data it holds about them. This is a <strong>subject access request</strong> (SAR, or DSAR for data subject access request). The records that answer it, such as email threads, HR files, support tickets, CCTV stills, and call recordings, nearly always mention other people too. Redaction lets you hand over the requester’s data while protecting everyone else in the same files.</p>
+<p><em>This guide gives practical background, not legal advice. For a contested or high-risk request, ask your data protection officer or a lawyer.</em></p>
 
-<h2>What to redact—and what to leave visible</h2>
+<h2>What the requester is entitled to</h2>
 <ul>
-<li><strong>Third-party personal data.</strong> Redact names, contact details, and identifying facts about other individuals unless they have consented to disclosure or it is reasonable to disclose without their consent.</li>
-<li><strong>Legally exempt material.</strong> Withhold passages covered by a statutory GDPR exemption, such as legal professional privilege, confidential references, or information that would prejudice crime prevention or ongoing negotiations.</li>
-<li><strong>Out-of-scope sections.</strong> In long multi-topic reports or spreadsheets, remove rows or sections that have nothing to do with the requester.</li>
+<li><strong>A copy of their personal data.</strong> Any information that relates to them and identifies them, in any format, including opinions others recorded about them.</li>
+<li><strong>Supporting information.</strong> The purposes of processing, the categories of data, who received it, how long you keep it, where it came from, their other rights, and any automated decision-making.</li>
+<li><strong>A free first copy.</strong> You may charge a reasonable fee only for extra copies, or for requests that are manifestly unfounded or excessive.</li>
 </ul>
-<p><strong>Never redact the requester’s own personal data</strong> simply because it is awkward or critical. Their name, statements they made, and others’ recorded opinions about them are part of their personal data (subject to third-party Balancing Test rules).</p>
+<p>The right covers data, not documents. You can send extracts or a summary table instead of whole files, but disclosing redacted originals is often faster and easier for the requester to trust.</p>
 
-<h2>Statutory SAR deadlines</h2>
-<p>You must respond within <strong>one calendar month</strong> of receiving the request. If a request is genuinely complex or involves a large volume of records, you may extend the deadline by up to <strong>two additional months</strong>—provided you notify the requester and explain why before the first month expires.</p>
+<h2>Deadlines</h2>
+<p>Respond within <strong>one calendar month</strong> of receiving the request. For complex or numerous requests, you may extend by up to <strong>two further months</strong>, as long as you tell the requester, and give your reasons, within the first month.</p>
 ${sarTimelineDiagram()}
+<p>If you need to confirm the requester’s identity or ask which records they want, the clock starts once you have that answer. In the UK, the Data (Use and Access) Act 2025 also confirms that searches need to be reasonable and proportionate, not exhaustive.</p>
 
-<h2>A practical SAR redaction workflow</h2>
+<h2>Whose data to redact</h2>
+<h3>Other people</h3>
+<p>Remove names, contact details, and identifying facts about third parties, such as colleagues, other customers, witnesses, and family members. Under UK law (Data Protection Act 2018, Schedule 2, paragraph 16) you may disclose third-party data only if that person consents or it is reasonable to disclose without consent. Article 15(4) GDPR sets the same limit in the EU: the copy must not harm the rights and freedoms of others. When weighing reasonableness, consider:</p>
+<ul>
+<li>Whether the requester already knows the information, for example an email they were copied on.</li>
+<li>Any duty of confidence owed to the third party.</li>
+<li>Whether you asked for consent, and whether it was refused.</li>
+<li>The risk of harm to the third party if their details are disclosed.</li>
+</ul>
+<h3>Staff acting in their job</h3>
+<p>Names and work emails of employees acting in a professional role, such as the manager who signed a letter, are often disclosed, particularly for senior staff or people the requester has dealt with. Redact them where disclosure could put someone at risk, such as the author of a whistleblowing complaint.</p>
+<h3>Indirect identifiers</h3>
+<p>Removing a name is not enough if the rest of the sentence still points to one person. Check job titles (“the only night shift nurse”), relationships (“his sister”), unusual events, initials, email signatures, phone extensions, and the To and Cc lines of email headers.</p>
+
+<h2>Exemptions that allow withholding</h2>
+<p>Beyond third-party data, the UK Data Protection Act 2018 lists exemptions in Schedules 2 to 4. The ones that come up most in SAR responses:</p>
+<ul>
+<li><strong>Legal professional privilege.</strong> Advice from your lawyers and documents prepared for litigation.</li>
+<li><strong>Confidential references.</strong> References your organization gave about the requester for a job, training, or an appointment.</li>
+<li><strong>Management forecasts and negotiations.</strong> Planning or negotiating positions that would be prejudiced by disclosure to the requester.</li>
+<li><strong>Crime and taxation.</strong> Information whose disclosure would prejudice preventing or detecting crime.</li>
+<li><strong>Serious harm.</strong> Health, social work, and education records where disclosure would likely cause serious harm to the requester or someone else.</li>
+</ul>
+<p>EU member states set their own exemptions under Article 23, so check national law outside the UK. Apply each exemption line by line, not to whole documents, and leave the rest readable.</p>
+
+<h2>Never redact the requester’s own data</h2>
+<p>Unflattering notes, complaints about the requester, and colleagues’ opinions of them are still their personal data. Withholding them because they are embarrassing breaks the law and is the most common reason SAR complaints succeed. If an opinion also identifies its author, weigh the author’s interests as third-party data rather than removing the whole passage.</p>
+
+<h2>Step-by-step SAR redaction workflow</h2>
 <ol>
-<li>Gather responsive records and deduplicate identical items (such as the same email chain saved across three mailboxes).</li>
-<li>Open each file in the matching AnyRedact tool: <a href="/redact-pdf">PDF</a>, <a href="/redact-word">Word</a>, <a href="/redact-excel">Excel</a>, <a href="/redact-image">Images</a>, <a href="/redact-audio">Audio</a>, or <a href="/redact-text">Text</a>.</li>
-<li>Uncheck detections that belong to the requester so their own details remain readable. Add coworkers’ and other customers’ names under <strong>Always redact</strong> so every mention—including first names and initials—is caught consistently.</li>
-<li>In Word and text files, consider choosing <strong>Replace with label</strong> (such as <code>[NAME]</code> or <code>[EMAIL]</code>) so sentences still make sense to the requester.</li>
-<li>Keep an internal exemption log recording which files were redacted and the legal basis for each category of withholding, in case the supervisory authority asks to review your handling.</li>
+<li><strong>Collect and deduplicate.</strong> Gather records from mailboxes, shared drives, HR and CRM systems, chat tools, and recordings. Remove duplicate copies of the same email chain so each is reviewed once.</li>
+<li><strong>Convert where useful.</strong> Export emails to PDF with their attachments, and keep spreadsheets and Word files in their own formats so the structure survives.</li>
+<li><strong>Open each file in the matching tool.</strong> <a href="/redact-pdf">PDF</a>, <a href="/redact-word">Word</a>, <a href="/redact-excel">Excel</a>, <a href="/redact-powerpoint">PowerPoint</a>, <a href="/redact-image">images</a>, <a href="/redact-audio">audio</a>, or <a href="/redact-text">text and chat exports</a>. Click <strong>Upload</strong> to let the AI list names, contacts, and ID numbers under <strong>Found</strong>.</li>
+<li><strong>Untick the requester.</strong> Clear every finding that belongs to the requester so their details stay readable.</li>
+<li><strong>List third parties once.</strong> Type each colleague’s or customer’s name into <strong>Always redact</strong>, one per line, so every mention across the file is caught, including first names on their own. Select any remaining phrase in the preview and choose <strong>Redact here</strong> or <strong>Redact everywhere</strong>.</li>
+<li><strong>Keep sentences readable.</strong> In Word and text files, set the redaction style to <strong>Replace with label</strong> so the requester sees <code>[NAME]</code> or <code>[EMAIL]</code> instead of a bare bar.</li>
+<li><strong>Decide on business contacts.</strong> Company switchboards and public helplines are found but left unticked. Tick <strong>Redact company and public contacts</strong> only if they would identify a third party.</li>
+<li><strong>Check and download.</strong> Tick <strong>Check for missed details</strong>, then download. The copy drops hidden metadata and embedded files, and PDF pages are flattened so no text sits under the bars.</li>
 </ol>
 
-<h2>Final checks before disclosure</h2>
+<h2>Keep a redaction log</h2>
+<p>For each file, note what was withheld and the reason, such as “third-party data, no consent” or “legal professional privilege”. Keep the unredacted originals and the log together in a restricted folder. If the requester complains, the regulator will ask how you reached each decision.</p>
+
+<h2>What to tell the requester</h2>
 <ul>
-<li>Spot-search exported files for key third-party names and email addresses.</li>
-<li>Remember to check email attachments, embedded spreadsheets, and call recordings—not just email bodies.</li>
-<li>Verify that PDF redactions are truly flattened rather than covered with movable shapes; see <a href="/guides/pdf-black-box-mistakes">why black boxes in PDFs fail</a>.</li>
+<li>That some information was withheld, and the general grounds, unless saying so would itself reveal something exempt.</li>
+<li>The supporting information listed above.</li>
+<li>Their right to complain to the ICO in the UK, or to their national supervisory authority in the EU, and to seek a court remedy.</li>
 </ul>
+
+<h2>Final checks before sending</h2>
+<ul>
+<li>Search exported Word, Excel, and text files for the third-party names on your list. Flattened PDFs have no searchable text, so read them page by page.</li>
+<li>Open attachments, embedded spreadsheets, and recordings, not just email bodies.</li>
+<li>For PDFs redacted elsewhere, confirm the text under each bar is gone; see <a href="/guides/pdf-black-box-mistakes">why black boxes in PDFs fail</a>.</li>
+<li>Send the bundle through a secure channel, such as an encrypted link or password-protected archive with the password sent separately.</li>
+</ul>
+
+<h2>Frequently asked questions</h2>
+<h3>Do I have to send whole documents?</h3>
+<p>No. The requester is entitled to their personal data and the supporting information. Many organizations send redacted documents because extracts take longer to prepare and are harder to verify.</p>
+<h3>Can I redact the names of employees?</h3>
+<p>Sometimes. Staff acting in a work role are often named, but you can redact where disclosure would be unfair or put them at risk. Decide case by case and record why.</p>
+<h3>The requester asked for an unredacted copy. Do I have to give it?</h3>
+<p>Not for third-party data you withheld lawfully. Explain the grounds and their right to complain to the regulator.</p>
+<h3>Can I refuse a SAR outright?</h3>
+<p>Only when the request is manifestly unfounded or excessive, such as repeated identical requests or a request made purely to disrupt. You must explain the refusal and tell the requester how to complain.</p>
+<h3>Can I use an online tool to redact SAR documents?</h3>
+<p>Yes, if your data protection policy allows that processor. Read the <a href="/privacy">privacy policy</a> for what AnyRedact receives and keeps, and record the tool in your processing records.</p>
 `,
   },
   {
