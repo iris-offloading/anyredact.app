@@ -1,3 +1,4 @@
+import { termRegExp } from '../shared/detect.ts';
 import type { Finding } from './types.ts';
 
 /** Laid-out text has no line break characters and shows tabs as em spaces. */
@@ -102,4 +103,26 @@ function wrapRange(nodes: Text[], start: number, end: number, make: () => HTMLEl
     piece.replaceWith(mark);
     mark.append(piece);
   }
+}
+
+/** Ranges over every place `term` appears in a block's text, matched like an always-redact term. */
+export function termRanges(block: HTMLElement, term: string): Range[] {
+  const re = termRegExp(term);
+  if (!re) return [];
+  const nodes = textNodes(block);
+  const full = nodes.map((n) => n.data).join('');
+  const at = (pos: number, end: boolean): [Text, number] => {
+    let offset = 0;
+    for (const n of nodes) {
+      if (pos < offset + n.data.length || (end && pos === offset + n.data.length)) return [n, pos - offset];
+      offset += n.data.length;
+    }
+    return [nodes[nodes.length - 1], nodes[nodes.length - 1].data.length];
+  };
+  return Array.from(full.matchAll(re), (m) => {
+    const r = document.createRange();
+    r.setStart(...at(m.index!, false));
+    r.setEnd(...at(m.index! + m[0].length, true));
+    return r;
+  });
 }

@@ -2,9 +2,8 @@
 // vision model. The browser also runs a local detector; this pass catches the
 // small, turned and partly hidden faces it misses. Only used when the visitor
 // turned picture redaction on and agreed to send the file.
-import { PAGE_CHARS } from '../shared/pricing.ts';
 import { chargeUsage, responseContent, runWithRetry, type Env } from './detect.ts';
-import { json, readAiPost } from './http.ts';
+import { json, modelJson, readAiPost } from './http.ts';
 
 // Chosen on sample photos: found small and turned faces that Gemma 4 and
 // Llama 4 Scout missed, and is not limited to 20 requests a minute like the
@@ -13,7 +12,7 @@ export const VISION_MODEL = '@cf/qwen/qwen3.8-27b';
 const VISION_OPTIONS = { chat_template_kwargs: { enable_thinking: false } };
 
 export const VISION_KINDS = {
-  face: 'faces, including small, turned or partly hidden ones',
+  face: 'faces, including small, turned or partly hidden ones, and faint one-colour portraits such as the second, see-through photo on passports and ID cards',
   screen: 'screens: monitors, TVs, laptops, tablets and phones',
   sign: 'road and street signs, and house numbers',
   plate: 'vehicle number plates',
@@ -36,16 +35,7 @@ Return JSON only: {"items":[{"kind":"${kinds.join('|')}","box":[x0,y0,x1,y1]}]},
 
 /** Validates the model's items; boxes given as 0-1 fractions are scaled up. */
 export function parseRegions(content: unknown, kinds: VisionKind[]): Region[] {
-  let data: unknown = content;
-  if (typeof content === 'string') {
-    const m = content.match(/\{[\s\S]*\}/);
-    try {
-      data = m ? JSON.parse(m[0]) : null;
-    } catch {
-      return [];
-    }
-  }
-  const items = (data as { items?: unknown })?.items;
+  const items = (modelJson(content) as { items?: unknown })?.items;
   if (!Array.isArray(items)) return [];
   const out: Region[] = [];
   for (const it of items as { kind?: unknown; box?: unknown }[]) {
@@ -69,8 +59,8 @@ export async function handleVision(request: Request, env: Env): Promise<Response
   if (typeof image !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(image)) return json({ error: 'Expected an image data URL.' }, 400);
   if (image.length > (MAX_IMAGE_BYTES * 4) / 3) return json({ error: 'Image is too large.' }, 413);
 
-  // One picture counts as one page.
-  const quota = await chargeUsage(request, env, PAGE_CHARS);
+  // One picture costs one credit.
+  const quota = await chargeUsage(request, env, 1);
   if (quota instanceof Response) return quota;
 
   try {
@@ -86,6 +76,7 @@ export async function handleVision(request: Request, env: Env): Promise<Response
     return json({ regions: parseRegions(responseContent(result), kinds), quota: quota.state });
   } catch (err) {
     console.error('vision failed', err);
-    return json({ error: 'Picture detection is unavailable right now.' }, 502);
+    await quota.refund();
+    return json({ error: 'Image detection is temporarily unavailable. Please try again in a moment.' }, 502);
   }
 }

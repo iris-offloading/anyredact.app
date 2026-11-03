@@ -19,6 +19,11 @@ test('single-name variants are case-sensitive', () => {
   assert.deepEqual(got, ['Will Turner', 'TURNER', 'Will']);
 });
 
+test('a one-word name the AI found is matched case-sensitively', () => {
+  const got = found(['Will said we will meet.'], [{ text: 'Will', type: 'name' }]).map(([, v]) => v);
+  assert.deepEqual(got, ['Will']);
+});
+
 test('later mentions of a name the AI found are caught', () => {
   const got = found(['Patient: Jane Doe', 'Ms. Doe reported that Jane felt better.'], [{ text: 'Jane Doe', type: 'name' }]).map(([, v]) => v);
   assert.deepEqual(got, ['Jane Doe', 'Doe', 'Jane']);

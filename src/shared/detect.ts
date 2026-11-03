@@ -103,6 +103,16 @@ function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Matches a term case-insensitively unless asked, with any run of whitespace between its words. */
+export function termRegExp(term: string, caseSensitive = false): RegExp | null {
+  const t = term.trim();
+  if (t.length < 2) return null;
+  const pattern = t.split(/\s+/).map(escapeRe).join('\\s+');
+  const wordy = /^\w/.test(t) && /\w$/.test(t);
+  // A letter after a backslash is an escape such as \n in JSON or code, not part of the word.
+  return new RegExp(wordy ? `(?<!(?<!\\\\)\\w)${pattern}(?![\\w])` : pattern, caseSensitive ? 'g' : 'gi');
+}
+
 /** Finds every occurrence of each term (case-insensitive unless asked, whitespace-tolerant). */
 export function findTerms(
   text: string,
@@ -112,16 +122,74 @@ export function findTerms(
 ): Span[] {
   const spans: Span[] = [];
   for (const term of terms) {
-    const t = term.text.trim();
-    if (t.length < 2) continue;
-    const pattern = t.split(/\s+/).map(escapeRe).join('\\s+');
-    const wordy = /^\w/.test(t) && /\w$/.test(t);
-    const re = new RegExp(wordy ? `(?<![\\w])${pattern}(?![\\w])` : pattern, caseSensitive ? 'g' : 'gi');
+    const re = termRegExp(term.text, caseSensitive);
+    if (!re) continue;
     for (const m of text.matchAll(re)) {
       spans.push({ start: m.index!, end: m.index! + m[0].length, type: term.type, source });
     }
   }
   return spans;
+}
+
+/** Splits text into pieces of at most `size` characters, at the last line break or space where there is one. */
+export function chunkText(text: string, size: number): string[] {
+  const chunks: string[] = [];
+  let pos = 0;
+  while (pos < text.length) {
+    let end = Math.min(text.length, pos + size);
+    if (end < text.length) {
+      const slice = text.slice(pos, end);
+      const brk = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf(' '));
+      if (brk > size / 2) end = pos + brk + 1;
+    }
+    chunks.push(text.slice(pos, end));
+    pos = end;
+  }
+  return chunks;
+}
+
+// Private keys are found by their armour rather than by the model, which
+// skips long blobs such as the key in a Google service account file. Line
+// breaks may be real or escaped as \n, as in JSON and source code.
+const KEY_LABEL = String.raw`(?:[A-Z0-9]+\s+)*PRIVATE\s+KEY(?:\s+BLOCK)?-----`;
+const KEY_BEGIN = new RegExp(String.raw`-----BEGIN\s+${KEY_LABEL}`, 'g');
+const KEY_END = new RegExp(String.raw`-----END\s+${KEY_LABEL}`, 'g');
+const KEY_BREAK = /(\r?\n|\\+[nr])/;
+const KEY_LINE = /^[ \t]*[A-Za-z0-9+/=]*[ \t]*$/;
+const MAX_KEY = 20_000;
+
+/** Length of the base64 lines at the start of `parts` (lines and breaks, as split with KEY_BREAK). */
+function keyLines(parts: string[]): number {
+  let n = 0;
+  let taken = 0;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 0 && !KEY_LINE.test(parts[i])) break;
+    n += parts[i].length;
+    if (i % 2 === 0 && parts[i].trim()) taken = n;
+  }
+  return taken;
+}
+
+/**
+ * Finds PEM, OpenSSH and PGP private keys, header to footer. A key cut off by
+ * the end of the text, or starting before it, is taken as far as its base64 lines go.
+ */
+export function findPrivateKeys(text: string): string[] {
+  const keys: [number, number][] = [];
+  for (const begin of text.matchAll(KEY_BEGIN)) {
+    const from = begin.index + begin[0].length;
+    if (keys.length && begin.index < keys[keys.length - 1][1]) continue;
+    KEY_END.lastIndex = from;
+    const end = KEY_END.exec(text);
+    const next = text.slice(from, from + MAX_KEY);
+    keys.push([begin.index, end && end.index - from < MAX_KEY ? end.index + end[0].length : from + keyLines(next.split(KEY_BREAK))]);
+  }
+  for (const end of text.matchAll(KEY_END)) {
+    if (keys.some(([a, b]) => end.index >= a && end.index < b)) continue;
+    const before = text.slice(Math.max(0, end.index - MAX_KEY), end.index).split(KEY_BREAK).reverse();
+    keys.push([end.index - keyLines(before), end.index + end[0].length]);
+  }
+  return keys.map(([a, b]) => text.slice(a, b).trim());
 }
 
 // Field labels a model sometimes returns as if they were the sensitive value.

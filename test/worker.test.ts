@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { chunkText, type Env } from '../src/worker/detect.ts';
+import { chunkText } from '../src/shared/detect.ts';
+import type { Env } from '../src/worker/detect.ts';
 import entry from '../src/worker/index.ts';
 
 const worker = { fetch: (req: Request, e: Env) => entry.fetch(req as Parameters<typeof entry.fetch>[0], e) };
@@ -27,6 +28,11 @@ test('returns only entities that occur in the text', async () => {
       { text: '1 Main St', type: 'address' },
     ],
   });
+});
+
+test('keeps IP addresses as their own type', async () => {
+  const res = await worker.fetch(post({ text: 'login from 10.0.0.12' }), env({ entities: [{ text: '10.0.0.12', type: 'ip' }] }));
+  assert.deepEqual(await res.json(), { entities: [{ text: '10.0.0.12', type: 'ip' }] });
 });
 
 test('parses string responses and unknown types', async () => {
@@ -74,7 +80,7 @@ test('check returns per-category risks', async () => {
     AI: { run: async () => ({ answers: { name: { type: 'noul', noul: 0.9 }, contact: { type: 'noul', noul: 0.1 } } }) } as unknown as Ai,
   };
   const req = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: 'Hi Jane, ████' }), headers: { origin: 'https://anyredact.app' } });
-  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 } });
+  assert.deepEqual(await (await worker.fetch(req, e)).json(), { risks: { name: 0.9, contact: 0.1 }, free: false });
   const empty = new Request('https://anyredact.app/api/check', { method: 'POST', body: JSON.stringify({ text: '████ \n ██' }), headers: { origin: 'https://anyredact.app' } });
   assert.deepEqual(await (await worker.fetch(empty, e)).json(), { risks: {} });
 });
@@ -129,7 +135,7 @@ async function quotaNamespace() {
     get: (name: string) => {
       if (!objects.has(name)) {
         const data = new Map<string, unknown>();
-        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v) };
+        const storage = { get: async (k: string) => data.get(k), put: async (k: string, v: unknown) => void data.set(k, v), delete: async (k: string) => data.delete(k), setAlarm: async () => {} };
         objects.set(name, new Quota({ storage } as unknown as DurableObjectState));
       }
       const obj = objects.get(name)!;
@@ -139,24 +145,80 @@ async function quotaNamespace() {
 }
 
 test('free allowance is enforced per browser, with a larger shared IP allowance', async () => {
-  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), FREE_CHARS_PER_DAY: '30' };
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
   const req = (device: string, text: string) =>
     new Request('https://anyredact.app/api/detect', {
       method: 'POST',
       body: JSON.stringify({ text }),
       headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9' },
     });
-  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e);
-  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 20, limit: 30 });
-  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(20)), e)).status, 402);
+  // 3,000 characters to a credit, rounded up.
+  const first = await worker.fetch(req('device-aaaa', 'x'.repeat(17_000)), e);
+  assert.deepEqual(((await first.json()) as { quota: unknown }).quota, { used: 6, limit: 10 });
+  assert.equal((await worker.fetch(req('device-aaaa', 'x'.repeat(18_000)), e)).status, 402);
   // Another browser on the same IP still has its own allowance...
-  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(25)), e)).status, 200);
+  assert.equal((await worker.fetch(req('device-bbbb', 'x'.repeat(21_000)), e)).status, 200);
   // ...until the IP allowance (5x) runs out.
-  // IP used: 20 + 25 + 4 x 25 = 145 of 150, so 10 more characters don't fit.
-  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(25)), e);
-  const res = await worker.fetch(req('device-gggg', 'x'.repeat(10)), e);
+  // IP used: 6 + 7 + 4 x 9 = 49 of 50 credits, so 2 more don't fit.
+  for (const d of ['device-cccc', 'device-dddd', 'device-eeee', 'device-ffff']) await worker.fetch(req(d, 'x'.repeat(27_000)), e);
+  const res = await worker.fetch(req('device-gggg', 'x'.repeat(6_000)), e);
   assert.equal(res.status, 402);
   assert.equal(((await res.json()) as { code: string }).code, 'quota');
+});
+
+test('each scan comes with one free final check, later ones use the allowance', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
+  const post = (path: string, body: object) =>
+    worker.fetch(
+      new Request(`https://anyredact.app${path}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' },
+      }),
+      e,
+    );
+  const { checkToken } = (await (await post('/api/detect', { text: 'Jane' })).json()) as { checkToken: string };
+  const first = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean };
+  assert.equal(first.free, true);
+  const second = (await (await post('/api/check', { text: 'Jane Doe', checkToken })).json()) as { free: boolean; quota: { used: number } };
+  // 1 credit for the scan, then 1 for the paid check.
+  assert.deepEqual([second.free, second.quota.used], [false, 2]);
+  assert.equal(((await (await post('/api/check', { text: 'Jane Doe', checkToken: crypto.randomUUID() })).json()) as { free: boolean }).free, false);
+});
+
+test('a failed model call gives the charge back', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
+  const req = (text: string) =>
+    new Request('https://anyredact.app/api/detect', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' },
+    });
+  const run = e.AI!.run;
+  e.AI!.run = (async () => {
+    throw new Error('model down');
+  }) as never;
+  assert.equal((await worker.fetch(req('x'.repeat(9_000)), e)).status, 502);
+  e.AI!.run = run;
+  const ok = (await (await worker.fetch(req('x'.repeat(10)), e)).json()) as { quota: { used: number } };
+  assert.equal(ok.quota.used, 1);
+});
+
+test('a free final check covers about the size of its scan', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace() };
+  const post = (path: string, body: object) =>
+    worker.fetch(
+      new Request(`https://anyredact.app${path}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' },
+      }),
+      e,
+    );
+  const { checkToken } = (await (await post('/api/detect', { text: 'ab' })).json()) as { checkToken: string };
+  // 'ab' covers a check of up to 504 characters.
+  const big = (await (await post('/api/check', { text: 'Jane '.repeat(200), checkToken })).json()) as { free: boolean };
+  assert.equal(big.free, false);
 });
 
 test('vision regions are validated and scaled to thousandths', async () => {
@@ -171,4 +233,100 @@ test('vision regions are validated and scaled to thousandths', async () => {
     { kind: 'face', box: [900, 900, 1000, 950] },
   ]);
   assert.deepEqual(parseRegions('not json', ['face']), []);
+});
+
+test('limits IPv6 visitors by their /64 network', async () => {
+  const { clientNetwork } = await import('../src/worker/http.ts');
+  const net = (ip: string) => clientNetwork(new Request('https://anyredact.app/', { headers: { 'cf-connecting-ip': ip } }));
+  assert.equal(net('203.0.113.7'), '203.0.113.7');
+  assert.equal(net('2001:db8:aa:1::1'), '2001:db8:aa:1::/64');
+  assert.equal(net('2001:0db8:00aa:0001:ffff:1:2:3'), '2001:db8:aa:1::/64');
+  assert.equal(net('2001:db8::5'), '2001:db8:0:0::/64');
+  assert.equal(net('::ffff:198.51.100.4'), '198.51.100.4');
+});
+
+test('preview benchmark features need the trial key', async () => {
+  const calls: unknown[] = [];
+  const e = {
+    ASSETS: { fetch: async () => new Response('asset') },
+    AI: { run: async (model: string) => (calls.push(model), { response: { entities: [] } }) },
+    MODEL_TRIALS: '1',
+    TRIAL_KEY: 'k1',
+  } as unknown as Env;
+  const detect = (key?: string) =>
+    entry.fetch(
+      new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane Doe', model: '@cf/meta/other' }), headers: key ? { 'x-trial-key': key } : {} }) as never,
+      e as never,
+    );
+  await detect();
+  await detect('wrong');
+  await detect('k1');
+  assert.deepEqual(calls, ['@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/meta/other']);
+});
+
+test('finds private keys the model skipped, with escaped line breaks', async () => {
+  const key = '-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\\nBKcwggSjAgEAAoIBAQC7\\n-----END PRIVATE KEY-----';
+  const text = `{"private_key_id": "3f2a9c7e", "private_key": "${key}\\n", "client_id": "1048573"}`;
+  const res = await worker.fetch(post({ text }), env({ entities: [{ text: '3f2a9c7e', type: 'id', owner: 'organization' }] }));
+  assert.deepEqual(await res.json(), {
+    entities: [
+      { text: key, type: 'other', owner: 'person' },
+      { text: '3f2a9c7e', type: 'id', owner: 'organization' },
+    ],
+  });
+});
+
+// Stands in for Cloudflare's siteverify: tokens starting with "ok" pass, once each.
+function fakeTurnstile() {
+  const spent = new Set<string>();
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (!String(url).includes('challenges.cloudflare.com')) return real(url, init);
+    const token = String((init!.body as FormData).get('response'));
+    const success = token.startsWith('ok') && !spent.has(token);
+    spent.add(token);
+    return Response.json({ success });
+  }) as typeof fetch;
+  return () => void (globalThis.fetch = real);
+}
+
+test("a signed-out browser's first scan of the day needs Turnstile", async () => {
+  const restore = fakeTurnstile();
+  try {
+    const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), TURNSTILE_SITE_KEY: 'site', TURNSTILE_SECRET_KEY: 'secret' };
+    const req = (device: string, turnstile?: string) =>
+      new Request('https://anyredact.app/api/detect', {
+        method: 'POST',
+        body: JSON.stringify({ text: 'Jane Doe' }),
+        headers: { origin: 'https://anyredact.app', 'x-device-id': device, 'cf-connecting-ip': '203.0.113.9', ...(turnstile ? { 'x-turnstile': turnstile } : {}) },
+      });
+    const quota = async () =>
+      (await (await worker.fetch(new Request('https://anyredact.app/api/quota', { headers: { 'x-device-id': 'device-aaaa', 'cf-connecting-ip': '203.0.113.9' } }), e)).json()) as { turnstile?: string };
+    assert.equal((await quota()).turnstile, 'site');
+    const first = await worker.fetch(req('device-aaaa'), e);
+    assert.equal(first.status, 403);
+    assert.deepEqual(await first.json(), { error: 'Please confirm you are human.', code: 'turnstile', siteKey: 'site' });
+    assert.equal((await worker.fetch(req('device-aaaa', 'bad'), e)).status, 403);
+    const passed = await worker.fetch(req('device-aaaa', 'ok-1'), e);
+    assert.equal(passed.status, 200);
+    // Refused requests charged nothing.
+    assert.equal(((await passed.json()) as { quota: { used: number } }).quota.used, 1);
+    // The rest of the day needs no token...
+    assert.equal((await worker.fetch(req('device-aaaa'), e)).status, 200);
+    assert.equal((await quota()).turnstile, undefined);
+    // ...but a new browser ID asks again, and a token works once.
+    assert.equal((await worker.fetch(req('device-bbbb'), e)).status, 403);
+    assert.equal((await worker.fetch(req('device-bbbb', 'ok-1'), e)).status, 403);
+  } finally {
+    restore();
+  }
+});
+
+test('Turnstile stays off until both keys are set', async () => {
+  const e = { ...env({ entities: [] }), QUOTA: await quotaNamespace(), TURNSTILE_SITE_KEY: 'site' };
+  const res = await worker.fetch(
+    new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane Doe' }), headers: { origin: 'https://anyredact.app', 'x-device-id': 'device-aaaa' } }),
+    e,
+  );
+  assert.equal(res.status, 200);
 });

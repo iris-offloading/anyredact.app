@@ -1,4 +1,3 @@
-import exifr from 'exifr';
 import type { MetaField } from '../types.ts';
 
 type Tags = Record<string, unknown>;
@@ -28,6 +27,8 @@ const SKIP = new Set(['latitude', 'longitude', 'ExifVersion', 'FlashpixVersion',
 export async function readMetadata(file: File): Promise<MetaField[]> {
   let tags: Tags | undefined;
   try {
+    // Loaded here, so the audio page, which only needs show(), doesn't download it.
+    const { default: exifr } = await import('exifr');
     tags = await exifr.parse(file, {
       tiff: true,
       exif: true,
@@ -86,7 +87,7 @@ export function describe(tags: Tags): MetaField[] {
   return out;
 }
 
-function show(v: unknown): string {
+export function show(v: unknown): string {
   if (v === undefined || v === null || v === '') return '';
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toLocaleString();
   if (v instanceof Uint8Array || ArrayBuffer.isView(v)) return '';

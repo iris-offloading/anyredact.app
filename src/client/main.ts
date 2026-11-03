@@ -1,24 +1,32 @@
 import { analyzeUnits, startsTicked } from '../shared/analyze.ts';
 import { h } from './dom.ts';
 import { ENTITY_LABELS, type EntityType } from '../shared/detect.ts';
-import { detectWithAi, freePagesLeft, QuotaError, type AiEntity } from './ai.ts';
+import { detectWithAi, freeCredits, onHumanCheck, QuotaError, startJob, useHumanToken, type AiEntity } from './ai.ts';
+import { humanCheck, type HumanCheck } from './turnstile.ts';
 import { CHECK_LABELS, checkRemaining, remainingText } from './check.ts';
 import { PageEditor, type Overlay } from './editor.ts';
-import { pagesFor } from '../shared/pricing.ts';
-import { highlight, pieces, unitRange } from './highlight.ts';
-import type { Finding, Layout, LoadedDoc, ManualBox, MetaField, Page, RedactStyle, Unit } from './types.ts';
-import { detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
+import { audioCredits, CHECK_CREDITS, creditsFor } from '../shared/pricing.ts';
+import { highlight, pieces, termRanges, unitRange } from './highlight.ts';
+import { clock, Timeline } from './timeline.ts';
+import { FileError, groupBy, isBox, type DocView, type Finding, type Layout, type LoadedDoc, type ManualMark, type MetaField, type Page, type RedactStyle, type SpokenWord, type Unit, type ViewHandlers } from './types.ts';
+import { aiKinds, detectVisual, detectVisualAi, mergeHits, VISUAL_LABELS, type VisualHit, type VisualKind } from './visual.ts';
 
 type Kind = LoadedDoc['kind'];
 
+// Source code and scripts, opened as plain text. TypeScript's .ts is left out because it is also a video format.
+const CODE_EXTENSIONS = ['js', 'mjs', 'cjs', 'jsx', 'tsx', 'py', 'rb', 'php', 'java', 'kt', 'swift', 'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'sh', 'bash', 'ps1', 'bat', 'r', 'lua', 'pl', 'scala', 'dart', 'css', 'scss'];
+
 const ACCEPT: Record<Kind | 'all', string> = {
   pdf: '.pdf,application/pdf',
-  image: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp',
+  image: 'image/png,image/jpeg,image/webp,image/heic,image/heif,image/avif,image/gif,image/bmp,image/tiff,image/svg+xml,.png,.jpg,.jpeg,.webp,.heic,.heif,.avif,.gif,.bmp,.tif,.tiff,.svg',
   docx: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  text: '.txt,.md,.csv,.tsv,.json,.log,.xml,.html,.yaml,.yml,text/*',
+  pptx: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  sheet: '.xlsx,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,text/csv',
+  text: `.txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.ndjson,.log,.xml,.html,.htm,.yaml,.yml,.toml,.ini,.cfg,.conf,.properties,.env,.srt,.vtt,.vcf,.ics,.sql,.tex,.rst,.${CODE_EXTENSIONS.join(',.')},text/*,application/json,application/xml`,
+  audio: 'audio/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.aac,.weba',
   all: '',
 };
-ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.text].join(',');
+ACCEPT.all = [ACCEPT.pdf, ACCEPT.image, ACCEPT.docx, ACCEPT.pptx, ACCEPT.sheet, ACCEPT.text, ACCEPT.audio].join(',');
 
 // What the "Look for" chips offer. AI findings are filtered by these.
 const CHIP_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 'ssn', 'card', 'iban', 'ip', 'url', 'date', 'org', 'other'];
@@ -27,34 +35,57 @@ const DEFAULT_TYPES: EntityType[] = ['name', 'address', 'email', 'phone', 'id', 
 const VISUAL_KINDS = Object.keys(VISUAL_LABELS) as VisualKind[];
 // Each page is one AI request, so very long PDFs only get the local pass after this.
 const MAX_AI_PICTURE_PAGES = 30;
+// Paragraphs drawn in the text preview; the download still covers the whole file.
+const MAX_PREVIEW_BLOCKS = 2000;
+
+const PLUS_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>';
+const DOWNLOAD_NAMES: Record<LoadedDoc['kind'], string> = { pdf: 'PDF', image: 'image', docx: 'document', pptx: 'presentation', sheet: 'spreadsheet', text: 'file', audio: 'audio' };
 
 /** Whether the preview shows text: everything except PDF pages and images. */
 function hasText(doc: LoadedDoc) {
-  return doc.kind === 'text' || doc.kind === 'docx';
+  return doc.kind === 'text' || isOffice(doc) || doc.kind === 'sheet' || doc.kind === 'audio';
 }
+
+/** Word and PowerPoint: pictures inside a laid-out document rather than pages. */
+function isOffice(doc: LoadedDoc | null) {
+  return doc?.kind === 'docx' || doc?.kind === 'pptx';
+}
+
+// Config files are named .env, .env.local or prod.env.
+const TEXT_NAME = new RegExp(`\\.(txt|md|markdown|csv|tsv|jsonl?|ndjson|log|xml|html?|ya?ml|toml|ini|cfg|conf|properties|srt|vtt|vcf|ics|sql|tex|rst|${CODE_EXTENSIONS.join('|')})$|(^|\\.)env(\\.[\\w-]+)?$`);
 
 function kindOf(file: File): Kind | null {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
-  if (/^image\/(png|jpeg|webp)$/.test(file.type) || /\.(png|jpe?g|webp)$/.test(n)) return 'image';
+  if (/^image\/(png|jpeg|webp|heic|heif|avif|gif|bmp|tiff|svg\+xml)$/.test(file.type) || /\.(png|jpe?g|webp|heic|heif|avif|gif|bmp|tiff?|svg)$/.test(n)) return 'image';
   if (n.endsWith('.docx')) return 'docx';
-  if (n.endsWith('.doc')) return null;
-  if (file.type.startsWith('text/') || /\.(txt|md|csv|tsv|json|log|xml|html?|ya?ml)$/.test(n) || !file.type) return 'text';
+  if (n.endsWith('.pptx')) return 'pptx';
+  if (/\.(xlsx|ods)$/.test(n)) return 'sheet';
+  if (file.type.startsWith('audio/') || /\.(mp3|m4a|wav|flac|ogg|opus|aac|weba)$/.test(n)) return 'audio';
+  if (/\.(doc|xls|ppt)$/.test(n)) return null;
+  if (file.type.startsWith('text/') || /^application\/(json|xml)$/.test(file.type) || TEXT_NAME.test(n) || !file.type) return 'text';
   return null;
 }
 
-async function load(file: File, progress: (m: string) => void): Promise<LoadedDoc> {
+async function load(file: File, progress: (m: string) => void, askPassword: (wrong: boolean) => Promise<string | null>): Promise<LoadedDoc> {
   switch (kindOf(file)) {
     case 'pdf':
-      return (await import('./formats/pdf.ts')).loadPdf(file, progress);
+      return (await import('./formats/pdf.ts')).loadPdf(file, progress, askPassword);
     case 'image':
       return (await import('./formats/image.ts')).loadImage(file, progress);
     case 'docx':
       return (await import('./formats/docx.ts')).loadDocx(file, progress);
+    case 'pptx':
+      return (await import('./formats/pptx.ts')).loadPptx(file, progress);
+    case 'sheet':
+      return (await import('./formats/sheet.ts')).loadSheet(file, progress);
     case 'text':
       return (await import('./formats/text.ts')).loadText(file);
+    case 'audio':
+      return (await import('./formats/audio.ts')).loadAudio(file, progress);
     default:
-      throw new Error('This file type is not supported yet. Try PDF, PNG, JPG, WebP, DOCX or a text file. Old .doc files need to be saved as .docx first.');
+      throw new FileError('This file format isn’t supported yet. Try a PDF, image, Word (.docx), PowerPoint (.pptx), spreadsheet (.xlsx or .ods), text file, or audio recording. Legacy .doc, .ppt, and .xls files need to be saved as .docx, .pptx, or .xlsx first.');
   }
 }
 
@@ -78,35 +109,57 @@ const store = {
 class App {
   private doc: LoadedDoc | null = null;
   private findings: Finding[] = [];
-  private boxes: ManualBox[] = [];
+  private boxes: ManualMark[] = [];
   // Text the user selected and redacted in that one spot only.
   private picks: { unitId: string; start: number; end: number }[] = [];
   private aiEntities: AiEntity[] | null = null;
   private overrides = new Map<string, boolean>();
   private editors: PageEditor[] = [];
   private focused: string | null = null;
-  // Word files laid out as pages, when the layout worked.
+  // Word pages or PowerPoint slides as laid out, when the layout worked.
   private sheet: HTMLElement | null = null;
   private layout: Layout | null = null;
+  private view: DocView | null = null;
+  // Text units the custom view has no place for, such as spreadsheet comments.
+  private extras = h('div');
+  private timeline: Timeline | null = null;
+  // Where the text preview or transcript is drawn, below the timeline for audio.
+  private textHost = h('div');
+  /** The spreadsheet's cell bar and the cell it shows. */
+  private cellBar: HTMLElement | null = null;
+  private cell: Parameters<ViewHandlers['cell']>[0] | null = null;
+  // Transcript words in the order they are said, with the spans that show each one.
+  private spoken: { word: SpokenWord; els: HTMLElement[] }[] = [];
+  private speaking: HTMLElement[] = [];
+  // The redaction bar around the word being said, outlined.
+  private saying: HTMLElement | null = null;
+  // The word last clicked, by its place in `spoken`.
+  private pinned: number | null = null;
+  private transcribing: Promise<void> | null = null;
+  private detecting: ReturnType<typeof detectWithAi> | null = null;
   private aiError: string | null = null;
   // Nothing leaves the browser until the user presses Upload for this file.
   private consent: 'ask' | 'yes' = 'ask';
   private consentBox: HTMLElement;
+  // Turnstile above the Upload button, for a signed-out browser's first scan of the day.
+  private human: HumanCheck | null = null;
+  // The consent box's question and price, rewritten when a picture option changes.
+  private consentQuestion: HTMLElement | null = null;
+  private consentCost: HTMLElement | null = null;
+  private freeLeft: number | null = null;
   private types = new Set<EntityType>(DEFAULT_TYPES);
   // Business and public-service contacts start ticked too.
   private redactPublic = store.get('redact-public') === '1';
   private terms = '';
   private visualKinds = new Set<VisualKind>();
-  // Per page, and the kinds they were computed for.
-  // Hits found so far per page, and the kinds already looked for, so ticking
-  // another kind only looks for that one and unticking needs no new pass.
+  // See PictureCache.
   private visualLocal = pictureCache();
   private visualAi = pictureCache();
   // Picture passes run one at a time, so a second analyze() sees the first one's results.
   private pictureQueue: Promise<unknown> = Promise.resolve();
   private visualError: string | null = null;
   private pictureBox: HTMLElement;
-  // "Look for" and "In pictures" chips, locked once the file is sent.
+  // "Look for" and "In images" chips, locked once the file is sent.
   private chips: HTMLLabelElement[] = [];
   private lookFor: HTMLElement;
   private style: RedactStyle = 'block';
@@ -114,7 +167,9 @@ class App {
 
   private intake: HTMLElement;
   private status: HTMLElement;
-  private panelHead: HTMLElement;
+  private docBar: HTMLElement;
+  private docType: HTMLElement;
+  private panelBody: HTMLElement;
   private workspace: HTMLElement;
   private list: HTMLElement;
   private preview: HTMLElement;
@@ -122,24 +177,44 @@ class App {
   private metaBox: HTMLElement;
   private docName: HTMLElement;
   private download: HTMLButtonElement;
+  private transcriptBtn: HTMLButtonElement;
   private warn: HTMLElement;
+  /** Pages a long file leaves out of the download. */
+  private partialNote: HTMLElement;
+  private checkBox: HTMLInputElement;
+  /** The current scan's free final check, until it is used. */
+  private checkToken: string | undefined;
+  private checkRow: HTMLElement;
   private styleRow: HTMLElement;
+  private styleSel: HTMLSelectElement;
   private fileInput: HTMLInputElement;
 
   constructor(private root: HTMLElement) {
     const format = (root.dataset.format as Kind | 'all') || 'all';
     root.textContent = '';
+    onHumanCheck((siteKey) => this.askHuman(siteKey));
 
     this.fileInput = h('input', { type: 'file', accept: ACCEPT[format], className: 'visually-hidden', id: 'file-input' });
     this.fileInput.addEventListener('change', () => this.fileInput.files?.[0] && this.open(this.fileInput.files[0]));
 
+    // Some phones report a fine pointer that hovers, so the user agent is checked too.
+    const touch =
+      matchMedia('(hover: none), (pointer: coarse)').matches ||
+      (navigator as Navigator & { userAgentData?: { mobile: boolean } }).userAgentData?.mobile ||
+      /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) ||
+      (/Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1);
     const drop = h(
       'label',
       { className: 'drop', for: 'file-input' },
       this.fileInput,
-      h('span', { className: 'drop-icon', 'aria-hidden': 'true' }, '⬆'),
-      h('span', { className: 'drop-title' }, 'Drop a file here or ', h('u', {}, 'choose one')),
-      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PNG, JPG, WebP or text'),
+      h('span', {
+        className: 'drop-icon',
+        'aria-hidden': 'true',
+        innerHTML: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>',
+      }),
+      h('span', { className: 'drop-title' }, h('u', {}, 'Choose a file'), ...(touch ? [] : [h('span', { className: 'drop-here' }, ' or drop it here')])),
+      ...(touch ? [] : [h('span', { className: 'drop-or' }, 'or paste with ', h('kbd', {}, /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'), ' ', h('kbd', {}, 'V'))]),
+      h('span', { className: 'drop-sub' }, root.dataset.hint || 'PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), ODS, images, text, or audio'),
     );
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => (e.preventDefault(), drop.classList.add('over')));
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, () => drop.classList.remove('over'));
@@ -149,26 +224,26 @@ class App {
       if (f) this.open(f);
     });
 
-    const pasteArea = h('textarea', { rows: 6, placeholder: 'Paste text that contains emails, phone numbers, names…', 'aria-label': 'Text to redact' });
+    // Phones have no paste shortcut, so they get a box to paste into; so does the text page.
+    const pasteArea = h('textarea', { rows: 3, id: 'paste-text' });
+    const pasteText = (text: string) => text.trim() && this.open(new File([text], 'pasted-text.txt', { type: 'text/plain' }));
     const paste = h(
-      'details',
-      { className: 'paste', open: format === 'text' },
-      h('summary', {}, 'Or paste text'),
+      'div',
+      { className: 'paste' + (format === 'text' || touch ? ' always' : '') },
+      h('label', { for: 'paste-text' }, 'Or paste text below'),
       pasteArea,
-      h('button', {
-        type: 'button',
-        className: 'btn',
-        textContent: 'Find sensitive info',
-        onclick: () => pasteArea.value.trim() && this.open(new File([pasteArea.value], 'pasted-text.txt', { type: 'text/plain' })),
-      }),
+      h('button', { type: 'button', className: 'btn', textContent: 'Scan for personal info', onclick: () => pasteText(pasteArea.value) }),
     );
 
-    this.intake = h('div', { className: 'intake' }, drop, paste);
+    this.intake = h('div', { className: 'intake' }, drop, ...(format === 'text' || format === 'all' ? [paste] : []));
     this.status = h('div', { className: 'status', role: 'status', 'aria-live': 'polite', hidden: true });
 
-    // Workspace: side panel + preview.
+    // Workspace: side panel + preview. The file's name and the New file button go in the site header.
     this.docName = h('strong', { className: 'doc-name' });
-    const reset = h('button', { type: 'button', className: 'btn ghost', textContent: 'New file', onclick: () => this.reset() });
+    this.docType = h('span', { className: 'doc-type' });
+    const reset = h('button', { type: 'button', className: 'btn ghost', innerHTML: `${PLUS_ICON}New file`, onclick: () => this.reset() });
+    this.docBar = h('div', { className: 'doc-bar' }, this.docType, this.docName, reset);
+    document.querySelector('.site-header .logo')?.after(this.docBar);
 
     const typeBoxes = h('div', { className: 'types' });
     for (const t of CHIP_TYPES) {
@@ -199,11 +274,11 @@ class App {
     this.pictureBox = h(
       'div',
       { hidden: true },
-      h('h3', {}, 'In pictures'),
+      h('p', { className: 'panel-label' }, 'In images'),
       pictureChips,
     );
 
-    const termsArea = h('textarea', { rows: 3, placeholder: 'One per line, e.g. a name or project', 'aria-label': 'Words to always redact' });
+    const termsArea = h('textarea', { rows: 3, placeholder: 'One term per line (e.g. a name, project, or ID)', 'aria-label': 'Words to always redact' });
     let termTimer = 0;
     termsArea.addEventListener('input', () => {
       clearTimeout(termTimer);
@@ -218,54 +293,112 @@ class App {
       this.analyze();
     };
 
-    const styleSel = h('select', { 'aria-label': 'Redaction style' });
-    styleSel.append(h('option', { value: 'block', textContent: 'Black out (█████)' }), h('option', { value: 'label', textContent: 'Replace with label ([EMAIL])' }));
-    styleSel.addEventListener('change', () => (this.style = styleSel.value as RedactStyle));
-    this.styleRow = h('label', { className: 'row' }, 'Style ', styleSel);
+    this.styleSel = h('select', { 'aria-label': 'Redaction style' });
+    this.styleSel.addEventListener('change', () => (this.style = this.styleSel.value as RedactStyle));
+    this.styleRow = h('label', { className: 'row style-row' }, 'Style ', this.styleSel);
 
-    this.download = h('button', { type: 'button', className: 'btn primary', textContent: 'Download redacted file', onclick: () => this.export() });
+    this.download = h('button', { type: 'button', className: 'btn primary', onclick: () => this.export() });
+    this.setDownloadLabel('file');
+    this.transcriptBtn = h('button', { type: 'button', className: 'btn transcript', textContent: 'Download redacted transcript', hidden: true, onclick: () => this.export(false, true) });
     this.warn = h('div', { className: 'status error warn', role: 'alert', hidden: true });
+    this.partialNote = h('p', { className: 'status partial', hidden: true });
+    // Each scan's first final check is free and starts ticked; later ones cost credits and start unticked.
+    this.checkBox = h('input', { type: 'checkbox', checked: true });
+    this.checkRow = h('label', { className: 'row check-row', hidden: true });
+    this.setFreeCheck(undefined);
     this.list = h('div', { className: 'findings' });
     this.notes = h('ul', { className: 'notes' });
     this.metaBox = h('div', { className: 'meta', hidden: true });
     this.consentBox = h('div', { className: 'consent', hidden: true });
 
-    this.panelHead = h('div', { className: 'panel-head' }, this.docName, reset);
-    const panel = h(
-      'aside',
-      { className: 'panel' },
-      this.panelHead,
+    // The body scrolls on its own so the download button stays in view at the foot of the panel.
+    this.panelBody = h(
+      'div',
+      { className: 'panel-body' },
       this.consentBox,
-      (this.lookFor = h('div', {}, h('h3', {}, 'Look for'), typeBoxes)),
-      this.pictureBox,
-      h('h3', {}, 'Always redact'),
-      termsArea,
-      h('h3', {}, 'Found'),
+      h('p', { className: 'panel-label found-label' }, 'Found'),
       this.list,
+      (this.lookFor = h('div', {}, h('p', { className: 'panel-label' }, 'Look for'), typeBoxes)),
+      this.pictureBox,
+      h('p', { className: 'panel-label' }, 'Always redact'),
+      termsArea,
       this.metaBox,
-      this.styleRow,
-      this.download,
-      this.warn,
       this.notes,
     );
+    const panel = h(
+      'aside',
+      { className: 'panel', id: 'review-panel', 'aria-label': 'Review' },
+      this.panelBody,
+      h('div', { className: 'panel-foot' }, this.styleRow, this.checkRow, this.partialNote, this.download, this.transcriptBtn, this.warn),
+    );
     this.preview = h('div', { className: 'preview' });
-    this.workspace = h('div', { className: 'workspace', hidden: true }, panel, this.preview);
+    const legend = h(
+      'div',
+      { className: 'preview-bar' },
+      h('span', { className: 'key' }, h('span', { className: 'swatch on' }), 'Redacted'),
+      h('span', { className: 'key' }, h('span', { className: 'swatch off' }), 'Kept'),
+    );
+    const stage = h('div', { className: 'stage', id: 'preview-stage' }, legend, this.preview);
+    // Phones show the preview or the findings, one at a time.
+    const tab = (label: string, view: 'preview' | 'found', controls: string) => {
+      const b = h('button', { type: 'button', role: 'tab', textContent: label, 'aria-controls': controls, onclick: () => this.showTab(view) });
+      b.dataset.view = view;
+      return b;
+    };
+    this.tabs = h('div', { className: 'tabs', role: 'tablist', 'aria-label': 'Editor view' }, tab('Preview', 'preview', 'preview-stage'), tab('Found', 'found', 'review-panel'));
+    this.workspace = h('div', { className: 'workspace', hidden: true }, this.tabs, panel, stage);
+    this.showTab('preview');
 
     root.append(this.intake, this.status, this.workspace);
     document.addEventListener('paste', (e) => {
       if (this.doc || (e.target as HTMLElement)?.closest?.('textarea,input')) return;
       const f = e.clipboardData?.files[0];
       if (f) this.open(f);
+      else if (format === 'text' || format === 'all') pasteText(e.clipboardData?.getData('text/plain') ?? '');
+    });
+    // A drag can end outside the text, and phones adjust a selection with handles, so selections are also picked up page-wide.
+    document.addEventListener('mouseup', (e) => {
+      // The text's own listeners handle releases inside it.
+      if (![this.textHost, this.extras].some((el) => el.contains(e.target as Node))) this.onSelect(e);
+    });
+    let dragging = false;
+    let settle = 0;
+    document.addEventListener('pointerdown', (e) => (dragging = e.pointerType === 'mouse'));
+    document.addEventListener('pointerup', () => {
+      // The mouseup that follows offers the selection.
+      if (dragging) clearTimeout(settle);
+      dragging = false;
+    });
+    document.addEventListener('selectionchange', () => {
+      clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        const s = getSelection();
+        if (dragging || !s?.rangeCount || s.isCollapsed || !s.getRangeAt(0).intersectsNode(this.preview)) return;
+        this.onSelect();
+      }, 400);
     });
   }
 
   private addTerm: (t: string) => void = () => {};
+  private tabs: HTMLElement;
+
+  private showTab(view: 'preview' | 'found') {
+    this.workspace.dataset.view = view;
+    for (const b of this.tabs.children) b.setAttribute('aria-selected', String((b as HTMLElement).dataset.view === view));
+  }
+
+  private setDownloadLabel(what: string) {
+    this.download.replaceChildren(h('span', { className: 'btn-icon', 'aria-hidden': 'true', innerHTML: DOWNLOAD_ICON }), `Download redacted ${what}`);
+  }
 
   /** Shows the status at the top of the panel while a file is open, or above the download button while exporting. */
   private say(msg: string, error = false, nearDownload = false) {
-    if (this.workspace.hidden) this.intake.after(this.status);
-    else if (nearDownload) this.download.before(this.status);
-    else this.panelHead.after(this.status);
+    // Moving the element restarts the spinner, so it only moves when it is somewhere else.
+    if (this.workspace.hidden) {
+      if (this.intake.nextElementSibling !== this.status) this.intake.after(this.status);
+    } else if (nearDownload) {
+      if (this.download.previousElementSibling !== this.status) this.download.before(this.status);
+    } else if (this.panelBody.firstElementChild !== this.status) this.panelBody.prepend(this.status);
     // Progress messages carry an ellipsis and get a spinner.
     this.status.classList.toggle('busy', !error && msg.includes('…'));
     this.status.hidden = !msg;
@@ -275,34 +408,77 @@ class App {
 
   async open(file: File) {
     if (this.busy) return;
-    if (file.size > 100 * 1024 * 1024) return this.say('That file is over 100 MB, which is too large to process in the browser.', true);
+    // Audio is read in pieces, so only its length is capped (in formats/audio.ts).
+    if (kindOf(file) !== 'audio' && file.size > 100 * 1024 * 1024) return this.say('This file is over 100 MB, which is too large to process in your browser.', true);
     this.busy = true;
     this.reset(false);
     this.say(`Opening ${file.name}…`);
     try {
-      this.doc = await load(file, (m) => this.say(m));
+      // Before loading: audio is transcribed while it loads.
+      startJob(kindOf(file) ?? 'text');
+      this.doc = await load(file, (m) => this.say(m), (wrong) => this.askPassword(wrong));
       this.docName.textContent = file.name;
-      this.styleRow.hidden = this.doc.kind === 'pdf' || this.doc.kind === 'image';
+      const styles = this.doc.styles ?? [];
+      this.styleRow.hidden = !styles.length;
+      this.transcriptBtn.hidden = !this.doc.exportTranscript;
+      this.setDownloadLabel(DOWNLOAD_NAMES[this.doc.kind]);
+      this.docType.textContent = (file.name.match(/\.(\w{1,5})$/)?.[1] ?? this.doc.kind).toUpperCase();
+      this.styleSel.replaceChildren(...styles.map(([value, textContent]) => h('option', { value, textContent })));
+      this.style = styles[0]?.[0] ?? 'block';
       this.pictureBox.hidden = !this.doc.pages.length;
+      this.partialNote.textContent = this.doc.downloadNote ?? '';
+      this.partialNote.hidden = !this.doc.downloadNote;
       this.notes.replaceChildren(...this.doc.notes.map((n) => h('li', {}, n)));
       this.renderMetadata(this.doc.metadata);
       if (this.doc.render) await this.layOut(this.doc);
       this.intake.hidden = true;
       this.workspace.hidden = false;
-      this.renderPreview();
-      await this.analyze();
+      this.showTab('preview');
+      document.body.classList.add('editing');
+      await this.renderPreview();
+      if (this.doc !== null) await this.analyze();
     } catch (err) {
       console.error(err);
-      this.doc = null;
-      this.say(err instanceof Error ? err.message : 'Could not open that file.', true);
+      this.reset(false);
+      this.say(openFailure(err, kindOf(file)), true);
     } finally {
       this.busy = false;
       this.fileInput.value = '';
     }
   }
 
+  /** A locked PDF's password, typed under the file box; null when the visitor cancels. The password stays in the browser. */
+  private askPassword(wrong: boolean): Promise<string | null> {
+    this.say(wrong ? 'Incorrect password. Please try again.' : 'This PDF is password-protected. Enter the password to unlock it.', wrong);
+    return new Promise((resolve) => {
+      const input = h('input', { type: 'password', autocomplete: 'off', 'aria-label': 'PDF password', required: true });
+      const done = (password: string | null) => {
+        form.remove();
+        this.say(password === null ? '' : 'Opening PDF…');
+        resolve(password);
+      };
+      const form = h(
+        'form',
+        { className: 'pdf-password' },
+        input,
+        h('button', { type: 'submit', className: 'btn primary', textContent: 'Open' }),
+        h('button', { type: 'button', className: 'btn', textContent: 'Cancel', onclick: () => done(null) }),
+      );
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        done(input.value);
+      });
+      this.status.after(form);
+      input.focus();
+    });
+  }
+
   reset(clearStatus = true) {
+    this.doc?.dispose?.();
     this.doc = null;
+    this.timeline = null;
+    this.transcribing = null;
+    this.detecting = null;
     this.findings = [];
     this.boxes = [];
     this.picks = [];
@@ -314,15 +490,23 @@ class App {
     this.consent = 'ask';
     this.consentBox.hidden = true;
     this.lockChips(false);
+    this.human?.remove();
+    this.human = null;
+    this.checkRow.hidden = true;
+    this.partialNote.hidden = true;
+    this.setFreeCheck(undefined);
     this.overrides.clear();
     this.editors = [];
     this.sheet = null;
     this.layout = null;
+    this.view?.dispose();
+    this.view = null;
     this.preview.replaceChildren();
     this.list.replaceChildren();
     this.metaBox.hidden = true;
     this.workspace.hidden = true;
     this.intake.hidden = false;
+    document.body.classList.remove('editing');
     if (clearStatus) this.say('');
   }
 
@@ -337,19 +521,27 @@ class App {
 
     // Ask the model once per document, and only after the user agreed to send the text.
     if (this.consent === 'ask') this.askConsent(doc);
+    if (this.consent === 'yes' && doc.transcribe && !this.aiError) {
+      // Chips and terms re-run analyze() while a long transcription is in flight: share it, don't start another.
+      try {
+        await (this.transcribing ??= doc.transcribe((m) => this.say(m)));
+      } catch (err) {
+        if (this.doc === doc) this.aiError = aiFailure(err, 'Transcription failed.');
+      }
+      if (this.doc !== doc) return;
+    }
     if (this.consent === 'yes' && !this.aiEntities && !this.aiError) {
       const text = doc.units.map((u) => u.text).join('\n\n');
       if (text.trim()) {
-        this.say('Finding names, addresses and other personal details…');
+        this.say('Scanning for names, addresses, and other personal details…');
         try {
-          this.aiEntities = await detectWithAi(text);
+          const { entities, checkToken } = await (this.detecting ??= detectWithAi(text));
+          if (this.doc === doc) {
+            this.aiEntities = entities;
+            this.setFreeCheck(checkToken);
+          }
         } catch (err) {
-          this.aiError =
-            err instanceof QuotaError
-              ? `${err.message} They reset tomorrow, or you can buy more under Account.`
-              : err instanceof Error
-                ? err.message
-                : 'AI detection failed.';
+          if (this.doc === doc) this.aiError = aiFailure(err, 'AI detection failed.');
         }
       }
       if (this.doc !== doc) return;
@@ -357,39 +549,21 @@ class App {
 
     const byId = new Map(doc.units.map((u) => [u.id, u]));
     const spans = analyzeUnits(doc.units, { terms, ai: this.aiEntities }).filter((s) => s.type === 'custom' || this.types.has(s.type));
-    const findings: Finding[] = spans.map((s) => {
-      const unit = byId.get(s.unitId)!;
-      const key = `${unit.id}:${s.start}:${s.end}`;
-      return {
-        key,
-        unitId: unit.id,
-        start: s.start,
-        end: s.end,
-        type: s.type,
-        source: s.source,
-        text: unit.text.slice(s.start, s.end),
-        enabled: this.overrides.get(key) ?? startsTicked(s, this.redactPublic),
-        publicHint: s.publicHint,
-        page: unit.page,
-        rects: unit.rectsFor?.(s.start, s.end) ?? [],
-      };
+    const finding = (unit: Unit, key: string, start: number, end: number, type: EntityType, defaultOn: boolean, publicHint?: string): Finding => ({
+      key,
+      unitId: unit.id,
+      start,
+      end,
+      type,
+      text: unit.text.slice(start, end),
+      enabled: this.overrides.get(key) ?? defaultOn,
+      publicHint,
+      page: unit.page,
+      rects: unit.rectsFor?.(start, end) ?? [],
+      times: unit.timesFor?.(start, end) ?? undefined,
     });
-    for (const p of this.picks) {
-      const unit = byId.get(p.unitId)!;
-      const key = `pick:${p.unitId}:${p.start}:${p.end}`;
-      findings.push({
-        key,
-        unitId: p.unitId,
-        start: p.start,
-        end: p.end,
-        type: 'custom',
-        source: 'term',
-        text: unit.text.slice(p.start, p.end),
-        enabled: this.overrides.get(key) ?? true,
-        page: unit.page,
-        rects: unit.rectsFor?.(p.start, p.end) ?? [],
-      });
-    }
+    const findings = spans.map((s) => finding(byId.get(s.unitId)!, `${s.unitId}:${s.start}:${s.end}`, s.start, s.end, s.type, startsTicked(s, this.redactPublic), s.publicHint));
+    for (const p of this.picks) findings.push(finding(byId.get(p.unitId)!, `pick:${p.unitId}:${p.start}:${p.end}`, p.start, p.end, 'custom', true));
     const pictures = await this.pictureFindings(doc);
     if (this.doc !== doc) return;
     this.findings = [...findings, ...pictures];
@@ -413,11 +587,11 @@ class App {
     const kinds = new Set(this.visualKinds);
     // A queued pass for a file that has since been replaced must not fill the new file's caches.
     if (this.doc !== doc) return [];
-    if (!kinds.size || !doc.pages.length) return [];
     this.visualError = null;
+    if (!kinds.size || !doc.pages.length) return [];
     const local = missingKinds(this.visualLocal, kinds);
     if (local.size) {
-      this.say('Looking for faces and screens on this device…');
+      this.say('Looking for faces and screens on your device…');
       try {
         const found: VisualHit[][] = [];
         for (const p of doc.pages) found[p.index] = await detectVisual(p.canvas, local);
@@ -425,23 +599,23 @@ class App {
         addHits(this.visualLocal, local, found);
       } catch (err) {
         console.warn(err);
-        this.visualError = 'The on-device picture detector could not start in this browser.';
+        this.visualError = 'On-device image detection isn’t available in this browser.';
       }
     }
-    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, kinds) : new Set<VisualKind>();
+    const ai = this.consent === 'yes' ? missingKinds(this.visualAi, aiKinds(kinds)) : new Set<VisualKind>();
     if (ai.size) {
       const pages = doc.pages.slice(0, MAX_AI_PICTURE_PAGES);
       try {
         const found: VisualHit[][] = [];
         for (const p of pages) {
-          this.say(pages.length > 1 ? `Checking pictures with AI… page ${p.index + 1} of ${pages.length}` : 'Checking the picture with AI…');
+          this.say(pages.length > 1 ? `Scanning images with AI… page ${p.index + 1} of ${pages.length}` : 'Scanning image with AI…');
           found[p.index] = await detectVisualAi(p.canvas, ai);
           if (this.doc !== doc) return [];
         }
         addHits(this.visualAi, ai, found);
       } catch (err) {
         console.warn(err);
-        this.visualError = `${err instanceof Error ? err.message : 'Picture detection failed.'} Showing what this device found; review the pictures carefully.`;
+        this.visualError = `${err instanceof Error ? err.message : 'Image detection failed.'} Showing on-device matches only—please review images carefully.`;
       }
     }
     const out: Finding[] = [];
@@ -458,7 +632,6 @@ class App {
           start: 0,
           end: 0,
           type: hit.kind,
-          source: 'visual',
           text: `${ENTITY_LABELS[hit.kind]} ${n}`,
           enabled: this.overrides.get(key) ?? true,
           page: p.index,
@@ -480,12 +653,13 @@ class App {
   }
 
   private renderList() {
-    const groups = new Map<EntityType, Finding[]>();
-    for (const f of this.findings) (groups.get(f.type) ?? groups.set(f.type, []).get(f.type)!).push(f);
+    const groups = groupBy(this.findings, (f) => f.type);
     const manual = this.boxes.length;
     if (!groups.size && !manual) {
       const visual = this.doc?.pages.length;
-      this.list.replaceChildren(h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw boxes, or add words above.' : 'Nothing detected. Add words above, or select text in the preview to redact it.'));
+      this.list.replaceChildren(
+        h('p', { className: 'empty' }, visual ? 'Nothing detected yet. Drag on the preview to draw redaction boxes, or add custom terms below.' : this.doc?.audio ? 'Nothing detected. Drag across the timeline to bleep or mute a section.' : 'Nothing detected. Add custom terms below, or select text in the preview to redact it.'),
+      );
       return;
     }
     const out: HTMLElement[] = [];
@@ -507,7 +681,7 @@ class App {
         const cb = h('input', { type: 'checkbox', checked: f.enabled });
         cb.addEventListener('change', () => this.toggle([f.key], cb.checked));
         const label = f.text.length > 48 ? f.text.slice(0, 46) + '…' : f.text;
-        const where = f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (this.doc?.kind === 'docx' ? `picture ${f.page + 1}` : `p${f.page + 1}`) : '';
+        const where = f.times ? clock(f.times[0]) : f.page !== undefined && (this.doc?.pages.length ?? 0) > 1 ? (isOffice(this.doc) ? `image ${f.page + 1}` : `p${f.page + 1}`) : '';
         const tag = [f.publicHint ? 'public?' : '', where].filter(Boolean).join(', ');
         const row = h('label', { className: 'finding' + (f.enabled ? '' : ' off') }, cb, h('span', { className: 'ftext' }, label), h('small', { title: f.publicHint ?? '' }, tag));
         // Only a moving mouse: mouseenter also fires when the list scrolls under a still pointer, and a tap fires it too, so the page jumped.
@@ -517,8 +691,10 @@ class App {
       });
       out.push(h('details', { className: 'group', open: items.length <= 12 }, h('summary', {}, all, ` ${ENTITY_LABELS[type]} `, h('span', { className: 'count' }, `${on}/${items.length}`)), ...rows));
     }
-    if (manual) {
-      out.push(h('p', { className: 'manual-count' }, `${manual} hand-drawn box${manual > 1 ? 'es' : ''}. Click a box on the preview to remove it.`));
+    if (manual && this.timeline) {
+      out.push(h('p', { className: 'manual-count' }, `${manual} section${manual > 1 ? 's' : ''} marked on the timeline. Click any section to remove it.`));
+    } else if (manual) {
+      out.push(h('p', { className: 'manual-count' }, `${manual} hand-drawn box${manual > 1 ? 'es' : ''}. Click any box on the preview to remove it.`));
     }
     this.list.replaceChildren(...out);
   }
@@ -530,17 +706,18 @@ class App {
     const key = fields.filter((f) => f.key);
     const rest = fields.filter((f) => !f.key);
     const body: HTMLElement[] = [];
-    if (!fields.length) body.push(h('p', { className: 'empty' }, 'None found.'));
+    if (!fields.length) body.push(h('p', { className: 'empty' }, 'No metadata found.'));
     else {
       body.push(dl(key.length ? key : rest));
       if (key.length && rest.length) body.push(h('details', {}, h('summary', {}, 'More fields'), dl(rest)));
     }
-    this.metaBox.replaceChildren(h('h3', {}, 'Metadata'), ...body);
+    this.metaBox.replaceChildren(h('p', { className: 'panel-label' }, 'Metadata'), ...body);
   }
 
   private focus(f: Finding) {
     if (this.focused === f.key) return;
     this.focused = f.key;
+    if (this.view?.reveal(f)) return;
     const el = this.preview.querySelector<HTMLElement>(`[data-key="${CSS.escape(f.key)}"]`) ?? (f.page !== undefined ? this.editors[f.page]?.el : null);
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -548,7 +725,7 @@ class App {
   }
 
   private async layOut(doc: LoadedDoc) {
-    this.say('Laying out pages…');
+    this.say('Formatting pages…');
     const sheet = h('div', { className: 'sheet' });
     try {
       this.layout = await doc.render!(sheet);
@@ -560,8 +737,11 @@ class App {
     this.sheet = sheet;
     // Highlights sit inside links; clicking one toggles it rather than leaving the page.
     sheet.addEventListener('click', (e) => (e.target as Element).closest('a') && e.preventDefault());
-    new ResizeObserver(() => this.fitSheet()).observe(this.preview);
+    this.sheetResize ??= new ResizeObserver(() => this.fitSheet());
+    this.sheetResize.observe(this.preview);
   }
+
+  private sheetResize?: ResizeObserver;
 
   /** Scales the pages down to the preview width, as on a phone. */
   private fitSheet() {
@@ -569,16 +749,56 @@ class App {
     if (!sheet?.isConnected) return;
     sheet.style.zoom = '';
     // Pages wider than the column overflow on both sides, so measure the pages rather than the scroll width.
-    const widest = Math.max(sheet.scrollWidth, ...Array.from(sheet.querySelectorAll<HTMLElement>('section.docx'), (s) => s.offsetWidth));
+    const widest = Math.max(sheet.scrollWidth, ...Array.from(sheet.querySelectorAll<HTMLElement>('section.docx, .slide'), (s) => s.offsetWidth));
     const ratio = this.preview.clientWidth / widest;
     if (ratio < 1) sheet.style.zoom = String(ratio);
   }
 
-  private renderPreview() {
+  private async renderPreview(): Promise<void> {
     const doc = this.doc!;
+    if (doc.mountView) {
+      const host = h('div', { className: 'sheet-view' });
+      this.extras = h('div');
+      // Like Excel's formula bar: the selected cell's whole text, which the grid can cut off.
+      this.cellBar = h('div', { className: 'cell-bar' });
+      this.cell = null;
+      this.textHost = h('div', {}, this.cellBar);
+      this.preview.replaceChildren(h('p', { className: 'hint' }, 'Click any highlight to toggle redaction, or select a cell or text to redact more.'), this.textHost, host, this.extras);
+      // The grid reports its own selection; text selection applies to the cell bar and the list under the grid.
+      for (const el of [this.textHost, this.extras]) {
+        el.addEventListener('mouseup', this.onSelect);
+        el.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      }
+      this.drawCellBar();
+      let view: DocView;
+      try {
+        view = await doc.mountView(host, {
+          toggle: (keys, on) => this.toggle(keys, on),
+          cell: (c) => {
+            this.cell = c;
+            this.drawCellBar();
+            // Selecting a cell without highlights offers to redact its text.
+            const s = c.spot;
+            const pick = s && !this.findings.some((f) => f.unitId === s.unitId && f.start < s.end && f.end > s.start) ? s : null;
+            this.offerPicks(pick ? [pick] : [], pick ? doc.units.find((u) => u.id === pick.unitId)!.text.slice(pick.start, pick.end) : '');
+          },
+        });
+      } catch (err) {
+        // The grid's reader is stricter than the redaction's; every cell is still listed as text.
+        console.warn(err);
+        doc.mountView = undefined;
+        doc.gridUnits = undefined;
+        return this.renderPreview();
+      }
+      if (this.doc !== doc) return view.dispose();
+      this.view = view;
+      this.refreshPreview();
+      return;
+    }
+    this.cellBar = null;
     this.editors = doc.pages.map((page) => this.pageEditor(page));
-    // Pictures in a Word file show at their own size rather than full width.
-    if (doc.kind === 'docx') this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
+    // Pictures in a Word or PowerPoint file show at their own size rather than full width.
+    if (isOffice(doc)) this.editors.forEach((e, i) => (e.el.style.maxWidth = `${doc.pages[i].canvas.width}px`));
     // On laid-out pages the editor takes the picture's place and size; a picture used twice gets a second editor.
     for (const { page, img } of this.layout?.pictures ?? []) {
       let editor = this.editors[page];
@@ -590,56 +810,115 @@ class App {
       editor.el.classList.add('placed');
       img.replaceWith(editor.el);
     }
+    if (doc.audio) {
+      this.timeline = new Timeline({
+        ...doc.audio,
+        stretches: () => [
+          ...this.findings.filter((f) => f.times).map((f) => ({ id: f.key, kind: 'finding' as const, start: f.times![0], end: f.times![1], enabled: f.enabled })),
+          ...this.boxes.flatMap((b) => (isBox(b) ? [] : [{ id: b.id, kind: 'manual' as const, start: b.times[0], end: b.times[1], enabled: true }])),
+        ],
+        onDraw: (start, end) => this.setMarks([...this.boxes, { id: crypto.randomUUID(), times: [start, end] }]),
+        onClick: (s) => (s.kind === 'manual' ? this.setMarks(this.boxes.filter((b) => b.id !== s.id)) : this.toggle([s.id], !s.enabled)),
+        onTime: (t) => this.follow(t),
+      });
+    }
     this.preview.replaceChildren();
     if (hasText(doc)) {
-      this.preview.addEventListener('mouseup', this.onSelect);
-      this.preview.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      // The player stays put while the text below it is redrawn, so playback is not interrupted.
+      this.textHost = h('div');
+      this.textHost.addEventListener('mouseup', this.onSelect);
+      this.textHost.addEventListener('touchend', (e) => setTimeout(() => this.onSelect(e), 300));
+      // A click on a spoken word moves the player there; a click on a highlight still toggles it.
+      this.textHost.addEventListener('click', (e) => {
+        const w = (e.target as Element).closest<HTMLElement>('.w');
+        if (!w || w.closest('mark') || getSelection()?.isCollapsed === false) return;
+        this.pinned = Number(w.dataset.w);
+        this.timeline?.seek(Number(w.dataset.t));
+      });
+      // Hovering a word marks its place on the timeline.
+      this.textHost.addEventListener('mouseover', (e) => {
+        const w = (e.target as Element).closest<HTMLElement>('.w');
+        this.timeline?.point(w ? Number(w.dataset.t) : null);
+      });
+      this.textHost.addEventListener('mouseleave', () => this.timeline?.point(null));
+      this.preview.replaceChildren(...(this.timeline ? [this.timeline.el] : []), this.textHost);
     }
     this.refreshPreview();
+  }
+
+  private drawCellBar() {
+    const bar = this.cellBar;
+    const c = this.cell;
+    if (!bar || !this.doc) return;
+    const ref = h('span', { className: 'cell-ref' }, c?.label ?? '');
+    const spot = c?.spot;
+    const index = spot ? this.doc.units.findIndex((u) => u.id === spot.unitId) : -1;
+    if (!spot || index < 0) return bar.replaceChildren(ref, h('div', { className: 'cell-text' }));
+    const { unitId, start, end } = spot;
+    const text = this.doc.units[index].text.slice(start, end);
+    const spans = this.findings
+      .filter((f) => f.unitId === unitId && f.start < end && f.end > start)
+      .map((f) => ({ ...f, start: Math.max(f.start, start) - start, end: Math.min(f.end, end) - start }));
+    const el = h('div', { className: 'unit cell-text', 'data-unit': String(index), 'data-from': String(start) });
+    for (const p of pieces(text.length, spans)) el.append(p.top ? this.mark(p.top, text.slice(p.start, p.end)) : text.slice(p.start, p.end));
+    bar.replaceChildren(ref, el);
   }
 
   private pageEditor(page: Page) {
     return new PageEditor({
       page,
       overlays: () => this.overlaysFor(page.index),
-      onDraw: (rect) => {
-        this.boxes.push({ ...rect, page: page.index, id: crypto.randomUUID() });
-        this.renderList();
-        this.refreshPreview();
-      },
+      onDraw: (rect) => this.setMarks([...this.boxes, { ...rect, page: page.index, id: crypto.randomUUID() }]),
       onClick: (o) => {
-        if (o.kind === 'manual') this.boxes = this.boxes.filter((b) => b.id !== o.id);
-        else {
-          const f = this.findings.find((x) => x.key === o.id);
-          if (f) return this.toggle([f.key], !f.enabled);
-        }
-        this.renderList();
-        this.refreshPreview();
+        if (o.kind === 'manual') return this.setMarks(this.boxes.filter((b) => b.id !== o.id));
+        const f = this.findings.find((x) => x.key === o.id);
+        if (f) this.toggle([f.key], !f.enabled);
       },
     });
+  }
+
+  private setMarks(marks: ManualMark[]) {
+    this.boxes = marks;
+    this.renderList();
+    this.refreshPreview();
   }
 
   private onSelect = (e?: Event) => {
     if ((e?.target as Element | null)?.closest?.('.sel-add')) return;
     const range = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0) : null;
     const sel = range?.toString().trim();
-    this.preview.querySelector('.sel-add')?.remove();
+    this.closePicks();
     if (!range || !sel || sel.length < 2 || sel.length > 200 || !this.doc || !hasText(this.doc)) return;
-    const picks = this.selectedSpans(range);
-    if (!picks.length) return;
+    this.offerPicks(this.selectedSpans(range), sel);
+  };
+
+  /** Offers to redact a selection at this spot only, or every match of its text. */
+  private offerPicks(picks: { unitId: string; start: number; end: number }[], sel: string) {
+    this.closePicks();
+    if (!picks.length || sel.trim().length < 2) return;
     const done = (fn: () => void) => () => {
       getSelection()?.removeAllRanges();
+      this.closePicks();
       fn();
     };
-    this.preview.append(
+    this.textHost.append(
       h(
         'div',
         { className: 'sel-add' },
         h('button', { type: 'button', className: 'btn primary', textContent: 'Redact here', onclick: done(() => this.addPicks(picks)) }),
-        h('button', { type: 'button', className: 'btn', textContent: 'Redact everywhere', onclick: done(() => this.addTerm(sel)) }),
+        h('button', { type: 'button', className: 'btn', textContent: 'Redact everywhere', onclick: done(() => this.addTerm(sel.trim())) }),
       ),
     );
-  };
+    // Marks the other places Redact everywhere covers.
+    if (typeof Highlight === 'undefined') return;
+    const blocks = [...this.preview.querySelectorAll<HTMLElement>('.unit'), ...[...(this.layout?.blocks.values() ?? [])].flat()];
+    CSS.highlights.set('same-text', new Highlight(...blocks.flatMap((b) => termRanges(b, sel))));
+  }
+
+  private closePicks() {
+    this.preview.querySelector('.sel-add')?.remove();
+    if (typeof Highlight !== 'undefined') CSS.highlights.delete('same-text');
+  }
 
   /** Character ranges of the selection in each text unit it touches, without surrounding spaces. */
   private selectedSpans(range: Range) {
@@ -654,8 +933,10 @@ class App {
         r.setEnd(node, at);
         return r.toString().length;
       };
-      let start = el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0;
-      let end = el.contains(range.endContainer) ? offset(range.endContainer, range.endOffset) : unit.text.length;
+      // The cell bar shows part of a unit, from data-from on.
+      const from = Number(el.dataset.from ?? 0);
+      let start = from + (el.contains(range.startContainer) ? offset(range.startContainer, range.startOffset) : 0);
+      let end = el.contains(range.endContainer) ? from + offset(range.endContainer, range.endOffset) : from + el.textContent!.length;
       while (start < end && /\s/.test(unit.text[start])) start++;
       while (end > start && /\s/.test(unit.text[end - 1])) end--;
       if (end > start) out.push({ unitId: unit.id, start, end });
@@ -681,109 +962,211 @@ class App {
   private overlaysFor(page: number): Overlay[] {
     const out: Overlay[] = [];
     for (const f of this.findings) if (f.page === page) for (const rect of f.rects) out.push({ id: f.key, kind: 'finding', rect, enabled: f.enabled });
-    for (const b of this.boxes) if (b.page === page) out.push({ id: b.id, kind: 'manual', rect: b, enabled: true });
+    for (const b of this.boxes) if (isBox(b) && b.page === page) out.push({ id: b.id, kind: 'manual', rect: b, enabled: true });
     return out;
   }
 
   private refreshPreview() {
     const doc = this.doc;
     if (!doc) return;
+    // Redrawing replaces the text a selection was in.
+    this.closePicks();
     for (const e of this.editors) e.draw();
+    this.timeline?.draw();
     const loose = this.editors.filter((e) => !e.el.classList.contains('placed'));
     const pictures = loose.length
-      ? [h('p', { className: 'hint' }, doc.kind === 'docx' ? 'Drag on a picture to add a box. Click a box to turn it off or remove it.' : 'Drag on a page to add a box. Click a box to turn it off or remove it.'), ...loose.map((e) => e.el)]
+      ? [h('p', { className: 'hint' }, isOffice(doc) ? 'Drag on an image to draw a redaction box, or click a box to toggle or remove it.' : 'Drag on a page to draw a redaction box, or click a box to toggle or remove it.'), ...loose.map((e) => e.el)]
       : [];
     if (!hasText(doc)) {
       if (!this.preview.childElementCount) this.preview.replaceChildren(...pictures);
       return;
     }
+    this.view?.update(this.findings);
+    this.drawCellBar();
     // Text preview: one block per unit with highlighted findings. Text read from pictures shows on the pictures.
-    const byUnit = new Map<string, Finding[]>();
-    for (const f of this.findings) (byUnit.get(f.unitId) ?? byUnit.set(f.unitId, []).get(f.unitId)!).push(f);
+    // Spreadsheet cells show in the grid above, so only comments, headers and footers are listed here.
+    const byUnit = groupBy(this.findings, (f) => f.unitId);
     const { sheet, layout } = this;
     if (sheet && layout) return this.refreshSheet(sheet, layout, byUnit, pictures);
-    const blocks = doc.units.flatMap((u, i) => (u.page === undefined ? [this.unitBlock(u, i, byUnit.get(u.id) ?? [])] : []));
-    const MAX = 2000;
-    this.preview.replaceChildren(
-      h('p', { className: 'hint' }, 'Click a highlight to redact or keep it. Select text to add more.'),
-      h('div', { className: 'text-preview' + (doc.kind === 'docx' ? ' docx' : '') }, ...blocks.slice(0, MAX)),
-      ...(blocks.length > MAX ? [h('p', { className: 'hint' }, `Preview shows the first ${MAX} paragraphs; the download covers the whole file.`)] : []),
-      ...pictures,
-    );
+    if (doc.audio && !doc.units.length) {
+      this.textHost.replaceChildren(h('p', { className: 'hint' }, 'Drag across the timeline to bleep or mute a section.'));
+      return;
+    }
+    let section: string | undefined;
+    let said = 0;
+    const blocks = doc.units.flatMap((u, i) => {
+      if (u.page !== undefined || doc.gridUnits?.has(u.id) || (u.quiet && !byUnit.has(u.id))) return [];
+      const heading = u.section !== undefined && u.section !== section ? [h('h3', { className: 'unit-section' }, u.section)] : [];
+      section = u.section;
+      const el = this.unitBlock(u, i, byUnit.get(u.id) ?? [], said);
+      said += u.words?.length ?? 0;
+      const start = u.words?.[0]?.start;
+      if (start === undefined) return [...heading, el];
+      // The paragraph's time sits beside the text, so selections inside the text keep their offsets.
+      return [...heading, h('div', { className: 'para' }, h('button', { type: 'button', className: 'at', textContent: clock(start), onclick: () => this.timeline?.seek(start, true) }), el)];
+    });
+    const text = [
+      h('div', { className: 'text-preview' + (isOffice(doc) || doc.kind === 'audio' ? ' flow' : '') }, ...blocks.slice(0, MAX_PREVIEW_BLOCKS)),
+      ...(blocks.length > MAX_PREVIEW_BLOCKS ? [h('p', { className: 'hint' }, `Showing the first ${MAX_PREVIEW_BLOCKS} paragraphs in the preview—your download will still include the entire file.`)] : []),
+    ];
+    if (doc.mountView) this.extras.replaceChildren(...(blocks.length ? text : []));
+    else this.textHost.replaceChildren(h('p', { className: 'hint' }, doc.audio ? 'Click any word to jump to that moment, click a highlight to keep it, or select words to bleep them.' : 'Click any highlight to toggle redaction, or select text to redact more.'), ...text, ...pictures);
+    if (!this.timeline) return;
+    const els = groupBy(this.textHost.querySelectorAll<HTMLElement>('.w'), (el) => el.dataset.w!);
+    this.spoken = doc.units.flatMap((u) => u.words ?? []).map((word, i) => ({ word, els: els.get(String(i)) ?? [] }));
+    this.speaking = [];
+    this.saying = null;
+    this.pinned = null;
+    this.follow(this.timeline.player.currentTime);
   }
 
-  private mark(f: Finding, text: string | Node) {
-    const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, text);
+  private mark(f: Finding, ...content: (string | Node)[]) {
+    const mark = h('mark', { className: f.enabled ? 'on' : 'off', title: `${ENTITY_LABELS[f.type]}, click to ${f.enabled ? 'keep' : 'redact'}`, 'data-key': f.key }, ...content);
     mark.addEventListener('click', () => this.toggle([f.key], !f.enabled));
     return mark;
   }
 
-  private unitBlock(u: Unit, index: number, spans: Finding[]) {
+  /** `first` numbers the unit's first spoken word. */
+  private unitBlock(u: Unit, index: number, spans: Finding[], first = 0) {
     const el = h('div', { className: 'unit', 'data-unit': String(index) });
-    for (const p of pieces(u.text.length, spans)) el.append(p.top ? this.mark(p.top, u.text.slice(p.start, p.end)) : u.text.slice(p.start, p.end));
+    const text = (from: number, to: number) => (u.words ? this.words(u, first, from, to) : [u.text.slice(from, to)]);
+    for (const p of pieces(u.text.length, spans)) el.append(...(p.top ? [this.mark(p.top, ...text(p.start, p.end))] : text(p.start, p.end)));
     return el;
   }
 
-  /** Word pages: highlights go into the laid-out paragraphs; comments, alt text and other text off the pages follow below. */
+  /** Word pages and slides: highlights go into the laid-out paragraphs; notes, comments, alt text and other text off the pages follow below. */
   private refreshSheet(sheet: HTMLElement, layout: Layout, byUnit: Map<string, Finding[]>, pictures: HTMLElement[]) {
     const doc = this.doc!;
     for (const m of Array.from(sheet.querySelectorAll('mark[data-key]'))) m.replaceWith(...m.childNodes);
     sheet.normalize();
     const rest: HTMLElement[] = [];
+    let section: string | undefined;
     doc.units.forEach((u, i) => {
       if (u.page !== undefined) return;
       const findings = byUnit.get(u.id) ?? [];
       const blocks = layout.blocks.get(u.id);
-      if (!blocks) rest.push(this.unitBlock(u, i, findings));
-      else if (findings.length) for (const b of blocks) highlight(b, u.text, findings, (f) => this.mark(f, ''));
+      if (!blocks && u.quiet && !findings.length) return;
+      if (!blocks && u.section !== undefined && u.section !== section) rest.push(h('h4', { className: 'unit-section' }, u.section));
+      if (!blocks) (section = u.section), rest.push(this.unitBlock(u, i, findings));
+      else if (findings.length) for (const b of blocks) highlight(b, u.text, findings, (f) => this.mark(f));
     });
     const placed = this.editors.some((e) => e.el.classList.contains('placed'));
-    this.preview.replaceChildren(
-      h('p', { className: 'hint' }, placed ? 'Click a highlight or box to redact or keep it. Select text, or drag on a picture, to add more.' : 'Click a highlight to redact or keep it. Select text to add more.'),
+    this.textHost.replaceChildren(
+      h('p', { className: 'hint' }, placed ? 'Click any highlight or box to toggle redaction. Select text or drag on an image to redact more.' : 'Click any highlight to toggle redaction, or select text to redact more.'),
       sheet,
-      ...(rest.length ? [h('h3', {}, 'Also in this file'), h('div', { className: 'text-preview docx' }, ...rest)] : []),
+      ...(rest.length ? [h('h3', {}, 'Also in this file'), h('div', { className: 'text-preview flow' }, ...rest)] : []),
       ...pictures,
     );
     this.fitSheet();
   }
 
-  private async export(skipCheck = false) {
+  /** The text from `from` to `to`, with each spoken word in its own span; `first` numbers the unit's first word. */
+  private words(u: Unit, first: number, from: number, to: number): (string | HTMLElement)[] {
+    const out: (string | HTMLElement)[] = [];
+    let pos = from;
+    u.words!.forEach((w, k) => {
+      const a = Math.max(from, w.from);
+      const b = Math.min(to, w.to);
+      if (b <= a) return;
+      if (a > pos) out.push(u.text.slice(pos, a));
+      out.push(h('span', { className: 'w', 'data-w': String(first + k), 'data-t': String(w.start) }, u.text.slice(a, b)));
+      pos = b;
+    });
+    if (to > pos) out.push(u.text.slice(pos, to));
+    return out;
+  }
+
+  /** Lights the speech just heard: a highlight that runs through the text and fades out behind the playhead. */
+  private follow(t: number) {
+    const TRAIL = 1.5;
+    // A seek can land a little before the word that was clicked, so that word counts as reached until playback is past it.
+    const playing = !this.timeline?.player.paused;
+    const pinned = this.pinned === null ? undefined : this.spoken[this.pinned];
+    // Paused on a clicked word, it shows as just said.
+    if (pinned && t >= pinned.word.start - 0.5 && t <= pinned.word.end) t = playing ? Math.max(t, pinned.word.start) : pinned.word.end;
+    else this.pinned = null;
+    // First word that ends after the trail begins.
+    let lo = 0;
+    let hi = this.spoken.length;
+    const from = t - TRAIL;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.spoken[mid].word.end < from) lo = mid + 1;
+      else hi = mid;
+    }
+    // How bright the highlight is at a moment: full at the playhead, gone TRAIL seconds behind it.
+    const glow = (at: number) => Math.max(0, 1 - (t - at) / TRAIL);
+    const lit: HTMLElement[] = [];
+    let lead: HTMLElement | undefined;
+    let bar: HTMLElement | null = null;
+    for (let i = lo; i < this.spoken.length && this.spoken[i].word.start < t; i++) {
+      const { word, els } = this.spoken[i];
+      const until = Math.min(word.end, t);
+      const said = Math.max(0, Math.min(1, (t - word.start) / Math.max(0.05, word.end - word.start)));
+      for (const el of els) {
+        el.style.setProperty('--a0', String(glow(word.start)));
+        el.style.setProperty('--a1', String(glow(until)));
+        el.style.setProperty('--said', `${said * 100}%`);
+        lit.push(el);
+      }
+      lead = els[0] ?? lead;
+      bar = t <= word.end + 0.25 ? (els.map((el) => el.closest('mark')).find(Boolean) ?? null) : null;
+    }
+    if (bar !== this.saying) {
+      this.saying?.classList.remove('saying');
+      bar?.classList.add('saying');
+      this.saying = bar;
+    }
+    for (const el of this.speaking) if (!lit.includes(el)) el.classList.remove('speaking');
+    for (const el of lit) el.classList.add('speaking');
+    this.speaking = lit;
+    const box = lead?.closest<HTMLElement>('.text-preview');
+    if (!lead || !box || !playing) return;
+    const r = lead.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - b.height / 3;
+  }
+
+  private async export(skipCheck = false, transcript = false) {
     const doc = this.doc;
     if (!doc || this.busy) return;
     this.busy = true;
-    this.download.disabled = true;
+    this.download.disabled = this.transcriptBtn.disabled = true;
     this.warn.hidden = true;
     let checkNote = '';
     try {
       // Ask a second model whether anything sensitive is still readable before handing over the file.
-      if (!skipCheck && this.consent === 'yes') {
-        this.say('Checking the redacted file for anything left…', false, true);
+      if (!skipCheck && this.consent === 'yes' && this.checkBox.checked) {
+        this.say('Running final check for missed details…', false, true);
         try {
-          const left = await checkRemaining(remainingText(doc.units, this.findings, this.boxes));
+          const { left, free } = await checkRemaining(remainingText(doc.units, this.findings, this.boxes), this.checkToken);
           if (this.doc !== doc) return;
-          if (left.length) return this.warnLeft(left);
+          // Once the free check is used, further checks cost credits, so the box is no longer ticked.
+          if (this.checkToken) this.setFreeCheck(undefined);
+          if (left.length) return this.warnLeft(left, transcript, free);
         } catch (err) {
           console.warn(err);
-          checkNote = ' The final check could not run, so review the file carefully.';
+          checkNote = err instanceof QuotaError ? ' Not enough credits for the final check—please review the file carefully.' : ' Couldn’t run the final check—please review the file carefully.';
         }
       }
-      this.say('Preparing your redacted file…', false, true);
-      const { blob, filename } = await doc.exportFile(this.findings, this.boxes, this.style);
+      this.say('Preparing your redacted download…', false, true);
+      const { blob, filename } =
+        transcript && doc.exportTranscript
+          ? await doc.exportTranscript(this.findings, this.boxes)
+          : await doc.exportFile(this.findings, this.boxes, this.style, (m) => this.say(m, false, true));
       const url = URL.createObjectURL(blob);
-      const a = h('a', { href: url, download: filename });
-      document.body.append(a);
-      a.click();
-      a.remove();
+      // Clicked without joining the page, so no page listener (such as analytics) sees the file name.
+      h('a', { href: url, download: filename }).click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       const n = this.findings.filter((f) => f.enabled).length + this.boxes.length;
-      if (this.consent !== 'yes') checkNote = ' The AI check was skipped because nothing is sent to our server, so review the file carefully.';
-      this.say(`Done. ${n} item${n === 1 ? '' : 's'} redacted in ${filename}.${checkNote || ' Open it and check before sharing.'}`, false, true);
+      if (this.consent !== 'yes') checkNote = ' Final check skipped because the file wasn’t scanned with AI—please review it carefully.';
+      this.say(`Done! Redacted ${n} item${n === 1 ? '' : 's'} in ${filename}.${checkNote || ' Please open and verify the file before sharing.'}`, false, true);
     } catch (err) {
       console.error(err);
       this.say(err instanceof Error ? err.message : 'Export failed.', true, true);
     } finally {
       this.busy = false;
-      this.download.disabled = false;
+      this.download.disabled = this.transcriptBtn.disabled = false;
     }
   }
 
@@ -797,53 +1180,128 @@ class App {
   }
 
   private askConsent(doc: LoadedDoc) {
-    if (!this.consentBox.hidden) return;
     const text = doc.units.map((u) => u.text).join(' ');
     const words = text.split(/\s+/).filter(Boolean).length;
-    const pictures = this.visualKinds.size > 0 && doc.pages.length > 0;
-    if (!words && !pictures) {
+    // Faces and screens are found on this device, so only the other picture options upload pages.
+    const pictures = aiKinds(this.visualKinds).size > 0 && doc.pages.length > 0;
+    const seconds = doc.transcribe ? (doc.audio?.duration ?? 0) : 0;
+    if (!words && !pictures && !seconds) {
       this.consentBox.hidden = true;
+      this.human?.remove();
+      this.human = null;
       return;
     }
-    const upload = () => {
+    const images = `${isOffice(doc) ? 'embedded image' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
+    const what = seconds ? `this recording (${clock(seconds)})` : words && pictures ? `extracted text and ${images}` : words ? 'extracted text' : images;
+    // Speech runs at about 900 characters a minute, which detection then reads.
+    const credits = (words ? creditsFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0) + (seconds ? audioCredits(seconds) + creditsFor((seconds / 60) * 900) : 0);
+    const cost = `Estimated cost: ${credits} credit${credits === 1 ? '' : 's'}`;
+    const costText = (left: number | null) => (left === null ? `${cost}.` : `${cost} (${left >= credits ? '' : 'only '}${left} free left today).`);
+    // Already showing: a picture option changed, so only the wording and price move.
+    if (!this.consentBox.hidden && this.consentQuestion && this.consentCost) {
+      this.consentQuestion.textContent = `Upload ${what} to scan for personal details?`;
+      this.consentCost.textContent = costText(this.freeLeft);
+      return;
+    }
+    let siteKey: string | undefined;
+    const upload = async () => {
+      // The box stays up until Turnstile passes, in case it wants a click.
+      if (this.human) {
+        button.disabled = true;
+        try {
+          const token = await this.human.token();
+          useHumanToken(async () => token);
+        } catch (err) {
+          if (this.doc !== doc) return;
+          this.say((err as Error).message, true);
+          this.human = humanCheck(slot, siteKey!, true);
+          button.disabled = false;
+          return;
+        }
+        this.human = null;
+        if (this.doc !== doc) return;
+      }
       this.consent = 'yes';
       this.consentBox.hidden = true;
+      this.checkRow.hidden = false;
       this.lockChips(true);
       this.analyze();
     };
-    const images = `${doc.kind === 'docx' ? 'picture' : 'page image'}${doc.pages.length > 1 ? 's' : ''}`;
-    const what = words && pictures ? `the text and ${images}` : words ? 'the text' : `the ${images}`;
-    const pages = (words ? pagesFor(text.length) : 0) + (pictures ? Math.min(doc.pages.length, MAX_AI_PICTURE_PAGES) : 0);
-    const cost = `Estimated cost: ${pages} credit${pages === 1 ? '' : 's'}`;
-    const costLine = h('p', { className: 'hint' }, `${cost}.`);
-    this.consentBox.replaceChildren(
-      h('p', {}, `Upload ${what} to find personal info?`),
-      costLine,
-      h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload }),
-    );
+    this.freeLeft = null;
+    const costLine = (this.consentCost = h('p', { className: 'hint' }, costText(null)));
+    const question = (this.consentQuestion = h('p', {}, `Upload ${what} to scan for personal details?`));
+    const slot = h('div', { className: 'human-slot' });
+    const button = h('button', { type: 'button', className: 'btn primary', textContent: 'Upload', onclick: upload });
+    this.consentBox.replaceChildren(question, costLine, slot, button);
     this.consentBox.hidden = false;
-    freePagesLeft().then((left) => {
-      if (left === null || this.doc !== doc || this.consentBox.hidden) return;
-      costLine.textContent = `${cost}, ${left >= pages ? '' : 'only '}${left} left today.`;
+    freeCredits().then(({ left, turnstile }) => {
+      if (this.doc !== doc || this.consentBox.hidden || this.consentCost !== costLine) return;
+      if (turnstile) this.human = humanCheck(slot, (siteKey = turnstile), true);
+      this.freeLeft = left;
+      // Read the price again: a picture option may have changed it while this was loading.
+      this.askConsent(doc);
     });
   }
 
-  private warnLeft(left: string[]) {
+  /** The server asked for Turnstile the page didn't expect: run it in the consent box until it passes. */
+  private askHuman(siteKey: string): Promise<string> {
+    const slot = h('div', { className: 'human-slot' });
+    this.consentBox.replaceChildren(h('p', {}, 'Please complete the security check below to continue.'), slot);
+    this.consentBox.hidden = false;
+    return humanCheck(slot, siteKey, true)
+      .token()
+      .finally(() => (this.consentBox.hidden = true));
+  }
+
+  /** Ticks the final check while the scan's free one is unused, and labels its price. */
+  private setFreeCheck(token: string | undefined) {
+    this.checkToken = token;
+    this.checkBox.checked = !!token;
+    this.checkRow.replaceChildren(this.checkBox, `Check for missed details (${token ? 'free' : credits(CHECK_CREDITS)})`);
+  }
+
+  private warnLeft(left: string[], transcript: boolean, free: boolean) {
     const list = left.map((k) => CHECK_LABELS[k]);
     const what = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
     this.say('');
     this.warn.replaceChildren(
-      h('p', { className: 'warn-text' }, `The final check thinks some ${what} may still be readable. Look through the preview, tick anything that was missed, or select the text and redact it.`),
+      h('p', { className: 'warn-text' }, `Our final check found that some ${what} may still be readable. Review the preview, check anything that was missed, or select text to redact it.`),
+      ...(free ? [h('p', { className: 'warn-text' }, `This check was free. Check the box above the download button to run it again (${credits(CHECK_CREDITS)}).`)] : []),
       h(
         'div',
         { className: 'warn-actions' },
         h('button', { type: 'button', className: 'btn', textContent: 'Keep reviewing', onclick: () => (this.warn.hidden = true) }),
-        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true) }),
+        h('button', { type: 'button', className: 'btn ghost', textContent: 'Download anyway', onclick: () => this.export(true, transcript) }),
       ),
     );
     this.warn.hidden = false;
     this.warn.scrollIntoView({ block: 'nearest' });
   }
+}
+
+const credits = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
+
+function aiFailure(err: unknown, fallback: string): string {
+  if (err instanceof QuotaError) return err.negative ? err.message : `${err.message} Free credits reset tomorrow, or you can purchase more under Pricing.`;
+  return err instanceof Error ? err.message : fallback;
+}
+
+// Shown when a library fails on a file, instead of its own wording.
+const DAMAGED: Record<Kind, string> = {
+  pdf: 'Could not open this PDF. The file may be damaged or corrupted.',
+  image: 'Could not open this image. It may be damaged or in a format your browser does not support.',
+  docx: 'Could not open this Word document. The file may be damaged or corrupted.',
+  pptx: 'Could not open this PowerPoint presentation. The file may be damaged or corrupted.',
+  sheet: 'Could not open this spreadsheet. The file may be damaged or corrupted.',
+  text: 'Could not read this file.',
+  audio: 'Could not open this audio recording.',
+};
+
+function openFailure(err: unknown, kind: Kind | null): string {
+  if (err instanceof FileError) return err.message;
+  // pdf.js names its errors.
+  if ((err as Error)?.name === 'PasswordException') return 'This PDF is password-protected. Please unlock it or save an unprotected copy and try again.';
+  return kind ? DAMAGED[kind] : 'Could not open this file.';
 }
 
 const root = document.getElementById('tool');
