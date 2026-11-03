@@ -440,9 +440,9 @@ ${photoMetadataDiagram()}
   {
     slug: 'gdpr-subject-access-request-redaction',
     title: 'Subject Access Request Redaction: GDPR Guide | AnyRedact',
-    description: 'Redacting a GDPR subject access request (SAR): whose data to remove, which exemptions apply, deadlines, and a workflow for emails, PDFs, and recordings.',
+    description: 'How to redact documents for a GDPR subject access request (SAR): whose data to withhold, key exemptions, statutory deadlines, and a step-by-step workflow for emails, PDFs, and recordings.',
     h1: 'Redacting a Subject Access Request (SAR)',
-    summary: 'Whose data to remove from a GDPR subject access request (SAR), the exemptions, the deadlines, and a repeatable workflow.',
+    summary: 'Learn whose data to withhold in a GDPR subject access request (SAR), which legal exemptions apply, statutory deadlines, and a step-by-step redaction workflow.',
     tools: ['redact-pdf', 'redact-word'],
     body: `
 <p>Under Article 15 of both the EU and UK GDPR, any individual has the right to request a copy of the personal data an organization holds about them. This is known as a <strong>subject access request</strong> (SAR or DSAR). Because the records needed to fulfill these requests—such as email threads, HR files, support tickets, CCTV stills, and call recordings—almost always mention other people, you cannot simply hand them over as-is. Redaction allows you to disclose the requester’s personal data while protecting the privacy of everyone else mentioned in the same files.</p>

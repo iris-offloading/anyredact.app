@@ -42,7 +42,7 @@ export function yesProbability(answer: unknown): number | null {
 }
 
 export async function handleCheck(request: Request, env: Env): Promise<Response> {
-  const body = await readAiPost(request, env, 'The final check is not configured on this server.');
+  const body = await readAiPost(request, env, 'Final check is not configured on this server.');
   if (body instanceof Response) return body;
   const { text, checkToken } = body;
   if (typeof text !== 'string' || !text.replace(/[█\s]/g, '')) return json({ risks: {} });

@@ -65,7 +65,7 @@ export async function loadPictures(zip: JSZip, folder: string, progress: Progres
     out.pictures.push({ name, canvas, page: review ? out.pages.length : -1 });
     if (!review) continue;
     const index = out.pages.length;
-    out.pages.push({ index, canvas, label: `Picture ${index + 1}` });
+    out.pages.push({ index, canvas, label: `Image ${index + 1}` });
     try {
       out.units.push(await ocrUnit(`picture#${index}`, index, canvas, progress));
     } catch (err) {
