@@ -231,7 +231,7 @@ const SHOWN = 4;
 
 /** Recent activity, the latest few with a button for the rest. */
 function activityList(items: Activity[]) {
-  if (!items.length) return [h('div', { className: 'activity-head' }, h('h3', {}, 'Recent activity')), h('p', { className: 'activity-empty' }, 'No files or purchases yet.')];
+  if (!items.length) return [h('div', { className: 'activity-head' }, h('h3', {}, 'Recent activity')), h('p', { className: 'activity-empty' }, 'No recent activity yet.')];
   const list = h('ul', { className: 'activity' }, ...items.slice(0, SHOWN).map(activityRow));
   const more =
     items.length > SHOWN
@@ -335,7 +335,7 @@ async function signInWithLink(token: string) {
   history.replaceState(null, '', '/account' + location.search);
   root.replaceChildren(card('Signing in…'));
   const r = await post('/api/auth/email/verify', { token });
-  if (!r.ok) say(r.error || 'Sign-in failed.', true);
+  if (!r.ok) say(r.error || 'Could not sign you in. Please try again.', true);
   else document.querySelector('.signin-link')!.textContent = 'Account';
 }
 

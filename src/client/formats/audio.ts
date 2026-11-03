@@ -132,7 +132,7 @@ async function speechChunk(input: Input, start: number, end: number): Promise<Ar
 }
 
 async function transcribeChunk(wav: ArrayBuffer, language: string | null): Promise<{ words: Word[]; language: string | null }> {
-  const data = await postApi<{ words?: Word[]; language?: string | null }>(`/api/transcribe${language ? `?language=${encodeURIComponent(language)}` : ''}`, wav, 'Transcription failed', 'audio/wav');
+  const data = await postApi<{ words?: Word[]; language?: string | null }>(`/api/transcribe${language ? `?language=${encodeURIComponent(language)}` : ''}`, wav, 'Audio transcription failed', 'audio/wav');
   return { words: data.words ?? [], language: data.language ?? null };
 }
 
@@ -200,7 +200,7 @@ async function exportAudio(input: Input, inputFormat: InputFormat, ranges: [numb
     showWarnings: false,
   });
   if (!conversion.isValid) throw new FileError('This audio file could not be re-encoded in your browser.');
-  if (progress) conversion.onProgress = (p) => progress(`Preparing your redacted file… ${Math.round(p * 100)}%`);
+  if (progress) conversion.onProgress = (p) => progress(`Preparing your redacted audio… ${Math.round(p * 100)}%`);
   await conversion.execute();
   return { blob: new Blob([output.target.buffer!], { type: target.type }), ext: target.ext };
 }

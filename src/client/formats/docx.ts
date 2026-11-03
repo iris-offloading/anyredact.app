@@ -62,7 +62,7 @@ export async function loadDocx(file: File, progress: Progress): Promise<LoadedDo
     // Word writes the same description on docPr and cNvPr; one unit covers both.
     collectAlts(xml, alts);
   }
-  if (!parts.has('word/document.xml')) throw new FileError('This does not look like a Word (.docx) document.');
+  if (!parts.has('word/document.xml')) throw new FileError('This file does not appear to be a Word (.docx) document.');
   // Chart titles, labels and series names.
   const charts: TextRun[] = [];
   for (const name of Object.keys(zip.files).filter((n) => CHART_PARTS.test(n))) {

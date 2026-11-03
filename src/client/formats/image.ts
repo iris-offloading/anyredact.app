@@ -149,7 +149,7 @@ function readable(canvas: HTMLCanvasElement) {
 async function renderSvg(file: File, notes: string[]): Promise<{ canvas: HTMLCanvasElement; metadata: MetaField[] }> {
   const doc = new DOMParser().parseFromString(await file.text(), 'image/svg+xml');
   const svg = doc.documentElement;
-  if (doc.querySelector('parsererror') || svg.localName !== 'svg') throw new FileError('This SVG file could not be read.');
+  if (doc.querySelector('parsererror') || svg.localName !== 'svg') throw new FileError('Could not read this SVG file. It may be damaged or incomplete.');
   // Relative sizes (%, em) fall back to the viewBox.
   const length = (v: string | null) => {
     const m = v?.trim().match(/^([\d.]+)([a-z]*)$/i);

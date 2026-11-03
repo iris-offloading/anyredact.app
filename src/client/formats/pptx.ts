@@ -40,11 +40,11 @@ function bodiesOf(xml: Document, name: string, skip: (el: Element) => boolean): 
 }
 
 export async function loadPptx(file: File, progress: Progress): Promise<LoadedDoc> {
-  progress('Opening PowerPoint file…');
+  progress('Opening PowerPoint presentation…');
   const zip = await JSZip.loadAsync(file);
   await checkParts(zip);
   const presentation = await readXml(zip, 'ppt/presentation.xml');
-  if (!presentation) throw new FileError('This does not look like a PowerPoint (.pptx) file.');
+  if (!presentation) throw new FileError('This file does not appear to be a PowerPoint (.pptx) presentation.');
   const presRels = await relsFor(zip, 'ppt/presentation.xml');
   const slides = Array.from(presentation.getElementsByTagNameNS(P, 'sldId'), (s) => presRels.get(s.getAttributeNS(R, 'id') ?? '')?.target).filter((t): t is string => !!t && !!zip.file(t));
 
@@ -69,7 +69,7 @@ export async function loadPptx(file: File, progress: Progress): Promise<LoadedDo
 
   const units: Unit[] = [];
   for (const [i, slide] of slides.entries()) {
-    progress(`Reading slides… ${i + 1} of ${slides.length}`);
+    progress(`Reading slide ${i + 1} of ${slides.length}…`);
     const n = i + 1;
     const onSlide = await read(slide, isSlideNumber);
     if (parts.get(slide)!.documentElement.getAttribute('show') === '0') hidden.push(n);
