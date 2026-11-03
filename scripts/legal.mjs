@@ -49,6 +49,7 @@ export const LEGAL = [
 <li><strong>Google</strong> authenticates optional Google sign-ins and provides Google Analytics (configured with Google signals and ad personalization disabled).</li>
 <li><strong>jsDelivr</strong> delivers client-side OCR and on-device vision model assets to your browser.</li>
 </ul>
+<p>Directory badges in the home page footer load from each directory’s own site, which receives your IP address and browser details like any image request.</p>
 <p>These providers may process data outside your country under standard contractual clauses or equivalent international transfer safeguards.</p>
 
 <h2>Purpose and legal basis</h2>
