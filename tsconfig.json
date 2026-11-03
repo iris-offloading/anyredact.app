@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true
   },
-  "include": ["src/client", "src/shared", "test/check.test.ts"]
+  "include": ["src/client", "src/shared", "test/check.test.ts", "test/files.test.ts"]
 }

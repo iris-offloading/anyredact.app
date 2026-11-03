@@ -294,7 +294,7 @@ async function takeBack(
 export async function handleBilling(request: Request, env: BillingEnv, url: URL): Promise<Response | null> {
   const path = url.pathname;
   if (path !== '/api/checkout' && path !== '/api/portal' && path !== '/api/stripe/webhook') return null;
-  if (!env.DB || !env.STRIPE_SECRET_KEY) return json({ error: 'Payments are not set up yet.' }, 503);
+  if (!env.DB || !env.STRIPE_SECRET_KEY) return json({ error: 'Payments are not configured on this server.' }, 503);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   if (path === '/api/stripe/webhook') {
@@ -320,7 +320,7 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   }
 
   if (crossOrigin(request)) return json({ error: 'Forbidden' }, 403);
-  if (await rateLimited(request, env.DETECT_LIMITER, 'billing:')) return json({ error: 'Too many requests. Please wait a minute.' }, 429);
+  if (await rateLimited(request, env.DETECT_LIMITER, 'billing:')) return json({ error: 'Too many requests. Please wait a minute and try again.' }, 429);
   const user = await currentUser(request, env);
   if (!user) return json({ error: 'Please sign in first.' }, 401);
 
@@ -334,13 +334,13 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   const product = findProduct(id);
   if (!product) return json({ error: 'Unknown product.' }, 400);
   // A second plan would charge twice while the account tracks only one.
-  if (product.monthly && user.plan_subscription && user.plan_period_end > now()) return json({ error: 'You already have a plan. Cancel it under Manage plan first.' }, 409);
+  if (product.monthly && user.plan_subscription && user.plan_period_end > now()) return json({ error: 'You already have an active plan. Manage or cancel it under Manage plan first.' }, 409);
   const customer = await customerFor(env, user);
   const priceData = {
     currency: 'usd',
     unit_amount: product.cents,
     product_data: {
-      name: product.monthly ? `AnyRedact ${product.name}, ${product.credits.toLocaleString('en-US')} credits a month` : `AnyRedact ${product.name}`,
+      name: product.monthly ? `AnyRedact ${product.name} (${product.credits.toLocaleString('en-US')} credits/month)` : `AnyRedact ${product.name}`,
       // Managed Payments (on by default) rejects items without an eligible tax code. AI as a service, cloud based, personal use.
       tax_code: 'txcd_10105001',
     },

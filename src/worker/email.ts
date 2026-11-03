@@ -9,7 +9,7 @@ const FONT = "Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export function loginEmail(origin: string, link: string, minutes: number): { subject: string; text: string; html: string } {
-  const expiry = `The link works once and expires in ${minutes} minutes. If you didn't ask for it, ignore this email.`;
+  const expiry = `This sign-in link can only be used once and expires in ${minutes} minutes. If you didn't request it, you can safely ignore this email.`;
   const href = escape(link);
   const c = LIGHT;
   const html = `<!doctype html>
@@ -61,7 +61,7 @@ export function loginEmail(origin: string, link: string, minutes: number): { sub
           <a href="${href}" style="display:inline-block;padding:13px 26px;font-family:${FONT};font-size:15px;font-weight:600;line-height:1;color:${c.accentInk};text-decoration:none;border-radius:10px;">Sign in</a>
         </td>
       </tr></table>
-      <p class="muted" style="margin:28px 0 0;font-size:13px;line-height:1.5;color:${c.muted};word-break:break-all;">Or open this link:<br><a href="${href}" style="color:${c.muted};text-decoration:underline;">${href}</a></p>
+      <p class="muted" style="margin:28px 0 0;font-size:13px;line-height:1.5;color:${c.muted};word-break:break-all;">Or copy and paste this link into your browser:<br><a href="${href}" style="color:${c.muted};text-decoration:underline;">${href}</a></p>
     </td></tr>
     </table>
   </td></tr>

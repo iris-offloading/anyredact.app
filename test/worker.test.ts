@@ -264,6 +264,18 @@ test('preview benchmark features need the trial key', async () => {
   assert.deepEqual(calls, ['@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/meta/other']);
 });
 
+test('finds private keys the model skipped, with escaped line breaks', async () => {
+  const key = '-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\\nBKcwggSjAgEAAoIBAQC7\\n-----END PRIVATE KEY-----';
+  const text = `{"private_key_id": "3f2a9c7e", "private_key": "${key}\\n", "client_id": "1048573"}`;
+  const res = await worker.fetch(post({ text }), env({ entities: [{ text: '3f2a9c7e', type: 'id', owner: 'organization' }] }));
+  assert.deepEqual(await res.json(), {
+    entities: [
+      { text: key, type: 'other', owner: 'person' },
+      { text: '3f2a9c7e', type: 'id', owner: 'organization' },
+    ],
+  });
+});
+
 // Stands in for Cloudflare's siteverify: tokens starting with "ok" pass, once each.
 function fakeTurnstile() {
   const spent = new Set<string>();

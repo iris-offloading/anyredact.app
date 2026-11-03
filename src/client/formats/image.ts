@@ -1,4 +1,4 @@
-import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, scaledCanvas, type LoadedDoc, type MetaField, type Page, type Progress, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, FileError, MAX_PAGES, outputName, partialPages, rectsForPage, scaledCanvas, type LoadedDoc, type MetaField, type Page, type Progress, type Unit } from '../types.ts';
 import { readMetadata } from './metadata.ts';
 import { readText, turned } from './ocr.ts';
 
@@ -63,7 +63,7 @@ async function decodeTiff(file: File, progress: Progress): Promise<{ canvases: H
   const { default: UTIF } = await import('utif2');
   const buf = await file.arrayBuffer();
   const ifds = UTIF.decode(buf).filter((ifd) => ifd.t256 && ifd.t257 && !(Number((ifd.t254 as number[] | undefined)?.[0]) & 1));
-  if (!ifds.length) throw new Error('This TIFF has no pages to show.');
+  if (!ifds.length) throw new FileError('This TIFF file contains no readable pages.');
   const canvases: HTMLCanvasElement[] = [];
   for (const [i, ifd] of ifds.slice(0, MAX_PAGES).entries()) {
     if (ifds.length > 1) progress(`Opening page ${i + 1} of ${Math.min(ifds.length, MAX_PAGES)}…`);
@@ -149,7 +149,7 @@ function readable(canvas: HTMLCanvasElement) {
 async function renderSvg(file: File, notes: string[]): Promise<{ canvas: HTMLCanvasElement; metadata: MetaField[] }> {
   const doc = new DOMParser().parseFromString(await file.text(), 'image/svg+xml');
   const svg = doc.documentElement;
-  if (doc.querySelector('parsererror') || svg.localName !== 'svg') throw new Error('This SVG file could not be read.');
+  if (doc.querySelector('parsererror') || svg.localName !== 'svg') throw new FileError('Could not read this SVG file. It may be damaged or incomplete.');
   // Relative sizes (%, em) fall back to the viewBox.
   const length = (v: string | null) => {
     const m = v?.trim().match(/^([\d.]+)([a-z]*)$/i);
@@ -182,9 +182,9 @@ async function renderSvg(file: File, notes: string[]): Promise<{ canvas: HTMLCan
   if (!readable(canvas) && objects.length) {
     objects.forEach((el) => el.remove());
     canvas = await drawSvg(doc, w, h);
-    notes.push('Embedded HTML in this drawing cannot be drawn here, so it is left out of the preview and the download.');
+    notes.push('Embedded HTML inside this SVG cannot be rendered here and is excluded from the preview and download.');
   }
-  if (!readable(canvas)) throw new Error('This SVG file could not be drawn.');
+  if (!readable(canvas)) throw new FileError('This SVG file could not be rendered.');
   return { canvas, metadata };
 }
 
@@ -195,7 +195,7 @@ async function readPages(canvases: HTMLCanvasElement[], progress: Progress, note
   for (const [i, canvas] of canvases.entries()) {
     const id = canvases.length > 1 ? `p${i + 1}` : 'image';
     try {
-      const read = await readText(id, i, onWhite(canvas), canvases.length > 1 ? (m) => progress(`Page ${i + 1}: ${m}`) : progress);
+      const read = await readText(id, i, canvas, canvases.length > 1 ? (m) => progress(`Page ${i + 1}: ${m}`) : progress);
       canvases[i] = turned(canvas, read.quarters);
       units.push(read.unit);
     } catch (err) {
@@ -205,8 +205,8 @@ async function readPages(canvases: HTMLCanvasElement[], progress: Progress, note
     }
   }
   const where = canvases.length > 1 ? 'these pages' : 'this image';
-  if (failed) notes.push('Automatic text reading failed, so nothing was detected. Drag on the image to draw redaction boxes.');
-  else if (!units.some((u) => u.text.trim())) notes.push(`No text was found in ${where}. Drag on the image to draw redaction boxes.`);
+  if (failed) notes.push('Automatic text recognition (OCR) failed, so no text was detected. Drag on the image to draw redaction boxes manually.');
+  else if (!units.some((u) => u.text.trim())) notes.push(`No readable text was found in ${where}. Drag on the image to draw redaction boxes manually.`);
   return units;
 }
 
@@ -235,7 +235,7 @@ export async function loadImage(file: File, progress: Progress): Promise<LoadedD
     const [bitmap, frames] = await Promise.all([decode(file, progress), frameCount(file)]);
     canvases = [scaledCanvas(bitmap)];
     bitmap.close();
-    if (frames > 1) notes.push('This image is animated. Only its first frame is kept.');
+    if (frames > 1) notes.push('This is an animated image—only the first frame is kept in the download.');
   }
 
   const units = await readPages(canvases, progress, notes);

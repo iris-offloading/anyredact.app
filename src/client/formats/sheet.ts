@@ -2,8 +2,8 @@ import { numfmt } from '@univerjs/core';
 import BUILTIN_FORMATS from 'exceljs/lib/xlsx/defaultnumformats.js';
 import JSZip from 'jszip';
 import { rewriteSegments } from '../../shared/segments.ts';
-import { enabledTexts, outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
-import { enabledByUnit, linkHidesText, readRels, readXml, removePart, removeThumbnail, saveXml, scrubProperties, scrubRelationships } from './office.ts';
+import { enabledTexts, FileError, outputName, type Finding, type LoadedDoc, type Progress, type RedactStyle, type Unit } from '../types.ts';
+import { checkParts, enabledByUnit, linkHidesText, readRels, readXml, removePart, removeThumbnail, saveXml, scrubProperties, scrubRelationships } from './office.ts';
 import type { GridCell, SheetMeta } from './sheet-view.ts';
 
 // Spreadsheets are edited in place, like DOCX: only the text of redacted cells
@@ -80,10 +80,11 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
   const ods = /\.ods$/i.test(file.name);
   const open = async () => {
     const zip = await JSZip.loadAsync(file);
+    await checkParts(zip);
     return { zip, book: ods ? await readOds(zip) : await readXlsx(zip) };
   };
   const { book } = await open();
-  const notes = ['Pictures, text boxes and chart titles are not scanned. Author names and file properties are cleared from the download.'];
+  const notes = ['Embedded images, floating text boxes, and chart titles are not scanned. Author names and document properties are removed on download.'];
   const hidden = book.sheets.filter((s) => s.hidden).map((s) => s.name);
   if (hidden.length) notes.push(`Includes hidden sheets: ${hidden.join(', ')}.`);
   const units = book.blocks.map((b) => b.unit);
@@ -104,7 +105,7 @@ export async function loadSheet(file: File, progress: Progress): Promise<LoadedD
       const { zip, book } = await open();
       const { changed, redacted } = applyFindings(book.blocks, findings, style);
       await book.finish(changed, redacted);
-      say('Packing spreadsheet…');
+      say('Saving spreadsheet…');
       if (ods) zip.file('mimetype', 'application/vnd.oasis.opendocument.spreadsheet', { compression: 'STORE' });
       const blob = await zip.generateAsync({
         type: 'blob',
@@ -172,7 +173,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
   const root = await readRels(zip, '');
   const bookPath = [...root.rels.values()].find((r) => r.type.endsWith('/officeDocument'))?.target ?? 'xl/workbook.xml';
   const book = await readXml(zip, bookPath);
-  if (!book) throw new Error('This does not look like an Excel (.xlsx) workbook.');
+  if (!book) throw new FileError('This does not look like an Excel (.xlsx) workbook.');
   const S = book.documentElement.namespaceURI ?? '';
   const bookRels = (await readRels(zip, bookPath)).rels;
   const relTarget = (suffix: string) => [...bookRels.values()].find((r) => r.type.endsWith(suffix))?.target;
@@ -304,7 +305,7 @@ async function readXlsx(zip: JSZip): Promise<Workbook> {
       }
     }
   }
-  if (!blocks.length && !sheets.length) throw new Error('This workbook has no sheets.');
+  if (!blocks.length && !sheets.length) throw new FileError('This workbook does not contain any worksheets.');
 
   return {
     blocks,
@@ -443,7 +444,7 @@ function odsToString(cell: Element, text: string) {
 
 async function readOds(zip: JSZip): Promise<Workbook> {
   const content = await readXml(zip, 'content.xml');
-  if (!content || !content.getElementsByTagNameNS(OFFICE, 'spreadsheet').length) throw new Error('This does not look like an OpenDocument (.ods) spreadsheet.');
+  if (!content || !content.getElementsByTagNameNS(OFFICE, 'spreadsheet').length) throw new FileError('This does not look like an OpenDocument (.ods) spreadsheet.');
   const styles = await readXml(zip, 'styles.xml');
   const blocks: Block[] = [];
   const sheets: SheetMeta[] = [];

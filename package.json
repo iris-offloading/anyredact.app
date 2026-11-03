@@ -12,7 +12,8 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json && tsc -p src/worker/tsconfig.json",
     "test": "node --test --experimental-strip-types --no-warnings test/*.test.ts",
-    "test:e2e": "node test/e2e/run.mjs e2e-out"
+    "test:e2e": "node test/e2e/run.mjs e2e-out",
+    "test:fuzz": "node --experimental-strip-types --no-warnings test/fuzz/shared.ts && node test/fuzz/run.mjs fuzz-out"
   },
   "dependencies": {
     "@jvmr/pptx-to-html": "1.1.2",

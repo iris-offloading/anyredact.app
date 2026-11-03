@@ -8,11 +8,11 @@ import { isBox, type Finding, type ManualBox, type ManualMark, type ManualStretc
 
 export const CHECK_LABELS: Record<string, string> = {
   name: 'names',
-  contact: 'addresses, emails or phone numbers',
-  number: 'ID, account or card numbers',
-  date: 'birth dates or other personal dates',
-  secret: 'passwords, tokens, usernames or IP addresses',
-  health: 'health, financial or other sensitive details',
+  contact: 'addresses, emails, or phone numbers',
+  number: 'ID, account, or card numbers',
+  date: 'dates of birth or other personal dates',
+  secret: 'passwords, tokens, usernames, or IP addresses',
+  health: 'health, financial, or other sensitive details',
 };
 
 // Below this a category is not mentioned. On the benchmark documents, fully
@@ -50,7 +50,7 @@ export function remainingText(units: Unit[], findings: Finding[], marks: ManualM
 export async function checkRemaining(text: string, checkToken?: string): Promise<{ left: string[]; free: boolean }> {
   if (!text.replace(/[█\s]/g, '')) return { left: [], free: false };
   // Longer documents are checked from the start.
-  const data = await postApi<{ risks?: Record<string, number>; free?: boolean }>('/api/check', { text: text.slice(0, MAX_CHARS), checkToken }, 'The final check failed');
+  const data = await postApi<{ risks?: Record<string, number>; free?: boolean }>('/api/check', { text: text.slice(0, MAX_CHARS), checkToken }, 'Final check failed');
   const left = Object.entries(data.risks ?? {})
     .filter(([k, p]) => p >= RISK_THRESHOLD && k in CHECK_LABELS)
     .sort((a, b) => b[1] - a[1])

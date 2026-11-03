@@ -81,7 +81,7 @@ async function other(env: Env, wav: Uint8Array, language: string | null): Promis
 }
 
 export async function handleTranscribe(request: Request, env: SpeechEnv): Promise<Response> {
-  const refused = await aiGuard(request, env.AI, env.TRANSCRIBE_LIMITER ?? env.DETECT_LIMITER, 'Transcription is not configured on this server.', 'speech:');
+  const refused = await aiGuard(request, env.AI, env.TRANSCRIBE_LIMITER ?? env.DETECT_LIMITER, 'Audio transcription is not configured on this server.', 'speech:');
   if (refused) return refused;
 
   if (Number(request.headers.get('content-length')) > MAX_BYTES) return json({ error: 'Audio chunk is too large.' }, 413);
@@ -119,6 +119,6 @@ export async function handleTranscribe(request: Request, env: SpeechEnv): Promis
   } catch (err) {
     console.error('transcription failed', err);
     await quota.refund();
-    return json({ error: 'Transcription is unavailable right now.' }, 502);
+    return json({ error: 'Audio transcription is temporarily unavailable. Please try again in a moment.' }, 502);
   }
 }

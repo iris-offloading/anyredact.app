@@ -46,7 +46,7 @@ export function analyzeUnits(units: { id: string; text: string }[], opts: { term
   for (let s of findTerms(text, ai.filter((e) => !singleName(e)), 'ai')) {
     // Models sometimes call an SSN/ITIN-shaped number a phone number.
     if (s.type === 'phone' && SSN_SHAPE.test(text.slice(s.start, s.end))) s = { ...s, type: 'ssn' };
-    if (ORG_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'AI: belongs to an organisation' };
+    if (ORG_TYPES.has(s.type) && orgOwned.has(text.slice(s.start, s.end).toLowerCase())) s = { ...s, publicHint: 'Belongs to an organization' };
     spans.push(s);
   }
   // Once a name is known, catch every other mention of it, including first or last name alone.

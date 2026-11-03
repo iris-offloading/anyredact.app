@@ -1,6 +1,6 @@
 import * as pdfjs from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { burnBoxes, canvasToBlob, MAX_PAGES, outputName, partialPages, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
+import { burnBoxes, canvasToBlob, FileError, MAX_PAGES, outputName, partialPages, rectsForPage, type LoadedDoc, type Page, type Progress, type Rect, type Unit } from '../types.ts';
 import { pad, readText, turned } from './ocr.ts';
 
 declare const __PDF_WORKER_SRC__: string;
@@ -110,12 +110,28 @@ async function formFields(page: pdfjs.PDFPageProxy, viewport: pdfjs.PageViewport
   return fields;
 }
 
-export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc> {
+/** Asks the visitor for a locked PDF's password, again after a wrong one; null when they cancel. */
+export type AskPassword = (wrong: boolean) => Promise<string | null>;
+
+export async function loadPdf(file: File, progress: Progress, askPassword?: AskPassword): Promise<LoadedDoc> {
   progress('Opening PDF…');
   const data = new Uint8Array(await file.arrayBuffer());
-  const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
+  const task = pdfjs.getDocument({ data, isEvalSupported: false });
+  let cancelled = false;
+  if (askPassword) {
+    task.onPassword = (update: (password: string) => void, reason: number) =>
+      askPassword(reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD).then((password) => {
+        if (password !== null) return update(password);
+        cancelled = true;
+        task.destroy();
+      });
+  }
+  const doc = await task.promise.catch((err) => {
+    throw cancelled ? new FileError('This PDF is password-protected. Enter its password to open it.') : err;
+  });
+  progress('Opening PDF…');
   const notes: string[] = [
-    'Pages are flattened into images when you download, so hidden text, links, form fields and metadata are removed. The result is not text-searchable.',
+    'Each page is flattened into an image on download, permanently removing hidden text, links, form fields, and metadata. The exported PDF will not be text-searchable.',
   ];
   const count = Math.min(doc.numPages, MAX_PAGES);
   if (doc.numPages > MAX_PAGES) notes.push(`Only the first ${MAX_PAGES} of ${doc.numPages} pages were loaded.`);
@@ -163,7 +179,7 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
     page.cleanup();
   }
   await doc.destroy();
-  if (ocrPages) notes.push(`${ocrPages} scanned page${ocrPages > 1 ? 's were' : ' was'} read with OCR. Check them carefully.`);
+  if (ocrPages) notes.push(`${ocrPages} scanned page${ocrPages > 1 ? 's were' : ' was'} read with OCR—please review ${ocrPages > 1 ? 'them' : 'it'} carefully.`);
 
   return {
     kind: 'pdf',
@@ -176,7 +192,7 @@ export async function loadPdf(file: File, progress: Progress): Promise<LoadedDoc
       const { PDFDocument } = await import('pdf-lib');
       const out = await PDFDocument.create();
       for (const p of pages) {
-        say(`Writing page ${p.index + 1} of ${pages.length}…`);
+        say(`Building redacted PDF… page ${p.index + 1} of ${pages.length}`);
         const burned = burnBoxes(p.canvas, rectsForPage(p.index, findings, boxes));
         const jpg = await out.embedJpg(await (await canvasToBlob(burned, 'image/jpeg', 0.9)).arrayBuffer());
         const { w, h } = sizes[p.index];

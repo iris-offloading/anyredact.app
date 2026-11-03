@@ -132,6 +132,9 @@ export interface Layout {
 
 export type Progress = (message: string) => void;
 
+/** A problem with the file, worded for the visitor; any other error opening a file gets a general message. */
+export class FileError extends Error {}
+
 export const TEXT_STYLES: [RedactStyle, string][] = [
   ['block', 'Black out (█████)'],
   ['label', 'Replace with label ([EMAIL])'],
@@ -147,7 +150,7 @@ export function outputName(name: string, ext?: string, suffix = ''): string {
 /** For a file longer than MAX_PAGES: the file name suffix and the note that the download leaves the rest out. */
 export function partialPages(total: number): { suffix: string; note?: string } {
   if (total <= MAX_PAGES) return { suffix: '' };
-  return { suffix: `-pages-1-${MAX_PAGES}`, note: `Pages ${MAX_PAGES + 1} to ${total} are not in the download.` };
+  return { suffix: `-pages-1-${MAX_PAGES}`, note: `Pages ${MAX_PAGES + 1}–${total} are not included in the download.` };
 }
 
 /** Items grouped by key, in their original order. */

@@ -12,141 +12,141 @@ export const LEGAL = [
     slug: 'privacy',
     nav: 'Privacy',
     title: 'Privacy Policy | AnyRedact',
-    description: 'Files open in your browser, content goes to AI only after you agree, and nothing you redact is kept. Our processors and your rights.',
+    description: 'Files open in your browser, content is sent for AI detection only after you confirm, and nothing you redact is stored. Read about our processors and your rights.',
     h1: 'Privacy policy',
     body: `
-<h2>Your files</h2>
-<p>Files are opened, previewed and redacted in your browser. The redacted copy is created on your device and never uploaded.</p>
-<p>To find personal information, AnyRedact sends part of the file to our server after you agree in the editor:</p>
+<h2>How your files are handled</h2>
+<p>Your files are opened, previewed, and redacted directly in your browser. The final redacted file is built on your device and is never uploaded to our servers.</p>
+<p>To detect personal information automatically, AnyRedact sends only the necessary parts of a file to our server—and only after you click Upload in the editor:</p>
 <ul>
-<li>the text read from the file, for detection;</li>
-<li>page images, if you turn on road sign or number plate redaction;</li>
-<li>the speech in a recording, as low-quality mono sound in parts of a few minutes;</li>
-<li>the text with your redactions blacked out, if you run the final check.</li>
+<li>extracted text from documents, spreadsheets, presentations, and images for AI entity detection;</li>
+<li>downscaled page or embedded images, only if you enable road sign or number plate detection;</li>
+<li>speech from audio recordings, converted in your browser into short, low-bitrate mono WAV chunks;</li>
+<li>extracted text with your chosen redactions already masked, if you run the optional final check before downloading.</li>
 </ul>
-<p>The content goes over HTTPS to our Cloudflare Worker and is analysed by AI models running on Cloudflare Workers AI. Speech is turned into text by Microsoft Azure AI Speech, which does not keep it. It is held in memory for that request only. We do not store it or the results, do not log it, and do not use it to train models. If you decline, nothing is sent and you can redact by hand.</p>
-<p>Scanned pages and images are read with the Tesseract OCR engine in your browser. Picture redaction runs a face and object detector in your browser, which finds faces and screens without uploading anything. The browser downloads both from the jsDelivr CDN.</p>
+<p>This data is sent over HTTPS to our Cloudflare Worker and analyzed in memory by AI models on Cloudflare Workers AI. Audio chunks are transcribed by Microsoft Azure AI Speech (with Cloudflare Workers AI as a fallback), which processes the audio in memory without retaining it. We never store your file content or detection results, never write them to logs, and never use them to train AI models. If you choose not to upload, nothing leaves your browser and you can still redact manually.</p>
+<p>Scanned pages and images are read locally in your browser using the Tesseract OCR engine. Face and screen detection also runs locally in your browser using MediaPipe, without uploading any images. Both engines are downloaded directly by your browser from the jsDelivr CDN.</p>
 
-<h2>Data we keep</h2>
+<h2>Data we store</h2>
 <ul>
-<li><strong>Free allowance.</strong> Your browser keeps a random ID in local storage. For each day, we count how many credits that ID and your IP address used.</li>
-<li><strong>Account.</strong> If you sign in, we keep your email address, your Google account ID if you use Google, your plan, your credit balances, your purchases, a sign-in session, and for each file you scan its format, its size in pages or minutes, the credits it used and the date, without its name.</li>
-<li><strong>Payments.</strong> Stripe takes the payment and keeps your card details. We receive your Stripe customer ID and what you bought.</li>
-<li><strong>Logs.</strong> Cloudflare keeps short-lived request logs, such as IP address, URL and errors, for security and abuse prevention.</li>
-<li><strong>Analytics.</strong> Google Analytics counts page views. Each visit sends the page address without its query or anchor, the page title, and your browser, device type and approximate location. File names, file content and findings are never sent.</li>
+<li><strong>Free daily allowance.</strong> Your browser stores a random device ID in local storage. Each day, we count how many free credits that ID and your IP network have used.</li>
+<li><strong>Account details.</strong> If you sign in, we store your email address, your Google account ID (if you sign in with Google), your subscription plan, your credit balances, purchase records, active sign-in sessions, and an activity log of credit usage (recording only the file format, size in pages or minutes, credits used, and date—never file names or contents).</li>
+<li><strong>Payments.</strong> Stripe processes all payments and stores your payment method details. We receive only your Stripe customer ID and purchase metadata.</li>
+<li><strong>Security logs.</strong> Cloudflare retains short-lived HTTP request logs (such as IP addresses, request URLs, and error codes) for security and abuse prevention.</li>
+<li><strong>Analytics.</strong> Google Analytics measures aggregate page views. Each page view reports only the URL path (with query strings and URL hashes stripped), the static page title, browser/device type, and approximate geographic region. File names, file contents, and detected items are never sent.</li>
 </ul>
-<p>We do not sell personal data and do not use advertising.</p>
+<p>We do not sell personal data and we do not run advertisements.</p>
 
 <h2>Cookies and local storage</h2>
-<p>Signing in sets a session cookie for 30 days and a cookie that tells the page you are signed in. Google sign-in sets a short-lived cookie that protects the login. Local storage keeps the free allowance ID and your settings, such as the theme and your analytics choice. These are needed for the site to work.</p>
-<p>Google Analytics sets <code>_ga</code> cookies that last up to 2 years. In the EU, EEA, UK and Switzerland they are only set after you accept them in the bar at the bottom of the page; until then Google Analytics counts the visit without cookies. Elsewhere they are set unless you decline. You can change your choice at any time with the Cookie settings button at the bottom of every page, and declining deletes these cookies.</p>
+<p>Signing in sets an <code>HttpOnly</code> session cookie for 30 days alongside a lightweight hint cookie so the header knows you are signed in. Signing in with Google also sets a short-lived cookie to protect the OAuth login flow. Local storage holds your random free-allowance ID and UI preferences such as color theme and cookie consent. These are strictly necessary to operate the site.</p>
+<p>Google Analytics sets <code>_ga</code> cookies lasting up to 2 years. For visitors in the EU, EEA, UK, and Switzerland, analytics cookies are set only if you click Accept in the cookie banner; otherwise, page views are counted cookielessly. Elsewhere, analytics cookies are enabled unless you opt out. You can review or change your choice anytime via the Cookie settings link in the footer, and declining immediately deletes existing <code>_ga</code> cookies.</p>
 
-<h2>Who processes data</h2>
+<h2>Subprocessors</h2>
 <ul>
-<li><strong>Cloudflare</strong> hosts the site, runs the other AI models, sends sign-in emails and checks with Turnstile that a visitor is not a bot, before the first free scan of the day and before every sign-in email.</li>
-<li><strong>Microsoft</strong> transcribes the speech in recordings with Azure AI Speech.</li>
-<li><strong>Stripe</strong> handles payments, subscriptions and refunds.</li>
-<li><strong>Google</strong> confirms your identity if you sign in with Google, and runs Google Analytics with Google signals and ad personalisation turned off.</li>
-<li><strong>jsDelivr</strong> serves the OCR engine and picture models to your browser.</li>
+<li><strong>Cloudflare</strong> hosts the website and Worker API, runs text and vision AI models, sends sign-in emails, and uses Turnstile to block automated abuse before a signed-out browser’s first free scan of the day and before sending sign-in links.</li>
+<li><strong>Microsoft</strong> transcribes spoken audio in recordings via Azure AI Speech.</li>
+<li><strong>Stripe</strong> processes payments, subscriptions, invoices, and refunds.</li>
+<li><strong>Google</strong> authenticates optional Google sign-ins and provides Google Analytics (configured with Google signals and ad personalization disabled).</li>
+<li><strong>jsDelivr</strong> delivers client-side OCR and on-device vision model assets to your browser.</li>
 </ul>
-<p>These providers may process data outside your country, under their own safeguards for international transfers.</p>
+<p>These providers may process data outside your country under standard contractual clauses or equivalent international transfer safeguards.</p>
 
 <h2>Purpose and legal basis</h2>
-<p>We use this data to provide the service you ask for, to count free and paid use, to take payments and to prevent abuse. We use analytics to see which pages people use. The legal bases are the contract with you, our legitimate interest in keeping the service secure and fair, your consent for analytics cookies where the law asks for it, and our legal duties such as keeping tax records.</p>
+<p>We process this data to deliver the redaction service you request, meter free and paid usage, process payments, and prevent abuse. We use analytics to understand which pages and guides are most helpful. Under GDPR, our legal bases are performance of a contract, our legitimate interest in keeping the service secure and fair, your consent for analytics cookies where required by law, and compliance with legal obligations such as tax and accounting rules.</p>
 
-<h2>How long we keep it</h2>
-<p>File content is gone once the request ends. Daily counters are replaced the next day. Sign-in links expire after 15 minutes and sessions after 30 days. Account data stays until you delete your account. Payment records are kept as long as tax law requires. Google Analytics keeps visit data for 2 months.</p>
+<h2>Data retention</h2>
+<p>File content is discarded from memory as soon as each request finishes. Free daily usage counters reset the next day. Email sign-in links expire after 15 minutes, and login sessions expire after 30 days. Account records remain until you delete your account. Payment records are retained as long as required by tax law. Google Analytics event data is retained for 2 months.</p>
 
-<h2>Your rights</h2>
-<p>You can delete your account on your account page. For a copy of your data or a correction, or to object to processing, write to ${mail} from the email address on your account. You can also complain to your local data protection authority.</p>
+<h2>Your privacy rights</h2>
+<p>You can permanently delete your account at any time from your <a href="/account">account page</a>. To request a copy of your personal data, ask for a correction, or object to processing, email ${mail} from the address associated with your account. You also have the right to lodge a complaint with your local data protection authority.</p>
 
 <h2>Children</h2>
-<p>AnyRedact is not meant for children under 16. If you think a child has given us personal data, write to us and we will delete it.</p>
+<p>AnyRedact is not directed at children under 16. If you believe a child has provided us with personal data, please contact us so we can delete it promptly.</p>
 
-<h2>Changes</h2>
-<p>We will post changes to this policy here and update the date below. If a change affects how your files are handled, we will also email account holders.</p>`,
+<h2>Changes to this policy</h2>
+<p>When we update this policy, we will post the revised version on this page and update the date below. If a change materially affects how your files or personal data are handled, we will notify account holders by email.</p>`,
   },
   {
     slug: 'terms',
     nav: 'Terms',
     title: 'Terms of Service | AnyRedact',
-    description: 'Terms for using AnyRedact: daily credits, plans and paid credits, reviewing every redacted file, and the limits of our liability.',
+    description: 'Terms of service for using AnyRedact: daily free credits, subscriptions and credit packs, your responsibility to review redacted files, and limits of liability.',
     h1: 'Terms of service',
     body: `
-<p>These terms apply when you use anyredact.app. By using it, you agree to them.</p>
+<p>These Terms of Service govern your use of anyredact.app. By using AnyRedact, you agree to these terms.</p>
 
 <h2>The service</h2>
-<p>AnyRedact finds personal information in documents, images, spreadsheets, presentations and recordings with AI, and lets you remove it before you share the file. We may change, add or remove features at any time.</p>
+<p>AnyRedact uses AI and browser-based tools to help you detect and remove personal or sensitive information from documents, images, spreadsheets, presentations, text files, and audio recordings. We may add, modify, or discontinue features at any time.</p>
 
-<h2>Check every file</h2>
-<p>Automatic detection misses things and marks things that are not sensitive. You decide what to redact, and you are responsible for reviewing the downloaded file before you share it. AnyRedact is not legal advice and does not make a file compliant with any law or regulation.</p>
+<h2>Review every redacted file</h2>
+<p>Automated detection is an aid, not a guarantee: AI models and OCR can miss sensitive details or flag text that is harmless. You choose what to redact, and you are solely responsible for inspecting every downloaded file before sharing or publishing it. AnyRedact does not provide legal advice and does not guarantee compliance with any law, court rule, or regulation.</p>
 
-<h2>Your content</h2>
-<p>Your files stay yours. You give us permission to process the parts the editor sends, only to provide the service. You must have the right to process the files you open.</p>
+<h2>Your files and permissions</h2>
+<p>You retain all rights to your files. By choosing to scan a file, you grant us permission to process the data your browser submits solely to provide the redaction service to you. You confirm that you have the legal right and authority to process the files you open.</p>
 
 <h2>Accounts</h2>
-<p>You need an account only to buy credits. Keep access to your email or Google account secure, since it is how you sign in. You must be 18 or older to buy credits.</p>
+<p>No account is required for free daily use. An account is needed only to purchase a subscription plan or pay-as-you-go credits. Keep access to your email inbox or Google account secure, as it controls access to your AnyRedact account. You must be at least 18 years old to make purchases.</p>
 
-<h2>Credits and plans</h2>
+<h2>Credits and subscriptions</h2>
 <ul>
-<li>Every browser gets free credits each day. Unused free credits do not carry over.</li>
-<li>A plan renews each month until you cancel it under Manage plan on your account page. Its credits reset at each renewal and end with the plan.</li>
-<li>Credits bought on their own are paid once and do not expire.</li>
-<li>Free credits are used first, then the plan, then bought credits.</li>
-<li>Credits have no cash value and cannot be transferred.</li>
-<li>Prices are in US dollars and shown on the <a href="/pricing">pricing page</a>.</li>
+<li>Every browser receives a free daily credit allowance. Unused free credits expire at midnight UTC and do not roll over.</li>
+<li>Monthly subscription plans renew automatically each month until canceled via <strong>Manage plan and invoices</strong> on your <a href="/account">account page</a>. Plan credits reset at each billing cycle and expire when the plan ends.</li>
+<li>Pay-as-you-go credit packs are one-time purchases and never expire.</li>
+<li>Usage draws from today’s free allowance first, then your active monthly plan, and finally your pay-as-you-go credits.</li>
+<li>Credits have no cash value and are non-transferable.</li>
+<li>All prices are listed in US dollars on our <a href="/pricing">pricing page</a>.</li>
 </ul>
-<p>Refunds are covered by our <a href="/refunds">refund policy</a>.</p>
+<p>Refund eligibility is set out in our <a href="/refunds">refund policy</a>.</p>
 
 <h2>Acceptable use</h2>
-<p>Do not use AnyRedact to break the law or anyone's rights, to get around the free limits, to overload or attack the service, to resell it, or to send content meant to manipulate the AI. We may suspend or close an account that does, without a refund for credits used in breach of these terms.</p>
+<p>You may not use AnyRedact to violate any law or third-party rights, bypass free usage limits, probe, overload, or disrupt the service, resell automated access, or submit prompts designed to manipulate or extract behavior from our AI models. We may suspend or terminate accounts that violate these terms without refunding credits spent in breach.</p>
 
-<h2>Our content</h2>
-<p>The site, its code and its text belong to AnyRedact. All rights are reserved.</p>
+<h2>Intellectual property</h2>
+<p>The AnyRedact website, software, branding, and documentation belong to AnyRedact. All rights are reserved.</p>
 
-<h2>No warranty</h2>
-<p>The service is provided as is and as available. We do not promise that it will find all personal information, run without interruption, or suit a particular purpose.</p>
+<h2>Disclaimer of warranties</h2>
+<p>AnyRedact is provided "as is" and "as available" without warranties of any kind, whether express or implied. We do not warrant that detection will catch all sensitive information, that the service will be uninterrupted or error-free, or that it will meet any specific compliance requirement.</p>
 
-<h2>Liability</h2>
-<p>To the extent the law allows, we are not liable for indirect or consequential losses, or for harm caused by information left in a file you shared. Our total liability is limited to what you paid us in the 12 months before the claim. Nothing in these terms limits rights you have as a consumer that cannot be limited by contract.</p>
+<h2>Limitation of liability</h2>
+<p>To the maximum extent permitted by law, AnyRedact shall not be liable for any indirect, incidental, special, or consequential damages, or for any loss or harm resulting from unredacted information remaining in a file you share. Our total aggregate liability for any claim arising out of the service is limited to the amount you paid us in the 12 months preceding the claim. Nothing in these terms limits mandatory consumer rights that cannot be waived by contract.</p>
 
-<h2>Changes</h2>
-<p>We may update these terms. The new version applies from the date below. If a change reduces your rights, we will email account holders first.</p>
+<h2>Changes to these terms</h2>
+<p>We may update these terms from time to time, with the revised version taking effect on the date shown below. If an update materially reduces your rights, we will give advance notice by email to account holders.</p>
 
 <h2>Contact</h2>
-<p>Questions about these terms go to ${mail}.</p>`,
+<p>If you have questions about these terms, please contact us at ${mail}.</p>`,
   },
   {
     slug: 'refunds',
     nav: 'Refunds',
     title: 'Refund Policy | AnyRedact',
-    description: 'Refunds for AnyRedact plans and credits: unused credits within 14 days, cancel a plan any time, and billing errors always refunded.',
+    description: 'AnyRedact refund policy: 14-day refunds on unused credits and plans, cancel subscriptions anytime, and full refunds for billing errors.',
     h1: 'Refund policy',
     body: `
-<h2>Credits</h2>
-<p>Within 14 days of buying credits, you can ask for a refund of the ones you have not used. We refund their share of the price, and those credits leave your balance.</p>
+<h2>Pay-as-you-go credits</h2>
+<p>Within 14 days of purchasing a credit pack, you can request a refund for any credits you haven’t used yet. We will refund the proportional price of the unused credits and deduct them from your balance.</p>
 
-<h2>Plans</h2>
-<p>You can cancel a plan at any time under Manage plan on your account page. It stops renewing, and you keep its credits until the end of the month you paid for. Within 14 days of a plan payment, if you have used none of that month's credits, you can ask for the payment back. A refunded plan payment ends that month's credits, and a full refund also ends the plan.</p>
+<h2>Monthly plans</h2>
+<p>You can cancel a monthly subscription anytime via <strong>Manage plan and invoices</strong> on your <a href="/account">account page</a>. Once canceled, your plan will not renew, and you can continue using your remaining monthly credits until the end of the current billing period. If you request a refund within 14 days of a subscription charge and haven’t used any plan credits from that billing period, we will refund the payment in full and end the subscription immediately.</p>
 
 <h2>Billing errors</h2>
-<p>A double charge, or a charge after you cancelled, is refunded in full.</p>
+<p>Duplicate charges or accidental charges occurring after cancellation are always refunded in full.</p>
 
-<h2>How to ask</h2>
-<p>Email <a href="mailto:support@anyredact.app?subject=Refund">support@anyredact.app</a> from the address on your account and say which payment it is about. Refunds go back to the card you paid with through Stripe and usually arrive within 5 to 10 business days.</p>
+<h2>How to request a refund</h2>
+<p>Email <a href="mailto:support@anyredact.app?subject=Refund">support@anyredact.app</a> from the email address linked to your account and let us know which payment you would like refunded. Refunds are issued back to your original payment method via Stripe and typically appear on your statement within 5 to 10 business days.</p>
 
-<h2>Chargebacks</h2>
-<p>If you dispute a payment with your bank, the credits it bought are removed while the dispute is open, and a disputed plan payment also ends the plan. Write to us first and we will try to sort it out.</p>`,
+<h2>Payment disputes and chargebacks</h2>
+<p>If a payment is disputed through your bank or card issuer, the credits granted by that payment are deducted while the dispute is open, and a disputed subscription charge immediately cancels the plan. Please reach out to us at ${mail} first—we’re happy to resolve billing issues directly and much faster.</p>`,
   },
   {
     slug: 'contact',
     nav: 'Contact',
     title: 'Contact | AnyRedact',
-    description: 'Contact AnyRedact about support, refunds, privacy requests or security issues.',
+    description: 'Contact AnyRedact for product support, billing questions, refund requests, privacy inquiries, or security reports.',
     h1: 'Contact',
     dated: false,
     body: `
-<p>Email ${mail} for support, billing, refunds, privacy requests and security reports.</p>
-<p>For anything about your account, write from the email address you sign in with. Please do not attach the documents you were redacting.</p>`,
+<p>For product support, billing questions, refunds, privacy requests, or security reports, email us at ${mail}.</p>
+<p>If you’re writing about your account or a payment, please email us from the address you use to sign in. For your own privacy, please do not attach sensitive or unredacted documents to support emails.</p>`,
   },
 ];

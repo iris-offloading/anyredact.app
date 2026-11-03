@@ -96,10 +96,11 @@ function xmlShape(text: string, shape: Shape): Shape {
     shape.keep.fill(1, at, at + m[0].length);
     if (m[1] !== undefined) open(shape, at + 4, at + 4 + m[1].length);
     else if (m[2] !== undefined) open(shape, at + 9, at + 9 + m[2].length);
-    else if (m[0][1] !== '!' && m[0][1] !== '?') {
-      // Attribute values stay redactable, their quotes do not.
-      for (const a of m[0].matchAll(/=\s*(?:"([^"]*)"|'([^']*)')/g)) {
-        const value = a[1] ?? a[2];
+    else if (m[0][1] !== '?') {
+      // Attribute values stay redactable, their quotes do not. So do the quoted values of declarations, such as <!ENTITY name "Jane Doe">.
+      const quoted = m[0][1] === '!' ? /()(?:"([^"]*)"|'([^']*)')/g : /(=\s*)(?:"([^"]*)"|'([^']*)')/g;
+      for (const a of m[0].matchAll(quoted)) {
+        const value = a[2] ?? a[3];
         const start = at + a.index + a[0].length - 1 - value.length;
         open(shape, start, start + value.length);
       }

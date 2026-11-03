@@ -24,7 +24,7 @@ function load(): Promise<Turnstile> {
     script.onload = () => resolve((window as unknown as { turnstile: Turnstile }).turnstile);
     script.onerror = () => {
       loading = undefined;
-      reject(new Error('Could not load the human check. Check your connection and try again.'));
+      reject(new Error('Could not load the security check. Please check your connection and try again.'));
     };
     document.head.append(script);
   });
@@ -32,7 +32,7 @@ function load(): Promise<Turnstile> {
 }
 
 const theme = () => document.documentElement.dataset.theme ?? 'auto';
-const failed = (code?: string) => new Error(`Couldn't confirm you're human${code ? ` (error ${code})` : ''}. Please try again.`);
+const failed = (code?: string) => new Error(`Verification failed${code ? ` (code ${code})` : ''}. Please try again.`);
 
 /**
  * Runs Turnstile in `slot` right away, so a token is usually ready by the time the button is pressed.
