@@ -5,6 +5,7 @@ import { handleDetect, type Env } from './detect.ts';
 import { pool } from '../shared/pool.ts';
 import { base64, json, rateLimited, trialsAllowed } from './http.ts';
 import { currentUser, handleAccounts, me } from './accounts.ts';
+import { withBadgeWall } from './badges.ts';
 import { handleBilling } from './billing.ts';
 import { quotaStatus } from './quota.ts';
 import { handleTranscribe } from './transcribe.ts';
@@ -15,7 +16,7 @@ import { handleVision } from './vision.ts';
 export { Quota } from './quota.ts';
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/api/detect') return handleDetect(request, env);
     if (url.pathname === '/api/check') return handleCheck(request, env);
@@ -56,7 +57,8 @@ export default {
         return json({ error: String(err) }, 500);
       }
     }
-    return env.ASSETS.fetch(request);
+    const page = await env.ASSETS.fetch(request);
+    return url.pathname === '/' && request.method === 'GET' ? withBadgeWall(page, env, ctx) : page;
   },
 } satisfies ExportedHandler<Env>;
 

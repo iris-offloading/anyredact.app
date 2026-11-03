@@ -116,7 +116,7 @@ function footer() {
   const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
   const about = [GUIDES_INDEX_LINK, PRICING, ...LEGAL].map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
-  <div><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
+  <div class="footer-brand"><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
   <div><h2>Tools</h2><ul>${tools}</ul></div>
   <div><h2>About</h2><ul>${about}<li><button type="button" class="footer-link" data-consent>Cookie settings</button></li></ul></div>
 </div></footer>`;
