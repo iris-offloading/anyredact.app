@@ -30,6 +30,27 @@ export const TOOLS = [
       ['Review detected items', 'Uncheck anything you want to keep, or drag a box over signatures and stamps.'],
       ['Download a flattened PDF', 'Every page is rebuilt as an image with solid black redaction bars burned in.'],
     ],
+    howTitle: 'How to redact a PDF',
+    topics: [
+      {
+        h2: 'Why black boxes in a PDF often fail',
+        intro: 'A PDF keeps its words in a text layer under whatever is drawn on the page. A box added on top changes the look of the page and nothing else.',
+        items: [
+          ['Copy and paste', 'Select across the bar, paste into a note, and the covered words come back.'],
+          ['Scans with an OCR layer', 'Scanners often add invisible searchable text behind the picture of the page. Covering the picture leaves that text in place.'],
+          ['Form fields and old versions', 'Filled-in fields keep their values, and incremental saves can leave an earlier copy of the page at the end of the file.'],
+        ],
+      },
+      {
+        h2: 'How to redact a bank statement',
+        intro: 'Landlords, lenders and visa offices often ask for statements but only need the totals and your name.',
+        items: [
+          ['Account and sort codes', 'Remove the full account number, IBAN and card digits, and any reference that repeats them.'],
+          ['Other people', 'Payees, payers and the names in transfer references belong to someone else.'],
+          ['Keep what was asked for', 'Leave the dates, balances and the income lines the reader needs to check.'],
+        ],
+      },
+    ],
     points: [
       ['True permanent redaction', 'Pages are flattened into images on export, permanently removing the underlying text, links, form fields, and metadata—not just covering them up.'],
       ['Works on scanned PDFs', 'Built-in OCR reads pages that have no text layer so sensitive details can still be detected automatically.'],
@@ -65,6 +86,18 @@ export const TOOLS = [
       ['Upload or paste an image', 'Built-in OCR reads text in the image directly on your device.'],
       ['Review redaction boxes', 'Uncheck any box you want to keep, or drag new boxes over faces and logos.'],
       ['Save a clean image', 'The image is freshly re-encoded, stripping hidden camera and GPS tags.'],
+    ],
+    howTitle: 'How to redact a screenshot or photo',
+    topics: [
+      {
+        h2: 'Remove location and camera data from photos',
+        intro: 'Phone photos record where and when they were taken and on which device, and that travels with the file when it is emailed or uploaded as a document.',
+        items: [
+          ['GPS coordinates', 'Often precise enough to find a house. The editor lists them under Metadata before you download.'],
+          ['Device and owner', 'Camera model, lens, software and sometimes a serial number or owner name.'],
+          ['Clues in the frame', 'Street signs, number plates, school badges and the view from a window can place a photo without any metadata.'],
+        ],
+      },
     ],
     points: [
       ['Automatic text detection', 'OCR reads text in your browser, and AI highlights personal details so you don’t have to hunt for them by hand.'],
@@ -113,6 +146,26 @@ export const TOOLS = [
       ['Review detected items', 'Click any highlight to keep it, or select text in the preview to redact more.'],
       ['Download your clean .docx', 'Choose solid black bars or readable placeholders like [NAME] before saving.'],
     ],
+    howTitle: 'How to redact a Word document',
+    topics: [
+      {
+        h2: 'Places Word hides text',
+        intro: 'Find and Replace only reaches the body. A .docx carries several other copies of what people wrote.',
+        items: [
+          ['Tracked changes', 'Deleted text stays in the file until the change is accepted, and each revision is signed with a name.'],
+          ['Comments, headers and footers', 'Review notes, letterheads and page footers often hold names, phone numbers and case references.'],
+          ['Properties and pictures', 'The author, the last person to edit and the template path sit in the file properties, and scanned signatures sit in pictures.'],
+        ],
+      },
+      {
+        h2: 'Redacting documents for a GDPR access request',
+        intro: 'Copies sent in answer to a subject access request keep the requester\'s own data and lose everyone else\'s.',
+        items: [
+          ['Colleagues and customers', 'Add the names of third parties under Always redact so every mention goes.'],
+          ['Labels instead of bars', 'Replace with label shows a reader that a person was named without saying who.'],
+        ],
+      },
+    ],
     points: [
       ['Formatting stays intact', 'Only the redacted text changes—fonts, tables, styles, and page layout stay just as they were.'],
       ['Covers hidden document text', 'Tracked changes, review comments, headers, footers, hyperlink targets, charts, embedded images, and alt text are all scanned alongside the body.'],
@@ -147,6 +200,18 @@ export const TOOLS = [
       ['Open your .pptx deck', 'Slides, speaker notes, and review comments are scanned together.'],
       ['Review detected items', 'Step through your slides and uncheck anything that should stay visible.'],
       ['Download your presentation', 'The cleaned deck opens normally in PowerPoint, Keynote, or Google Slides.'],
+    ],
+    howTitle: 'How to redact a PowerPoint presentation',
+    topics: [
+      {
+        h2: 'Text off the slide',
+        intro: 'A deck shown in a meeting reveals less than the .pptx that gets forwarded afterwards.',
+        items: [
+          ['Speaker notes', 'The presenter\'s script often names the client, the deal and the people in the room.'],
+          ['Charts', 'Each chart stores the workbook it was drawn from, with every row, not only the bars on show.'],
+          ['Hidden slides', 'Skipped in a slideshow, but still in the file for anyone who opens it.'],
+        ],
+      },
     ],
     points: [
       ['Slide design preserved', 'Themes, fonts, layouts, shapes, and animations remain untouched.'],
@@ -183,6 +248,18 @@ export const TOOLS = [
       ['Open your workbook', 'Every worksheet is scanned row by row and cell by cell.'],
       ['Review highlighted cells', 'Click any highlight in the grid to keep that value, or select cells to add more.'],
       ['Download your spreadsheet', 'Open the cleaned workbook right back in Excel or LibreOffice.'],
+    ],
+    howTitle: 'How to redact an Excel spreadsheet',
+    topics: [
+      {
+        h2: 'Copies that survive a delete',
+        intro: 'Clearing a column in Excel leaves the same values in several places a reader can still reach.',
+        items: [
+          ['Hidden sheets', 'Out of sight in the tabs, and one right-click away from showing again.'],
+          ['Formulas', 'A cell that looks up or joins another can rebuild a value you removed elsewhere.'],
+          ['Chart and pivot caches', 'Charts and pivot tables save their own copy of the source rows inside the file.'],
+        ],
+      },
     ],
     points: [
       ['Cell styles preserved', 'Only redacted cells are modified—number formats, colors, column widths, merged cells, and charts stay intact.'],
@@ -224,6 +301,26 @@ export const TOOLS = [
       ['Review detected items', 'Add internal hostnames or project codenames under Always redact.'],
       ['Download your masked file', 'Structure, keys, brackets, and line breaks stay right where they belong.'],
     ],
+    howTitle: 'How to redact text and logs',
+    topics: [
+      {
+        h2: 'How to redact logs and JSON before sharing',
+        intro: 'Logs and configs pasted into bug reports and forums are a common way secrets and customer data leak.',
+        items: [
+          ['Keys and tokens', 'Bearer tokens, cookies, signed URLs and connection strings with passwords inside.'],
+          ['People in requests', 'Email addresses and user IDs in request paths, and client IP addresses on every line.'],
+          ['Rotate what leaked', 'A key already posted is compromised. Revoke it and issue a new one as well as masking the copy.'],
+        ],
+      },
+      {
+        h2: 'How to redact a chat export',
+        intro: 'WhatsApp, Slack and Teams exports name every sender on every line, and the messages quote phone numbers and addresses.',
+        items: [
+          ['Sender names', 'Add each participant under Always redact, or use labels so the conversation still reads.'],
+          ['Shared contacts and links', 'Forwarded contact cards, location pins and invite links carry details of their own.'],
+        ],
+      },
+    ],
     points: [
       ['Built for logs & tickets', 'Quickly scrub customer data and credentials before sharing bug reports, transcripts, or datasets.'],
       ['Block mask or readable labels', 'Preserve exact character lengths with █ blocks, or swap sensitive values for clean placeholders like [EMAIL].'],
@@ -263,6 +360,18 @@ export const TOOLS = [
       ['Upload a recording', 'Speech is transcribed alongside an interactive audio timeline.'],
       ['Review the transcript', 'Play back sections and uncheck any words you want to leave audible.'],
       ['Download clean audio', 'Export the bleeped or muted audio file—plus a redacted text transcript if you need one.'],
+    ],
+    howTitle: 'How to redact an audio recording',
+    topics: [
+      {
+        h2: 'Redacting call recordings',
+        intro: 'Support and sales calls pick up details read aloud for security checks and payments.',
+        items: [
+          ['Card numbers in groups', 'Digits are often read in fours with pauses between. Widen the mark on the timeline if one falls outside.'],
+          ['Spelled-out names', 'Letters said one at a time may not join into a word in the transcript. Look for runs of single letters.'],
+          ['Greetings and sign-offs', 'The first and last minute usually carry full names and account numbers.'],
+        ],
+      },
     ],
     points: [
       ['Word-level audio sync', 'Every spoken word is transcribed with precise timestamps, so sensitive details are bleeped at the exact moment they are said.'],
