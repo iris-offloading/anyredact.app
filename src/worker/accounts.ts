@@ -2,7 +2,7 @@
 // needs no account. Sessions are random tokens in an HttpOnly cookie; only
 // their SHA-256 hashes are stored.
 import { recentActivity } from './activity.ts';
-import { stripe } from './billing.ts';
+import { planActive, stripe } from './billing.ts';
 import { loginEmail } from './email.ts';
 import { crossOrigin, hex, json, now, rateLimited, withCookies, type Limiter } from './http.ts';
 import { turnstileRequired, turnstileSiteKey, verifyTurnstile, type TurnstileEnv } from './turnstile.ts';
@@ -172,11 +172,10 @@ async function planEnding(env: AccountsEnv, subscription: string): Promise<boole
 export async function me(request: Request, env: AccountsEnv) {
   const user = env.DB ? await currentUser(request, env) : null;
   if (!user) return { user: null, signIn: { email: !!env.EMAIL, google: !!env.GOOGLE_CLIENT_ID, turnstile: turnstileSiteKey(env) } };
-  const planActive = !!user.plan_subscription && user.plan_period_end > now();
   return {
     user: {
       email: user.email,
-      plan: planActive ? { credits: user.plan_credits, used: user.plan_used, renews: user.plan_period_end, ending: await planEnding(env, user.plan_subscription!) } : null,
+      plan: planActive(user) ? { credits: user.plan_credits, used: user.plan_used, renews: user.plan_period_end, ending: await planEnding(env, user.plan_subscription!) } : null,
       credits: user.credits,
       canManage: !!user.stripe_customer,
       activity: (await recentActivity(env.DB!, user.id)).filter((a) => a.credits),
