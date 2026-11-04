@@ -51,7 +51,7 @@ async function disputedCharge(env: BillingEnv, charge: unknown): Promise<Charge 
 }
 
 /** The subscription a charge paid for and the end of the period it paid, if it paid a subscription invoice. */
-async function chargeSubscription(env: BillingEnv, charge: Charge): Promise<{ subscription?: string; periodEnd?: number } | null> {
+async function chargeSubscription(env: BillingEnv, charge: Charge): Promise<{ subscription?: string; periodEnd?: number; base?: number } | null> {
   // Older API versions name the invoice on the charge, newer ones list it under invoice payments.
   let invoice = typeof charge.invoice === 'string' ? charge.invoice : null;
   if (!invoice && typeof charge.payment_intent === 'string') {
@@ -65,7 +65,7 @@ async function chargeSubscription(env: BillingEnv, charge: Charge): Promise<{ su
   }
   if (!invoice) return null;
   const inv = await stripe<Record<string, any>>(env, `invoices/${encodeURIComponent(invoice)}`, {}, { method: 'GET' });
-  return { subscription: invoiceSubscription(inv), periodEnd: inv.lines?.data?.[0]?.period?.end };
+  return { subscription: invoiceSubscription(inv), periodEnd: inv.lines?.data?.[0]?.period?.end, base: inv.total_excluding_tax ?? inv.subtotal };
 }
 
 /**
@@ -205,8 +205,8 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
       const grant = db.prepare('UPDATE users SET credits = credits + ? WHERE id = ?').bind(product.credits, userId);
       // Recorded in the same transaction as the credits, so a refund or dispute can always take them back.
       const record = db
-        .prepare('INSERT OR IGNORE INTO purchases (payment_intent, user_id, credits, created_at) SELECT ?, id, ?, ? FROM users WHERE id = ?')
-        .bind(obj.payment_intent, product.credits, now(), userId);
+        .prepare('INSERT OR IGNORE INTO purchases (payment_intent, user_id, credits, cents, created_at) SELECT ?, id, ?, ?, ? FROM users WHERE id = ?')
+        .bind(obj.payment_intent, product.credits, obj.amount_subtotal ?? product.cents, now(), userId);
       await (obj.payment_intent ? db.batch([grant, record]) : grant.run());
       await logActivity(db, userId, event.id, 'credits', product.credits, obj.amount_total ?? product.cents);
     } else if (obj.mode === 'subscription' && paid) {
@@ -249,9 +249,11 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
       if (owner) await logActivity(db, owner.id, event.id, 'plan', owner.plan_credits, obj.amount_paid ?? null);
     }
   } else if (event.type === 'charge.refunded' && obj.amount > 0) {
-    await takeBack(env, event.id, 'refund', obj.payment_intent, async () => obj, obj.amount_refunded / obj.amount);
+    await takeBack(env, event.id, 'refund', obj.payment_intent, async () => obj, obj.amount_refunded, obj.amount);
   } else if (event.type === 'charge.dispute.created') {
-    await takeBack(env, event.id, 'dispute', obj.payment_intent, () => disputedCharge(env, obj.charge), 1);
+    await takeBack(env, event.id, 'dispute', obj.payment_intent, () => disputedCharge(env, obj.charge), Infinity, 1);
+  } else if (event.type === 'charge.dispute.closed' && (obj.status === 'won' || obj.status === 'warning_closed')) {
+    await giveBackDispute(env, event.id, obj.payment_intent);
   } else if (event.type === 'customer.subscription.deleted') {
     await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE plan_subscription = ?').bind(obj.id).run();
   }
@@ -259,9 +261,10 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
 
 /**
  * Takes back the credits a refunded or disputed payment bought, in proportion to
- * the amount returned. One-off credits come off the balance even when already
- * spent, which can leave it negative. A plan payment ends this period's credits,
- * and a dispute or full refund of one also cancels the plan.
+ * the amount returned out of the price before tax, so refunding part of the base
+ * price takes back that share. One-off credits come off the balance even when
+ * already spent, which can leave it negative. A plan payment ends this period's
+ * credits, and a dispute or full refund of one also cancels the plan.
  */
 async function takeBack(
   env: BillingEnv,
@@ -269,19 +272,29 @@ async function takeBack(
   kind: ActivityKind,
   paymentIntent: string | null,
   charge: () => Promise<Charge | null>,
-  share: number,
+  /** Cents returned so far; Infinity for a dispute, which takes everything. */
+  returned: number,
+  /** Cents charged, tax included, for payments with no recorded base price. */
+  total: number,
 ): Promise<void> {
   const db = env.DB!;
+  const share = (base: number | null | undefined) => Math.min(1, returned / (base || total));
   const purchase = paymentIntent
-    ? await db.prepare('SELECT user_id, credits, taken FROM purchases WHERE payment_intent = ?').bind(paymentIntent).first<{ user_id: string; credits: number; taken: number }>()
+    ? await db
+        .prepare('SELECT user_id, credits, cents, taken FROM purchases WHERE payment_intent = ?')
+        .bind(paymentIntent)
+        .first<{ user_id: string; credits: number; cents: number | null; taken: number }>()
     : null;
   if (purchase) {
-    const due = Math.min(purchase.credits, Math.ceil(purchase.credits * share)) - purchase.taken;
+    const due = Math.min(purchase.credits, Math.ceil(purchase.credits * share(purchase.cents))) - purchase.taken;
     if (due <= 0) return;
     // Both or neither, and only while no other refund or dispute event has taken credits since the read above.
     const [, marked] = await db.batch([
       db.prepare('UPDATE users SET credits = credits - ? WHERE id = ? AND (SELECT taken FROM purchases WHERE payment_intent = ?) = ?').bind(due, purchase.user_id, paymentIntent, purchase.taken),
-      db.prepare('UPDATE purchases SET taken = taken + ? WHERE payment_intent = ? AND taken = ?').bind(due, paymentIntent, purchase.taken),
+      // A dispute's share is kept apart, to give back if it closes in our favour.
+      db
+        .prepare('UPDATE purchases SET taken = taken + ?1, disputed = disputed + ?2 WHERE payment_intent = ?3 AND taken = ?4')
+        .bind(due, kind === 'dispute' ? due : 0, paymentIntent, purchase.taken),
     ]);
     // Stripe retries the event, which then works out what is still due.
     if (!marked.meta.changes) throw new Error(`purchase ${paymentIntent} changed while taking credits back`);
@@ -301,7 +314,7 @@ async function takeBack(
   // A refunded earlier month (a duplicate charge) leaves this month's credits and the plan alone; a dispute of any month still ends it.
   if (kind === 'refund' && bought.periodEnd && bought.periodEnd + PLAN_GRACE <= now()) return;
   // A dispute, or a refund of the whole payment, ends the plan so it doesn't renew.
-  if (kind === 'dispute' || share >= 1) {
+  if (kind === 'dispute' || share(bought.base) >= 1) {
     try {
       await stripe(env, `subscriptions/${encodeURIComponent(user.plan_subscription)}`, {}, { method: 'DELETE', idempotencyKey: `plan-cancel-${eventId}` });
     } catch (err) {
@@ -316,6 +329,27 @@ async function takeBack(
     await db.prepare('UPDATE users SET plan_used = plan_credits WHERE id = ? AND plan_subscription = ?').bind(user.id, user.plan_subscription).run();
   }
   await logActivity(db, user.id, eventId, kind, -Math.max(0, user.left));
+}
+
+/**
+ * A dispute closed in our favour (won, or an inquiry that never became a
+ * chargeback) returns the one-off credits it took. A plan it cancelled stays
+ * cancelled.
+ */
+async function giveBackDispute(env: BillingEnv, eventId: string, paymentIntent: unknown): Promise<void> {
+  if (typeof paymentIntent !== 'string') return;
+  const db = env.DB!;
+  const purchase = await db
+    .prepare('SELECT user_id, disputed FROM purchases WHERE payment_intent = ?')
+    .bind(paymentIntent)
+    .first<{ user_id: string; disputed: number }>();
+  if (!purchase || purchase.disputed <= 0) return;
+  const [, marked] = await db.batch([
+    db.prepare('UPDATE users SET credits = credits + ? WHERE id = ? AND (SELECT disputed FROM purchases WHERE payment_intent = ?) = ?').bind(purchase.disputed, purchase.user_id, paymentIntent, purchase.disputed),
+    db.prepare('UPDATE purchases SET taken = taken - disputed, disputed = 0 WHERE payment_intent = ? AND disputed = ?').bind(paymentIntent, purchase.disputed),
+  ]);
+  if (!marked.meta.changes) throw new Error(`purchase ${paymentIntent} changed while giving credits back`);
+  await logActivity(db, purchase.user_id, eventId, 'dispute', purchase.disputed);
 }
 
 /** Handles /api/checkout, /api/portal and /api/stripe/webhook. Returns null for other paths. */

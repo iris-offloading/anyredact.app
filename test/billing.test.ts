@@ -684,3 +684,29 @@ test('a scan paid from credits gives back the free credits a parallel scan raced
   assert.deepEqual(amounts, [1, -1]);
   assert.equal(((await db.prepare('SELECT credits FROM users WHERE id = ?').bind(id).first()) as { credits: number }).credits, 4);
 });
+
+test('a partial pack refund follows the price before tax, and a won dispute gives its credits back', async () => {
+  const db = d1();
+  const e = env(db);
+  const send = webhook(e);
+  const id = await upsertUser(e, 'tax@example.com');
+  const credits = async () => ((await db.prepare('SELECT credits FROM users WHERE id = ?').bind(id).first()) as { credits: number }).credits;
+  // $15 for 500 credits, $18 with tax.
+  await send({ id: 'evt_buy', type: 'checkout.session.completed', data: { object: { mode: 'payment', payment_status: 'paid', payment_intent: 'pi_t', amount_subtotal: 1500, amount_total: 1800, metadata: { user_id: id, product: 'credits-500' } } } });
+  assert.equal(await credits(), 500);
+  // 300 unused credits refunded at the base price: $9.
+  await send({ id: 'evt_ref', type: 'charge.refunded', data: { object: { payment_intent: 'pi_t', amount: 1800, amount_refunded: 900 } } });
+  assert.equal(await credits(), 200);
+  await send({ id: 'evt_dis', type: 'charge.dispute.created', data: { object: { payment_intent: 'pi_t', charge: 'ch_t', amount: 900 } } });
+  assert.equal(await credits(), 0);
+  // A lost dispute keeps them, a won one returns them once.
+  await send({ id: 'evt_lost', type: 'charge.dispute.closed', data: { object: { payment_intent: 'pi_none', status: 'lost' } } });
+  await send({ id: 'evt_won', type: 'charge.dispute.closed', data: { object: { payment_intent: 'pi_t', status: 'won' } } });
+  await send({ id: 'evt_won2', type: 'charge.dispute.closed', data: { object: { payment_intent: 'pi_t', status: 'won' } } });
+  assert.equal(await credits(), 200);
+  const p = (await db.prepare('SELECT taken, disputed FROM purchases WHERE payment_intent = ?').bind('pi_t').first()) as Record<string, number>;
+  assert.deepEqual({ ...p }, { taken: 300, disputed: 0 });
+  // The rest refunded: the base price covers it all.
+  await send({ id: 'evt_ref2', type: 'charge.refunded', data: { object: { payment_intent: 'pi_t', amount: 1800, amount_refunded: 1500 } } });
+  assert.equal(await credits(), 0);
+});

@@ -211,7 +211,7 @@ function activityRow(a: Activity) {
       case 'refund':
         return ['minus', 'Refund', ''];
       case 'dispute':
-        return ['minus', 'Disputed payment', ''];
+        return a.credits > 0 ? ['plus', 'Dispute closed', ''] : ['minus', 'Disputed payment', ''];
       default:
         return ['doc', FORMAT_NAMES[a.kind] ?? 'File', plural(used, 'page')];
     }
