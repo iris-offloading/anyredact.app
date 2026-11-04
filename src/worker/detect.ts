@@ -248,17 +248,18 @@ export async function chargeUsage(request: Request, env: Env, credits: number, k
     await Promise.all([log(-credits), free(credits)]);
     return { state: quota.state, refund: async () => void (await Promise.all([quota.refund(), log(credits), free(-credits)])) };
   }
+  // An allowance that took the charge before another ran out (parallel scans) gives it back, so the scan isn't paid twice.
+  await quota.refund();
   const paid = user ? await spendCredits(env, user.id, credits) : null;
   if (paid) {
     await log(-credits);
     return {
       state: quota.state,
       refund: async () => {
-        await Promise.all([quota.refund(), refundCredits(env, user!.id, paid), log(credits)]);
+        await Promise.all([refundCredits(env, user!.id, paid), log(credits)]);
       },
     };
   }
-  await quota.refund();
   return json({ error: "You've used today's free credits.", code: 'quota', signedIn: !!user, quota: quota.state }, 402);
 }
 

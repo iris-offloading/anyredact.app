@@ -586,3 +586,101 @@ test('every sign-in email needs Turnstile, signed-in scans never do', () =>
     assert.equal((await scan()).status, 403);
     assert.equal((await scan('session=tok')).status, 200);
   }));
+
+test('a plan stays usable while its renewal is charged, and blocks a second plan until Stripe ends it', async () => {
+  const db = d1();
+  const e = env(db);
+  const id = await upsertUser(e, 'renew@example.com');
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), id, Math.floor(Date.now() / 1000) + 3600).run();
+  // The period ended ten minutes ago and invoice.paid has not come yet.
+  const ended = (ago: number) =>
+    db.prepare("UPDATE users SET stripe_customer = 'cus_r', plan_subscription = 'sub_r', plan_credits = 600, plan_used = 0, plan_period_end = ? WHERE id = ?").bind(Math.floor(Date.now() / 1000) - ago, id).run();
+  await ended(600);
+  assert.ok(await spendCredits(e, id, 2));
+  const plan = ((await (await fetchWorker(new Request('https://anyredact.app/api/me', { headers: { cookie: 'session=tok' } }), e)).json()) as { user: { plan: unknown } }).user.plan;
+  assert.ok(plan);
+  const buy = () =>
+    fetchWorker(new Request('https://anyredact.app/api/checkout', { method: 'POST', body: JSON.stringify({ product: 'pro' }), headers: { origin: 'https://anyredact.app', cookie: 'session=tok' } }), e);
+  assert.equal((await buy()).status, 409);
+  // Days later, a renewal Stripe still retries counts as a plan; one Stripe ended does not.
+  await ended(5 * 86400);
+  assert.ok(!(await spendCredits(e, id, 1)));
+  await withStripe(() => ({ id: 'sub_r', status: 'past_due' }), async () => assert.equal((await buy()).status, 409));
+  await withStripe(
+    (method, url) => (url.includes('/subscriptions/') ? { id: 'sub_r', status: 'canceled' } : { url: 'https://checkout.stripe.com/x' }),
+    async () => assert.equal((await buy()).status, 200),
+  );
+});
+
+test('a refund of an earlier month leaves the current plan alone', async () => {
+  const db = d1();
+  const e = env(db);
+  const id = await upsertUser(e, 'dup@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_1', plan_subscription = 'sub_1', plan_credits = 600, plan_used = 10, plan_period_end = 4102444800 WHERE id = ?").bind(id).run();
+  const past = Math.floor(Date.now() / 1000) - 20 * 86400;
+  const calls = await withStripe(
+    (method, url) =>
+      url.includes('/invoice_payments') ? { data: [{ invoice: 'in_old' }] } : { id: 'in_old', parent: { subscription_details: { subscription: 'sub_1' } }, lines: { data: [{ period: { end: past } }] } },
+    async () => {
+      await webhook(e)({ id: 'evt_dup', type: 'charge.refunded', data: { object: { payment_intent: 'pi_dup', customer: 'cus_1', amount: 900, amount_refunded: 900 } } });
+    },
+  );
+  assert.ok(!calls.some((c) => c.method === 'DELETE'));
+  const u = (await db.prepare('SELECT plan_subscription, plan_used FROM users WHERE id = ?').bind(id).first()) as Record<string, unknown>;
+  assert.deepEqual({ ...u }, { plan_subscription: 'sub_1', plan_used: 10 });
+});
+
+test('checkout after invoice.paid keeps the exact period end, and a double click makes one Stripe customer', async () => {
+  const db = d1();
+  const e = env(db);
+  const send = webhook(e);
+  const id = await upsertUser(e, 'order@example.com');
+  await db.prepare("UPDATE users SET stripe_customer = 'cus_o' WHERE id = ?").bind(id).run();
+  const end = Math.floor(Date.now() / 1000) + 28 * 86400;
+  const invoice = { customer: 'cus_o', billing_reason: 'subscription_create', parent: { subscription_details: { subscription: 'sub_o', metadata: { product: 'plus' } } }, lines: { data: [{ period: { end } }] } };
+  await withStripe(() => ({ id: 'sub_o', status: 'active' }), async () => {
+    await send({ id: 'evt_inv', type: 'invoice.paid', data: { object: invoice } });
+    await send({ id: 'evt_co', type: 'checkout.session.completed', data: { object: { mode: 'subscription', payment_status: 'paid', subscription: 'sub_o', customer: 'cus_o', metadata: { user_id: id, product: 'plus' } } } });
+  });
+  const u = (await db.prepare('SELECT plan_subscription, plan_period_end FROM users WHERE id = ?').bind(id).first()) as Record<string, unknown>;
+  assert.deepEqual({ ...u }, { plan_subscription: 'sub_o', plan_period_end: end });
+
+  const fresh = await upsertUser(e, 'double@example.com');
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('t3'), fresh, Math.floor(Date.now() / 1000) + 3600).run();
+  const buy = () =>
+    fetchWorker(new Request('https://anyredact.app/api/checkout', { method: 'POST', body: JSON.stringify({ product: 'credits-100' }), headers: { origin: 'https://anyredact.app', cookie: 'session=t3' } }), e);
+  const calls = await withStripe(
+    (method, url) => (url.endsWith('/v1/customers') ? { id: 'cus_d' } : { url: 'https://checkout.stripe.com/x' }),
+    async () => void (await Promise.all([buy(), buy()])),
+  );
+  const created = calls.filter((c) => c.url.endsWith('/v1/customers'));
+  assert.ok(created.every((c) => c.key === `customer-${fresh}`));
+});
+
+test('a scan paid from credits gives back the free credits a parallel scan raced it to', async () => {
+  const db = d1();
+  const e = env(db);
+  const amounts: number[] = [];
+  // Every allowance has room on the dry run, then the IP's runs out first.
+  e.QUOTA = {
+    idFromName: (n: string) => n,
+    get: (key: string) => ({
+      fetch: async (_: string, init: RequestInit) => {
+        const b = JSON.parse(String(init.body)) as { dryRun?: boolean; amount: number };
+        if (b.dryRun) return Response.json({ ok: true, used: 0, limit: 10, human: true });
+        if (key.startsWith('device:')) amounts.push(b.amount);
+        return Response.json({ ok: !key.startsWith('ip:'), used: 1, limit: 10 });
+      },
+    }),
+  } as unknown as DurableObjectNamespace;
+  const id = await upsertUser(e, 'race@example.com');
+  await db.prepare('UPDATE users SET credits = 5 WHERE id = ?').bind(id).run();
+  await db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').bind(await sha256('tok'), id, Math.floor(Date.now() / 1000) + 3600).run();
+  const res = await fetchWorker(
+    new Request('https://anyredact.app/api/detect', { method: 'POST', body: JSON.stringify({ text: 'Jane' }), headers: { origin: 'https://anyredact.app', cookie: 'session=tok', 'x-device-id': 'device-aaaaaaaa' } }),
+    e,
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(amounts, [1, -1]);
+  assert.equal(((await db.prepare('SELECT credits FROM users WHERE id = ?').bind(id).first()) as { credits: number }).credits, 4);
+});
