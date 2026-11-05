@@ -353,7 +353,7 @@ export const TOOLS = [
     h1: 'Auto redact audio online with AI',
     lead: 'Upload a recording to automatically detect and bleep spoken names, phone numbers, and card details—complete with a matching redacted transcript.',
     also: 'Supports MP3, M4A, WAV, FLAC, OGG, and Opus.',
-    cost: ({ AUDIO_CREDITS_PER_MINUTE }) => `${AUDIO_CREDITS_PER_MINUTE} credits per minute`,
+    cost: ({ AUDIO_CREDITS_PER_MINUTE }) => `About ${AUDIO_CREDITS_PER_MINUTE} credits per minute`,
     hint: 'MP3, M4A, WAV, FLAC, OGG, or Opus, up to 2 hours',
     art: 'audio',
     how: [
@@ -423,7 +423,7 @@ export const HOME = {
   faq: [
     {
       q: 'Is AnyRedact free to use?',
-      a: 'Yes. Every browser gets 10 free credits per day with no watermarks and no sign-up required. One credit covers roughly one page of text or one image, and audio costs 3 credits per minute. Need more? Subscribe to a monthly plan or buy non-expiring credit packs.',
+      a: 'Yes. Every browser gets 10 free credits per day with no watermarks and no sign-up required. One credit covers roughly one page of text or one image, and audio costs about 3 credits per minute. Need more? Subscribe to a monthly plan or buy non-expiring credit packs.',
     },
     {
       q: 'Do I need to create an account?',

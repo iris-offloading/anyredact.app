@@ -51,9 +51,9 @@ export const PRICING = {
       .join('');
     const rows = [
       ['Documents, images, and scans', `1 credit per ${n(CREDIT_CHARS)} characters of text (about one page)`],
-      ['Faces and screens', 'Free — detected locally on your device'],
+      ['Faces and screens', 'Free, detected on your device'],
       ['Road signs and number plates', '1 credit per image or page (only when enabled)'],
-      ['Audio recordings', `${AUDIO_CREDITS_PER_MINUTE} credits per started minute`],
+      ['Audio recordings', `About ${AUDIO_CREDITS_PER_MINUTE} credits per minute, transcript included`],
       ['Final check for missed details', `First check per file is free, then ${CHECK_CREDITS} credit`],
     ]
       .map(([what, credits]) => `<tr><th scope="row">${esc(what)}</th><td>${esc(credits)}</td></tr>`)
