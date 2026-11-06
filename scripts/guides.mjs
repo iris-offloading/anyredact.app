@@ -321,7 +321,7 @@ ${pdfLayersDiagram()}
 </ul>
 
 <h2>Audio metadata is stripped automatically</h2>
-<p>Audio files often carry ID3 or MP4 metadata tags—title, artist, comments, cover art, and even smartphone GPS coordinates where a voice memo was recorded. Your exported audio file is freshly encoded without any of those tags.</p>
+<p>Audio files often carry ID3 or MP4 metadata tags—title, artist, comments, cover art, and even smartphone GPS coordinates where a voice memo was recorded. Your exported audio file is freshly encoded without any of those tags. Curious how word-level transcription and AI detection work under the hood? Read our deep dive on <a href="/guides/audio-pii-redaction">how audio PII redaction actually works</a>.</p>
 `,
   },
   {
@@ -690,6 +690,45 @@ ${sarTimelineDiagram()}
 
 <h2>Verify your cleaned file</h2>
 <p>Open the downloaded <code>.docx</code>, check <strong>File → Info → Properties</strong>, and hover over any comment to confirm the author reads <em>Redacted</em>. Working with standalone image files too? See our guide on <a href="/guides/remove-photo-metadata">removing EXIF and location metadata from photos</a>.</p>
+`,
+  },
+  {
+    slug: 'audio-pii-redaction',
+    title: 'Audio PII Redaction: ASR + LLM vs. Dedicated Models | AnyRedact',
+    description: 'How audio PII redaction actually works: why word-level ASR plus LLM detection outperforms dedicated PII redaction models and black-box APIs, and why manual timeline review matters.',
+    h1: 'How audio PII redaction actually works',
+    tools: ['redact-audio'],
+    summary: 'Why pairing word-level ASR with LLM detection beats dedicated PII models—and why you still need manual timeline review.',
+    body: `
+<p>Redacting a text document or PDF means replacing characters or flattening pixels at fixed coordinates on a page. An audio recording, by contrast, is a continuous waveform with no built-in word boundaries—you cannot run a search or regular expression directly on raw sound samples. Reliable <strong>audio PII redaction</strong> requires turning speech into accurately timed words, understanding which spoken phrases are actually sensitive, mapping those phrases back to exact millisecond ranges in the audio, and giving a human reviewer the tools to verify and adjust the result before export.</p>
+
+<h2>The ASR + LLM pipeline behind AnyRedact</h2>
+<p>Rather than relying on a black-box redaction API, our <a href="/redact-audio">audio redaction tool</a> splits the job into four transparent stages:</p>
+<ol>
+<li><strong>Overlapping audio chunks:</strong> In your browser, the recording is decoded into 16 kHz mono WAV chunks with a short overlap between consecutive chunks. If a caller reads a surname or credit card number right across a chunk boundary, the overlap ensures the word is never cut in half—each chunk keeps only the words whose midpoint falls inside its own window.</li>
+<li><strong>Word-level automatic speech recognition (ASR):</strong> Plain sentence transcripts aren’t enough to bleep audio cleanly; every word needs an accurate start and end timestamp. Even a half-second timing drift can leave the first syllable of a name or the last digit of a phone number audible. We benchmarked speech models specifically on how completely their word timestamps cover spoken PII, using Microsoft <code>MAI-Transcribe-2</code> (with automatic fallback to Deepgram <code>Nova-3</code> and <code>Whisper large-v3-turbo</code>) for tight word-boundary alignment across 60+ languages.</li>
+<li><strong>LLM + pattern detection on the transcript:</strong> Once timed words are assembled into a transcript with character offsets, a large language model paired with deterministic checks (such as Luhn validation for payment cards, IBAN checksums, and phone/ID patterns) scans the text in full conversational context. When a person’s full name is identified early in a call, every shorter mention of their first or last name later in the recording is caught automatically.</li>
+<li><strong>Sample-level bleeping and re-encoding in your browser:</strong> Every flagged character span is mapped back to the start of its first spoken word and the end of its last spoken word, then widened with a 150 ms safety pad on both sides so consonant onsets and trailing syllables don’t slip through. When you click Download, your browser replaces those audio samples with a 1 kHz tone (or silence) using short fade-ins and fade-outs to avoid clicks, and encodes a brand-new audio file stripped of ID3 and MP4 metadata tags.</li>
+</ol>
+
+<h2>Why dedicated PII redaction models perform worse on audio</h2>
+<p>Many teams initially reach for either <strong>dedicated PII token-classification models</strong> (small BERT/DeBERTa NER taggers or Presidio-style pipelines) or the <strong>built-in <code>pii_redaction</code> flags offered by cloud speech APIs</strong>. In practice, pairing word-level ASR with an LLM outperforms dedicated PII models on real call recordings for several reasons:</p>
+<ul>
+<li><strong>Spoken PII rarely looks like written PII:</strong> Dedicated NER models are trained primarily on clean written text with standard punctuation and casing. On a phone call, people read numbers in groups with pauses or filler words (<em>"four five three nine—hang on—fourteen eighty-eight…"</em>), spell emails and usernames out loud (<em>"r dot delgado at outlook dot com"</em> or <em>"kofi underscore mensah 88"</em>), and dictate addresses conversationally. An LLM understands spoken phrasing and disfluencies that slip right past rigid token classifiers.</li>
+<li><strong>Context separates private data from public numbers:</strong> A dedicated PII tagger flags every phone number or date it sees—muting harmless appointment times, invoice totals, or a company’s own 0800 support line. An LLM reads surrounding context to distinguish a caller’s personal mobile number from a public helpline, and connects a casual first-name mention back to the full name introduced five minutes earlier.</li>
+<li><strong>Black-box speech redaction APIs bake mistakes into the audio:</strong> Turnkey speech APIs that return a pre-redacted audio file give you no way to recover from an error. If the model falsely bleeps a key figure the recipient needs to hear, that audio is already destroyed; if it misses a softly spoken postcode, you have no timeline editor to bleep the gap yourself.</li>
+</ul>
+
+<h2>Why manual redaction is non-negotiable for audio</h2>
+<p>No automatic pipeline—whether ASR + LLM or an end-to-end speech model—can catch 100% of sensitive audio on its own. Real-world recordings include crosstalk where two people speak at once, heavy background noise, names spelled letter by letter (<em>"S-M-I-T-H"</em>, which speech models often transcribe as separate single letters), and mumbled words that the ASR model mishears or skips entirely.</p>
+<p>Because AnyRedact keeps the transcript, the detected spans, and the audio waveform linked in an interactive editor before anything is burned into the file, you stay in full control:</p>
+<ul>
+<li><strong>Keep false positives in one click:</strong> Click any highlighted word in the transcript or bar on the timeline to uncheck it so it stays audible.</li>
+<li><strong>Highlight words or add custom terms:</strong> Select any phrase in the transcript to bleep it on the spot, or type client names, codenames, and internal IDs under <strong>Always redact</strong> to bleep every spoken occurrence.</li>
+<li><strong>Drag directly on the waveform timeline:</strong> If a speaker mumbles a number or someone says a name in the background that never appeared in the transcript, simply click and drag across that stretch of the audio timeline to bleep or silence the raw audio directly.</li>
+<li><strong>Verify by ear before exporting:</strong> Click any word or timestamp to jump playback to that exact second, listen to how the bleeps line up, and export both your clean audio file and a matching redacted transcript when you’re satisfied.</li>
+</ul>
+<p>For a quick walkthrough of the editor controls, see our step-by-step guide on <a href="/guides/how-to-redact-audio">how to redact an audio recording</a>.</p>
 `,
   },
 ];
