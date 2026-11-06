@@ -351,7 +351,7 @@ export const TOOLS = [
     description:
       'Auto redact MP3, M4A, WAV, and other audio recordings online with AI. Transcribe speech, bleep or mute spoken names and card numbers, and save a clean file.',
     h1: 'Auto redact audio online with AI',
-    lead: 'Upload a recording to automatically detect and bleep spoken names, phone numbers, and card details—complete with a matching redacted transcript.',
+    lead: 'Upload a recording for automatic speech redaction—detect and bleep spoken names, phone numbers, and card details, complete with a matching redacted transcript.',
     also: 'Supports MP3, M4A, WAV, FLAC, OGG, and Opus.',
     cost: ({ AUDIO_CREDITS_PER_MINUTE }) => `About ${AUDIO_CREDITS_PER_MINUTE} credits per minute`,
     hint: 'MP3, M4A, WAV, FLAC, OGG, or Opus, up to 2 hours',
@@ -365,7 +365,7 @@ export const TOOLS = [
     topics: [
       {
         h2: 'Redacting call recordings',
-        intro: 'Customer support, sales, and compliance calls routinely capture sensitive details spoken aloud during identity checks and card payments.',
+        intro: 'Customer support, sales, and compliance calls routinely capture sensitive details spoken aloud during identity checks and card payments, making reliable speech redaction essential before sharing recordings.',
         items: [
           ['Card numbers read in groups', 'Callers often read long numbers four digits at a time with pauses in between. Expand the selection on the timeline if a pause splits a number.'],
           ['Spelled-out names', 'Names spelled letter by letter may appear as separate single letters in the transcript—scan for runs of individual letters.'],
@@ -374,7 +374,7 @@ export const TOOLS = [
       },
     ],
     points: [
-      ['Word-level audio sync', 'Every spoken word is transcribed with precise timestamps, so sensitive details are bleeped at the exact moment they are said.'],
+      ['Word-level speech redaction', 'Every spoken word is transcribed with precise timestamps, so sensitive details are bleeped at the exact moment they are said.'],
       ['Manual timeline selection', 'Click and drag anywhere on the audio timeline to bleep or mute sections that weren’t caught in the transcript.'],
       ['Audio metadata stripped', 'Title, artist, comments, cover art, and GPS recording tags are omitted when encoding your clean audio file.'],
     ],
@@ -386,6 +386,61 @@ export const TOOLS = [
       {
         q: 'Which spoken languages are supported?',
         a: 'English and roughly 60 other languages, powered by Microsoft MAI-Transcribe-2 word-level speech recognition.',
+      },
+    ],
+  },
+];
+
+// Additional intent-specific tool pages that share a format editor without adding a second format tab to the top nav.
+export const LANDING_PAGES = [
+  {
+    slug: 'speech-redaction',
+    relatedSlug: 'redact-audio',
+    format: 'audio',
+    name: 'Speech redaction',
+    title: 'AI Speech Redaction Online: Bleep or Mute Spoken PII | AnyRedact',
+    description:
+      'Online AI speech redaction for call recordings, interviews, and voice notes. Transcribe speech with word-level timestamps, bleep or silence spoken PII, and export clean audio.',
+    h1: 'AI speech redaction online',
+    lead: 'Automatically detect, review, and bleep or silence spoken personal information in call recordings, interviews, and voice notes—with interactive word-level transcript and waveform controls.',
+    also: 'Works with MP3, M4A, WAV, FLAC, OGG, and Opus recordings.',
+    cost: ({ AUDIO_CREDITS_PER_MINUTE }) => `About ${AUDIO_CREDITS_PER_MINUTE} credits per minute`,
+    hint: 'MP3, M4A, WAV, FLAC, OGG, or Opus, up to 2 hours',
+    art: 'audio',
+    how: [
+      ['Open your voice recording', 'Audio is decoded in your browser and prepared for word-level speech recognition.'],
+      ['Review detected spoken PII', 'Click any highlighted word in the transcript to toggle its bleep, or drag across the waveform to mark more.'],
+      ['Export redacted audio & transcript', 'Download your bleeped or silenced audio file along with a matching masked transcript.'],
+    ],
+    howTitle: 'How speech redaction works',
+    topics: [
+      {
+        h2: 'Why word-level ASR + LLM beats black-box speech redaction',
+        intro: 'Spoken language rarely follows the neat patterns of written text—callers pause mid-number, spell names out loud, and talk over one another.',
+        items: [
+          ['Conversational numbers & spelling', 'LLM detection on word-timed transcripts catches phone and card numbers read in groups as well as phonetically spelled emails and usernames.'],
+          ['Context-aware filtering', 'Surrounding conversation separates a caller’s private mobile number or birth date from public helpline numbers and appointment times.'],
+          ['Human-in-the-loop review', 'Unlike one-shot speech redaction APIs that permanently bleep false positives, you can preview every match by ear and adjust ranges on the timeline before exporting.'],
+        ],
+      },
+    ],
+    points: [
+      ['Millisecond word alignment', 'Microsoft MAI-Transcribe-2 timestamps every spoken word, with automatic safety padding and smooth fades around each bleep.'],
+      ['Transcript + waveform editing', 'Toggle AI findings in one click, add custom terms under Always redact, or drag directly on the audio timeline to cover mumbled speech and crosstalk.'],
+      ['Clean re-encoded output', 'Your browser replaces sensitive speech samples with a 1 kHz tone or silence and saves a fresh audio file stripped of ID3 and MP4 metadata.'],
+    ],
+    faq: [
+      {
+        q: 'What is speech redaction?',
+        a: 'Speech redaction is the process of removing spoken personally identifiable information (PII)—such as names, payment card numbers, addresses, and dates of birth—from an audio recording by replacing those exact time intervals with a bleep tone or silence.',
+      },
+      {
+        q: 'How is AnyRedact different from automated speech redaction APIs?',
+        a: 'Black-box APIs return an already-bleeped audio file, giving you no way to undo false positives or bleep mumbled words the speech model missed. AnyRedact pairs word-level ASR and LLM detection with an interactive timeline and transcript editor so you can verify and fine-tune every bleep before downloading.',
+      },
+      {
+        q: 'Can I download a redacted transcript along with the audio?',
+        a: 'Yes. After reviewing your recording, you can download both the redacted audio file (with bleeps or silence) and a matching text transcript with sensitive words masked or replaced with labels like [NAME].',
       },
     ],
   },

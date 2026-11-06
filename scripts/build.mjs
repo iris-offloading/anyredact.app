@@ -9,7 +9,7 @@ import { GUIDES, GUIDES_INDEX, PUBLISHED } from './guides.mjs';
 import { howItWorks } from './diagrams.mjs';
 import { CONTACT, LEGAL, UPDATED } from './legal.mjs';
 import { logoMark } from './logo.mjs';
-import { HOME, SITE, TOOLS } from './pages.mjs';
+import { HOME, LANDING_PAGES, SITE, TOOLS } from './pages.mjs';
 import { PRICING } from './pricing.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -113,7 +113,7 @@ function nav(current) {
 const GUIDES_INDEX_LINK = { slug: 'guides', nav: 'Guides' };
 
 function footer() {
-  const tools = TOOLS.map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
+  const tools = [...TOOLS, ...LANDING_PAGES].map((t) => `<li><a href="/${t.slug}">${esc(t.name)}</a></li>`).join('');
   const about = [GUIDES_INDEX_LINK, PRICING, ...LEGAL].map((p) => `<li><a href="/${p.slug}">${esc(p.nav)}</a></li>`).join('');
   return `<footer class="site-footer"><div class="wrap">
   <div class="footer-brand"><strong class="logo">${logoMark(24)}AnyRedact</strong><p>${esc(SITE.tagline)}.</p></div>
@@ -236,7 +236,7 @@ function toolPage(page) {
 <section class="band"><div class="wrap points">${points}</div></section>
 ${page.slug ? howSection(page) : homeSections(page)}
 <section class="wrap section faq"><h2>Frequently asked questions</h2><div class="faq-list">${faq}</div></section>
-${page.slug ? relatedGuides(page.slug) : ''}`,
+${page.slug ? relatedGuides(page.relatedSlug ?? page.slug) : ''}`,
   );
 }
 
@@ -271,9 +271,9 @@ const plans = await import(`data:text/javascript;base64,${Buffer.from(pricingTs.
 
 const pages = [
   [HOME, 'index.html'],
-  ...TOOLS.map((t) => [t, `${t.slug}.html`]),
+  ...[...TOOLS, ...LANDING_PAGES].map((t) => [t, `${t.slug}.html`]),
 ];
-for (const [page, file] of pages) await writeFile(path.join(dist, file), toolPage(page));
+for (const [page, file] of pages) await writeFile(path.join(dist, file), toolPage({ ...page, relatedSlug: page.relatedSlug ?? page.slug }));
 
 for (const page of LEGAL) {
   await writeFile(
@@ -354,7 +354,7 @@ await writeFile(path.join(dist, 'pricing.html'), layout({ ...PRICING, script: pr
 
 // /account and the 404 page are noindex, so they stay out.
 const sitemapUrls = [
-  ...['', ...TOOLS.map((t) => t.slug)].map((s) => [s, toolsModified]),
+  ...['', ...TOOLS.map((t) => t.slug), ...LANDING_PAGES.map((t) => t.slug)].map((s) => [s, toolsModified]),
   ...['guides', ...GUIDES.map((g) => `guides/${g.slug}`)].map((s) => [s, guidesModified]),
   ['pricing', modified('scripts/pricing.mjs', 'src/shared/pricing.ts')],
   ...LEGAL.map((p) => [p.slug, modified('scripts/legal.mjs')]),
