@@ -188,7 +188,7 @@ async function applyEvent(env: BillingEnv, event: PaymentEvent): Promise<void> {
     }
   } else if (event.type === 'payment.refunded' && event.payment.amount.amount > 0) {
     const { payment } = event;
-    const paid = async () => ({ ...payment, purpose: await payments(env).paymentPurpose(payment) });
+    const paid = async () => ({ ...payment, purpose: await payments(env).paymentPurpose(payment.id) });
     await takeBack(env, event.id, 'refund', payment.id, paid, event.refunded, payment.amount.amount);
   } else if (event.type === 'dispute.opened') {
     const ref = event.dispute.charge ?? event.dispute.payment;
