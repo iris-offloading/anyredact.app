@@ -17,7 +17,7 @@
     "test:fuzz": "node --experimental-strip-types --no-warnings test/fuzz/shared.ts && node test/fuzz/run.mjs fuzz-out"
   },
   "dependencies": {
-    "@iris-offloading/payments": "github:iris-offloading/payments#fda59289cbb1ca354b3590ebff70b4bf6c4c2175",
+    "@iris-offloading/payments": "github:iris-offloading/payments#4777de5cffe434f39e84743b542af073b22e1654",
     "@jvmr/pptx-to-html": "1.1.2",
     "@mediabunny/mp3-encoder": "^1.62.1",
     "@mediapipe/tasks-vision": "1.0.1",
