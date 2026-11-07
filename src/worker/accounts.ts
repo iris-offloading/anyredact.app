@@ -2,7 +2,7 @@
 // needs no account. Sessions are random tokens in an HttpOnly cookie; only
 // their SHA-256 hashes are stored.
 import { recentActivity } from './activity.ts';
-import { planActive, stripe } from './billing.ts';
+import { payments, planActive } from './billing.ts';
 import { loginEmail } from './email.ts';
 import { crossOrigin, hex, json, now, rateLimited, withCookies, type Limiter } from './http.ts';
 import { turnstileRequired, turnstileSiteKey, verifyTurnstile, type TurnstileEnv } from './turnstile.ts';
@@ -135,13 +135,11 @@ async function deleteAccount(request: Request, env: AccountsEnv): Promise<Respon
   if (user.stripe_customer) {
     if (!env.STRIPE_SECRET_KEY) return json({ error: 'Could not delete your account. Please try again.' }, 503);
     try {
-      await stripe(env, `customers/${encodeURIComponent(user.stripe_customer)}`, {}, { method: 'DELETE' });
+      // Already deleted in Stripe counts as done: nothing left to cancel.
+      await payments(env).deleteCustomer(user.stripe_customer);
     } catch (err) {
-      // Already deleted in Stripe: nothing left to cancel.
-      if (!/No such customer/i.test((err as Error).message)) {
-        console.error('stripe customer delete failed', err);
-        return json({ error: 'Could not delete your account. Please try again.' }, 502);
-      }
+      console.error('stripe customer delete failed', err);
+      return json({ error: 'Could not delete your account. Please try again.' }, 502);
     }
   }
   const db = env.DB!;
@@ -160,8 +158,7 @@ async function deleteAccount(request: Request, env: AccountsEnv): Promise<Respon
 async function planEnding(env: AccountsEnv, subscription: string): Promise<boolean> {
   if (!env.STRIPE_SECRET_KEY) return false;
   try {
-    const sub = await stripe<{ cancel_at_period_end?: boolean; cancel_at?: number | null }>(env, `subscriptions/${encodeURIComponent(subscription)}`, {}, { method: 'GET' });
-    return !!(sub.cancel_at_period_end || sub.cancel_at);
+    return !!(await payments(env).getSubscription(subscription))?.endsAt;
   } catch {
     return false;
   }
