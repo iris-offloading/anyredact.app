@@ -260,7 +260,7 @@ ${pdfLayersDiagram()}
 <p>Because CSV files contain plain delimited text rather than worksheet styles or formulas, they open in our <a href="/redact-text">text redaction tool</a>, which preserves every comma, quote, and row break.</p>
 
 <h2>Sharing datasets safely</h2>
-<p>Keep in mind that masking names and emails doesn’t automatically make a spreadsheet anonymous: combining a ZIP/postal code, birth date, and job title can still single out an individual. Review our <a href="/guides/personal-information-checklist">personal information checklist</a> before publishing raw datasets.</p>
+<p>Keep in mind that masking names and emails doesn’t automatically make a spreadsheet anonymous: combining a ZIP/postal code, birth date, and job title can still single out an individual. Review our <a href="/guides/personal-information-checklist">personal information checklist</a> before publishing raw datasets, or read our guide to <a href="/guides/excel-xls-spreadsheet-redaction">XLS, XLSX, ODS, and CSV spreadsheet redaction</a> if you are working with legacy formats or Google Sheets exports.</p>
 `,
   },
   {
@@ -729,6 +729,58 @@ ${sarTimelineDiagram()}
 <li><strong>Verify by ear before exporting:</strong> Click any word or timestamp to jump playback to that exact second, listen to how the bleeps line up, and export both your clean audio file and a matching redacted transcript when you’re satisfied.</li>
 </ul>
 <p>For a quick walkthrough of the editor controls, see our step-by-step guide on <a href="/guides/how-to-redact-audio">how to redact an audio recording</a>.</p>
+`,
+  },
+  {
+    slug: 'excel-xls-spreadsheet-redaction',
+    title: 'XLS, XLSX & Spreadsheet Redaction Guide (Excel, ODS, CSV) | AnyRedact',
+    description: 'Complete guide to Excel redaction, XLS and XLSX redaction, and spreadsheet redaction across Microsoft Excel, OpenDocument (.ods), Google Sheets, and CSV files.',
+    h1: 'Excel, XLS, and spreadsheet redaction explained',
+    tools: ['redact-excel', 'redact-text'],
+    summary: 'How to permanently redact XLS, XLSX, ODS, Google Sheets, and CSV files—and why black cell fills and hidden columns fail.',
+    body: `
+<p>People search for <strong>spreadsheet redaction</strong> under half a dozen different names—<strong>Excel redaction</strong>, <strong>XLS redaction</strong>, <strong>XLSX redaction</strong>, <strong>workbook redaction</strong>, <strong>ODS redaction</strong>, or <strong>CSV masking</strong>—depending on which software generated the file. Whatever the file extension, the goal is the same: removing personal names, emails, salaries, tax IDs, and account numbers from rows and columns without breaking the rest of the table or leaving hidden copies behind.</p>
+
+<h2>Spreadsheet file formats at a glance</h2>
+<p>How a spreadsheet stores your data under the hood determines how it must be redacted:</p>
+<ul>
+<li><strong>XLSX (<code>.xlsx</code>) — Modern Microsoft Excel workbook:</strong> Introduced in Excel 2007, an <code>.xlsx</code> file is a compressed ZIP archive of XML parts. Cell strings, styles, formulas, charts, pivot caches, comments, and author records each live in separate XML files inside the archive. Our <a href="/redact-excel">online Excel redaction tool</a> edits <code>.xlsx</code> workbooks directly in place.</li>
+<li><strong>XLS (<code>.xls</code>) — Legacy Excel 97–2003 binary workbook:</strong> Older <code>.xls</code> files use Microsoft’s proprietary BIFF8 binary stream format, which can retain deleted strings and unallocated sector slack inside the binary container. To perform clean <strong>XLS redaction</strong>, open the file in Excel, LibreOffice Calc, or Google Sheets, choose <strong>Save As → Excel Workbook (<code>.xlsx</code>)</strong>, and then redact the <code>.xlsx</code> file.</li>
+<li><strong>ODS (<code>.ods</code>) — OpenDocument Spreadsheet:</strong> Used by LibreOffice Calc, OpenOffice, and Collabora, <code>.ods</code> workbooks are also ZIP archives containing <code>content.xml</code>, <code>styles.xml</code>, and <code>meta.xml</code>. AnyRedact opens and exports <code>.ods</code> files natively alongside <code>.xlsx</code>.</li>
+<li><strong>Google Sheets &amp; Apple Numbers:</strong> Cloud and Mac spreadsheets don’t circulate as standalone files until exported. In Google Sheets, choose <strong>File → Download → Microsoft Excel (<code>.xlsx</code>)</strong> (or <code>.ods</code>); in Apple Numbers, choose <strong>File → Export To → Excel</strong>, then upload the exported workbook to redact it.</li>
+<li><strong>CSV &amp; TSV (<code>.csv</code>, <code>.tsv</code>) — Delimited text tables:</strong> Plain comma- or tab-separated files have no hidden worksheets, formulas, or XML caches—just raw lines of text. Open them in our <a href="/redact-text">text &amp; CSV redaction tool</a> (or drop them into the Excel tool) to mask values while keeping every delimiter, quote, and column aligned.</li>
+<li><strong>XLSM &amp; XLSB (<code>.xlsm</code>, <code>.xlsb</code>):</strong> Macro-enabled and binary workbooks can carry embedded VBA code and binary caches. Save a copy as a standard <code>.xlsx</code> workbook first so macros are stripped and every XML part can be inspected and scrubbed.</li>
+</ul>
+
+<h2>Why DIY "redaction" in Excel almost always leaks data</h2>
+<p>Unlike a flattened PDF image, an Excel workbook is a live database. The most common manual cover-up techniques leave the original data intact for anyone who opens the file:</p>
+<ul>
+<li><strong>Coloring cells black on black:</strong> Setting a cell’s fill color to black and font color to black only changes visual styling in <code>xl/styles.xml</code>. Anyone can select the cell to read its value in the formula bar, copy and paste the sheet into Notepad, or change the font color back.</li>
+<li><strong>Hiding rows, columns, or worksheet tabs:</strong> Hidden columns and sheets (even sheets set to <code>xlSheetVeryHidden</code> in VBA) remain stored in full inside <code>xl/worksheets/sheet*.xml</code> and can be unhidden in seconds.</li>
+<li><strong>Deleting a column referenced by formulas:</strong> If column C concatenates or looks up values from columns A and B, clearing A and B can either break the sheet with <code>#REF!</code> errors or leave cached results sitting inside the formula cells’ <code>&lt;v&gt;</code> tags.</li>
+<li><strong>Forgetting the shared string table:</strong> Excel deduplicates text across the workbook in <code>xl/sharedStrings.xml</code>. Poorly written scripts that edit cells without updating shared strings or calculation chains either corrupt the file or leave unreferenced strings behind.</li>
+<li><strong>Leaving PivotTable and chart caches untouched:</strong> Pivot tables (<code>xl/pivotCache/</code>) and charts (<code>xl/charts/</code>) save their own snapshot of source rows inside the workbook. Even if you delete the source worksheet completely, a recipient can double-click a pivot cell or inspect the chart data to recover the original records.</li>
+</ul>
+
+<h2>What proper Excel and spreadsheet redaction cleans</h2>
+<p>When you open an <code>.xlsx</code> or <code>.ods</code> workbook in our <a href="/redact-excel">spreadsheet redaction tool</a>, every layer of the file is handled together:</p>
+<ol>
+<li><strong>Formatted numbers and dates are read as displayed:</strong> Excel stores dates and custom-formatted numbers as raw serial integers (for example, <code>33970</code> instead of <code>01/02/1993</code>). AnyRedact applies the workbook’s number formats before scanning so birth dates, formatted phone numbers, and ID numbers are detected accurately.</li>
+<li><strong>Row-aware AI + pattern detection:</strong> Cells in each row are analyzed together so the AI sees column context—connecting a person’s name in column A with their email, phone number, IBAN, or notes in adjacent columns.</li>
+<li><strong>Safe formula conversion:</strong> Untouched formulas continue to calculate normally. Any formula cell whose value is redacted is automatically converted to a plain inline string (and stale calculation chains are dropped) so Excel never recalculates the secret value.</li>
+<li><strong>Shared strings, charts, and PivotTable caches updated:</strong> Shared string entries are cleanly split or overwritten in place, phonetic furigana guides (<code>&lt;rPh&gt;</code>) are removed, and cached values inside charts and PivotTables are scrubbed to match your redactions.</li>
+<li><strong>Hidden sheets, comments, and headers included:</strong> Hidden and very-hidden sheets are surfaced in the editor tabs, cell notes and threaded comments are scanned (with comment author names replaced by <code>Redacted</code>), and print headers and footers are checked automatically.</li>
+<li><strong>Metadata and local file paths stripped:</strong> Author names, company properties, <code>xl/persons/person.xml</code> contributor IDs, preview thumbnails, and local save-directory paths (<code>absPath</code>) are removed when you download.</li>
+</ol>
+
+<h2>Step-by-step workflow for any spreadsheet</h2>
+<ol>
+<li><strong>Convert legacy formats if needed:</strong> If your file is an older <code>.xls</code>, <code>.xlsm</code>, or Apple Numbers file, save it as <code>.xlsx</code> first. For <code>.xlsx</code>, <code>.ods</code>, or <code>.csv</code>, open it directly in the <a href="/redact-excel">Excel &amp; spreadsheet redaction tool</a>.</li>
+<li><strong>Click Upload to scan:</strong> Review detected names, emails, phone numbers, IDs, and payment details highlighted right inside the spreadsheet grid.</li>
+<li><strong>Toggle or add redactions:</strong> Click any highlight in the grid to keep it, select a cell to redact parts of its text in the cell bar, or list internal project names and client IDs under <strong>Always redact</strong>.</li>
+<li><strong>Choose your style and download:</strong> Export with solid <code>█</code> blocks or readable placeholders like <code>[NAME]</code> and <code>[EMAIL]</code>, then open the downloaded workbook in Excel or LibreOffice to continue working.</li>
+</ol>
+<p>For a walkthrough of the grid controls, see <a href="/guides/how-to-redact-an-excel-spreadsheet">how to redact an Excel spreadsheet</a>.</p>
 `,
   },
 ];
