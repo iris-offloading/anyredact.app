@@ -2,70 +2,32 @@
 // the customer portal for managing the plan, and a webhook that credits
 // accounts. Credits are spent after the free daily allowance: the monthly plan
 // first, then one-off credits, which never expire.
+import { isPaymentError, type Payment, type PaymentEvent } from '@iris-offloading/payments';
+import { createStripeProvider, type StripeProvider } from '@iris-offloading/payments/stripe';
 import { findProduct } from '../shared/pricing.ts';
 import { currentUser, type AccountsEnv, type User } from './accounts.ts';
 import { logActivity, type ActivityKind } from './activity.ts';
-import { crossOrigin, hex, json, now, rateLimited } from './http.ts';
+import { crossOrigin, json, now, rateLimited } from './http.ts';
 
 export interface BillingEnv extends AccountsEnv {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
 }
 
-/** Flattens nested params into Stripe's form encoding: a[b][0][c]=x. */
-export function stripeForm(params: Record<string, unknown>, prefix = '', out = new URLSearchParams()): URLSearchParams {
-  for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null) continue;
-    const key = prefix ? `${prefix}[${k}]` : k;
-    if (typeof v === 'object') stripeForm(v as Record<string, unknown>, key, out);
-    else out.append(key, String(v));
-  }
-  return out;
-}
+/**
+ * The Stripe account behind this server (the payments library). Live keys take only live events.
+ * Refunds and disputes of one-off credits are found in purchases, so webhooks ask Stripe what a
+ * payment was for only when it isn't there (takeBack).
+ */
+export const payments = (env: { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: string }): StripeProvider =>
+  createStripeProvider({ secretKey: env.STRIPE_SECRET_KEY, webhookSecret: env.STRIPE_WEBHOOK_SECRET, resolvePayments: false });
 
-/** Calls the Stripe API. GET and DELETE send `params` in the query; an idempotency key makes a retried write safe. */
-export async function stripe<T>(
-  env: { STRIPE_SECRET_KEY?: string },
-  path: string,
-  params: Record<string, unknown> = {},
-  opts: { method?: 'GET' | 'POST' | 'DELETE'; idempotencyKey?: string } = {},
-): Promise<T> {
-  const method = opts.method ?? 'POST';
-  const form = stripeForm(params);
-  const query = method !== 'POST' && form.size ? `?${form}` : '';
-  const headers: Record<string, string> = { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` };
-  if (method === 'POST') headers['content-type'] = 'application/x-www-form-urlencoded';
-  if (opts.idempotencyKey) headers['idempotency-key'] = opts.idempotencyKey;
-  const res = await fetch(`https://api.stripe.com/v1/${path}${query}`, { method, headers, body: method === 'POST' ? form : undefined });
-  const data = (await res.json()) as T & { error?: { message?: string } };
-  if (!res.ok) throw new Error(data.error?.message || `Stripe ${path} failed (${res.status})`);
-  return data;
-}
-
-type Charge = { customer?: string | null; invoice?: string | null; payment_intent?: string | null };
-
-/** The charge a dispute is about, which names its customer. */
-async function disputedCharge(env: BillingEnv, charge: unknown): Promise<Charge | null> {
-  if (typeof charge !== 'string') return null;
-  return stripe<Charge>(env, `charges/${encodeURIComponent(charge)}`, {}, { method: 'GET' });
-}
-
-/** The subscription a charge paid for and the end of the period it paid, if it paid a subscription invoice. */
-async function chargeSubscription(env: BillingEnv, charge: Charge): Promise<{ subscription?: string; periodEnd?: number; base?: number } | null> {
-  // Older API versions name the invoice on the charge, newer ones list it under invoice payments.
-  let invoice = typeof charge.invoice === 'string' ? charge.invoice : null;
-  if (!invoice && typeof charge.payment_intent === 'string') {
-    const payments = await stripe<{ data?: { invoice?: string | null }[] }>(
-      env,
-      'invoice_payments',
-      { payment: { type: 'payment_intent', payment_intent: charge.payment_intent }, limit: 1 },
-      { method: 'GET' },
-    );
-    invoice = payments.data?.[0]?.invoice ?? null;
-  }
-  if (!invoice) return null;
-  const inv = await stripe<Record<string, any>>(env, `invoices/${encodeURIComponent(invoice)}`, {}, { method: 'GET' });
-  return { subscription: invoiceSubscription(inv), periodEnd: inv.lines?.data?.[0]?.period?.end, base: inv.total_excluding_tax ?? inv.subtotal };
+/** The subscription a payment paid for, the end of the period it paid (seconds), and its price before tax. */
+function paymentSubscription(payment: Payment): { subscription: string; periodEnd?: number; base: number } | null {
+  const p = payment.purpose;
+  if (p.kind !== 'subscription') return null;
+  const end = p.lines[0]?.period.end;
+  return { subscription: p.subscription, periodEnd: end ? end / 1000 : undefined, base: p.lines.reduce((n, l) => n + l.amount, 0) };
 }
 
 /**
@@ -76,32 +38,27 @@ async function chargeSubscription(env: BillingEnv, charge: Charge): Promise<{ su
  * retried event redoes the idempotent refund, then cancels.
  */
 async function refundSecondPlan(env: BillingEnv, userId: string, subscription: string, invoice: unknown): Promise<void> {
+  const pay = payments(env);
   if (typeof invoice === 'string') {
     // Older API versions name the payment intent on the invoice, newer ones under its payments.
-    const inv = await stripe<{ payment_intent?: string | null; payments?: { data?: { payment?: { payment_intent?: string } }[] } }>(
-      env,
-      `invoices/${encodeURIComponent(invoice)}`,
+    const inv = await pay.request<{ payment_intent?: string | null; payments?: { data?: { payment?: { payment_intent?: string } }[] } }>(
+      'GET',
+      `/v1/invoices/${encodeURIComponent(invoice)}`,
       { expand: ['payments'] },
-      { method: 'GET' },
     );
     const paymentIntent = inv.payment_intent ?? inv.payments?.data?.[0]?.payment?.payment_intent;
     if (paymentIntent) {
       await env.DB!.prepare('INSERT OR IGNORE INTO purchases (payment_intent, user_id, credits, created_at) VALUES (?, ?, 0, ?)').bind(paymentIntent, userId, now()).run();
-      await stripe(env, 'refunds', { payment_intent: paymentIntent, metadata: { reason: 'second plan' } }, { idempotencyKey: `second-plan-refund-${subscription}` });
+      await pay.refund({ payment: paymentIntent, metadata: { reason: 'second plan' }, idempotencyKey: `second-plan-refund-${subscription}` });
     }
   }
-  await stripe(env, `subscriptions/${encodeURIComponent(subscription)}`, {}, { method: 'DELETE' });
+  await pay.cancelSubscription(subscription);
 }
 
 /** Whether a subscription was cancelled, so a late or retried payment event must not start it again. */
 async function subscriptionEnded(env: BillingEnv, subscription: string): Promise<boolean> {
-  try {
-    const sub = await stripe<{ status?: string }>(env, `subscriptions/${encodeURIComponent(subscription)}`, {}, { method: 'GET' });
-    return sub.status === 'canceled' || sub.status === 'incomplete_expired';
-  } catch (err) {
-    if (/No such subscription/i.test((err as Error).message)) return true;
-    throw err;
-  }
+  const sub = await payments(env).getSubscription(subscription);
+  return !sub || sub.status === 'canceled' || sub.status === 'incomplete_expired';
 }
 
 /**
@@ -125,23 +82,10 @@ async function planHeld(env: BillingEnv, u: PlanRow): Promise<boolean> {
 async function customerFor(env: BillingEnv, user: User): Promise<string> {
   if (user.stripe_customer) return user.stripe_customer;
   // Two checkouts started at once (a double click) get the same customer, so renewals and refunds find the account.
-  const customer = await stripe<{ id: string }>(env, 'customers', { email: user.email ?? undefined, metadata: { user_id: user.id } }, { idempotencyKey: `customer-${user.id}` });
-  await env.DB!.prepare('UPDATE users SET stripe_customer = ? WHERE id = ? AND stripe_customer IS NULL').bind(customer.id, user.id).run();
+  const customer = await payments(env).ensureCustomer({ userId: user.id, email: user.email });
+  await env.DB!.prepare('UPDATE users SET stripe_customer = ? WHERE id = ? AND stripe_customer IS NULL').bind(customer, user.id).run();
   const row = await env.DB!.prepare('SELECT stripe_customer FROM users WHERE id = ?').bind(user.id).first<{ stripe_customer: string | null }>();
-  return row?.stripe_customer ?? customer.id;
-}
-
-/** Verifies a Stripe-Signature header (HMAC-SHA256 over "timestamp.body"). */
-export async function verifyStripeSignature(body: string, header: string | null, secret: string, toleranceSec = 300): Promise<boolean> {
-  if (!header) return false;
-  const parts = Object.fromEntries(header.split(',').map((p) => p.split('=') as [string, string]));
-  const t = Number(parts.t);
-  const signatures = header.split(',').filter((p) => p.startsWith('v1=')).map((p) => p.slice(3));
-  if (!t || !signatures.length || Math.abs(now() - t) > toleranceSec) return false;
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${body}`));
-  const expected = hex(mac);
-  return signatures.some((s) => s.length === expected.length && [...s].every((c, i) => c === expected[i]));
+  return row?.stripe_customer ?? customer;
 }
 
 export interface PaidSpend {
@@ -180,60 +124,54 @@ export async function refundCredits(env: BillingEnv, userId: string, spent: Paid
     .run();
 }
 
-interface StripeEvent {
-  id: string;
-  type: string;
-  livemode?: boolean;
-  data: { object: Record<string, any> };
-}
+/** The Stripe object an event carries, for the fields the payments library doesn't normalize. */
+const stripeObject = (event: PaymentEvent): Record<string, any> => (event.raw as { data?: { object?: Record<string, any> } })?.data?.object ?? {};
 
-// Newer Stripe API versions moved the invoice's subscription under parent.subscription_details.
-const invoiceSubscription = (invoice: Record<string, any>): string | undefined =>
-  invoice.subscription ?? invoice.parent?.subscription_details?.subscription ?? undefined;
-
-async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
+async function applyEvent(env: BillingEnv, event: PaymentEvent): Promise<void> {
   const db = env.DB!;
-  const obj = event.data.object;
   // A delayed payment method (a bank debit) completes the session unpaid and confirms later.
-  if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
-    const product = findProduct(obj.metadata?.product);
-    const userId = obj.metadata?.user_id ?? obj.client_reference_id;
+  if (event.type === 'checkout.completed' || event.type === 'checkout.paid') {
+    const obj = stripeObject(event);
+    const product = findProduct(event.metadata.product);
+    const userId = event.metadata.user_id ?? event.clientReference;
     if (!product || !userId) return;
     // Plans too: a bank debit that later fails must not have started one.
-    const paid = obj.payment_status === 'paid' || obj.payment_status === 'no_payment_required';
-    if (obj.mode === 'payment' && paid) {
+    const paid = event.type === 'checkout.paid' || (event.type === 'checkout.completed' && event.paid);
+    if (event.mode === 'one_time' && paid) {
       const grant = db.prepare('UPDATE users SET credits = credits + ? WHERE id = ?').bind(product.credits, userId);
       // Recorded in the same transaction as the credits, so a refund or dispute can always take them back.
       const record = db
         .prepare('INSERT OR IGNORE INTO purchases (payment_intent, user_id, credits, cents, created_at) SELECT ?, id, ?, ?, ? FROM users WHERE id = ?')
-        .bind(obj.payment_intent, product.credits, obj.amount_subtotal ?? product.cents, now(), userId);
-      await (obj.payment_intent ? db.batch([grant, record]) : grant.run());
+        .bind(event.payment, product.credits, obj.amount_subtotal ?? product.cents, now(), userId);
+      await (event.payment ? db.batch([grant, record]) : grant.run());
       await logActivity(db, userId, event.id, 'credits', product.credits, obj.amount_total ?? product.cents);
-    } else if (obj.mode === 'subscription' && paid) {
+    } else if (event.mode === 'subscription' && paid && event.subscription) {
       const current = await db.prepare('SELECT plan_subscription, plan_period_end FROM users WHERE id = ?').bind(userId).first<PlanRow>();
       if (!current) return;
-      if (current.plan_subscription !== obj.subscription) {
+      if (current.plan_subscription !== event.subscription) {
         // Including a plan whose renewal is still being charged, which would otherwise keep billing next to the new one.
         if (await planHeld(env, current)) {
-          await refundSecondPlan(env, userId, obj.subscription, obj.invoice);
+          await refundSecondPlan(env, userId, event.subscription, obj.invoice);
           return;
         }
-        if (await subscriptionEnded(env, obj.subscription)) return;
+        if (await subscriptionEnded(env, event.subscription)) return;
         // invoice.paid sets the exact period end; until then allow a month. When it came first, the plan is already started.
         await db
           .prepare('UPDATE users SET plan_subscription = ?, plan_credits = ?, plan_used = 0, plan_period_end = ?, stripe_customer = COALESCE(stripe_customer, ?) WHERE id = ?')
-          .bind(obj.subscription, product.credits, now() + 31 * 86400, obj.customer, userId)
+          .bind(event.subscription, product.credits, now() + 31 * 86400, event.customer, userId)
           .run();
       }
       await logActivity(db, userId, event.id, 'plan', product.credits, obj.amount_total ?? product.cents);
     }
-  } else if (event.type === 'invoice.paid' && invoiceSubscription(obj)) {
-    const periodEnd = obj.lines?.data?.[0]?.period?.end ?? now() + 31 * 86400;
+  } else if (event.type === 'invoice.paid' && event.subscription) {
+    const obj = stripeObject(event);
+    const end = event.lines[0]?.period.end;
+    const periodEnd = end ? end / 1000 : now() + 31 * 86400;
     // The plan's size, for a plan whose first payment confirmed after checkout (a bank debit).
     const meta = obj.parent?.subscription_details?.metadata ?? obj.subscription_details?.metadata;
     const plan = findProduct(meta?.product);
-    const subscription = invoiceSubscription(obj)!;
-    const current = await db.prepare('SELECT plan_subscription, plan_period_end FROM users WHERE stripe_customer = ?').bind(obj.customer).first<PlanRow>();
+    const subscription = event.subscription;
+    const current = await db.prepare('SELECT plan_subscription, plan_period_end FROM users WHERE stripe_customer = ?').bind(event.customer).first<PlanRow>();
     if (!current) return;
     // Starting a plan, not renewing it: a late retry for a plan a refund or dispute cancelled must not bring it back.
     const starts = current.plan_subscription !== subscription && !planActive(current);
@@ -241,21 +179,24 @@ async function applyEvent(env: BillingEnv, event: StripeEvent): Promise<void> {
     // Renews the account's plan, or starts one when it has none; a second plan's invoice changes nothing.
     await db
       .prepare('UPDATE users SET plan_subscription = ?1, plan_credits = COALESCE(?2, plan_credits), plan_used = 0, plan_period_end = ?3 WHERE stripe_customer = ?4 AND (plan_subscription IS NULL OR plan_subscription = ?1 OR plan_period_end <= ?5)')
-      .bind(subscription, plan?.monthly ? plan.credits : null, periodEnd, obj.customer, now() - PLAN_GRACE)
+      .bind(subscription, plan?.monthly ? plan.credits : null, periodEnd, event.customer, now() - PLAN_GRACE)
       .run();
     // The first payment shows with its checkout; later ones are renewals.
-    if (obj.billing_reason === 'subscription_cycle') {
-      const owner = await db.prepare('SELECT id, plan_credits FROM users WHERE stripe_customer = ? AND plan_subscription = ?').bind(obj.customer, subscription).first<{ id: string; plan_credits: number }>();
-      if (owner) await logActivity(db, owner.id, event.id, 'plan', owner.plan_credits, obj.amount_paid ?? null);
+    if (event.reason === 'cycle') {
+      const owner = await db.prepare('SELECT id, plan_credits FROM users WHERE stripe_customer = ? AND plan_subscription = ?').bind(event.customer, subscription).first<{ id: string; plan_credits: number }>();
+      if (owner) await logActivity(db, owner.id, event.id, 'plan', owner.plan_credits, event.amount.amount);
     }
-  } else if (event.type === 'charge.refunded' && obj.amount > 0) {
-    await takeBack(env, event.id, 'refund', obj.payment_intent, async () => obj, obj.amount_refunded, obj.amount);
-  } else if (event.type === 'charge.dispute.created') {
-    await takeBack(env, event.id, 'dispute', obj.payment_intent, () => disputedCharge(env, obj.charge), Infinity, 1);
-  } else if (event.type === 'charge.dispute.closed' && (obj.status === 'won' || obj.status === 'warning_closed')) {
-    await giveBackDispute(env, event.id, obj.payment_intent);
-  } else if (event.type === 'customer.subscription.deleted') {
-    await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE plan_subscription = ?').bind(obj.id).run();
+  } else if (event.type === 'payment.refunded' && event.payment.amount.amount > 0) {
+    const { payment } = event;
+    const paid = async () => ({ ...payment, purpose: await payments(env).paymentPurpose(payment.id) });
+    await takeBack(env, event.id, 'refund', payment.id, paid, event.refunded, payment.amount.amount);
+  } else if (event.type === 'dispute.opened') {
+    const ref = event.dispute.charge ?? event.dispute.payment;
+    await takeBack(env, event.id, 'dispute', event.dispute.payment, async () => (ref ? payments(env).resolvePayment(ref) : null), Infinity, 1);
+  } else if (event.type === 'dispute.closed' && (event.dispute.stage === 'won' || event.dispute.status === 'warning_closed')) {
+    await giveBackDispute(env, event.id, event.dispute.payment);
+  } else if (event.type === 'subscription.deleted') {
+    await db.prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE plan_subscription = ?').bind(event.subscription.id).run();
   }
 }
 
@@ -271,7 +212,8 @@ async function takeBack(
   eventId: string,
   kind: ActivityKind,
   paymentIntent: string | null,
-  charge: () => Promise<Charge | null>,
+  /** The payment, with what it paid for; null when Stripe has none. Asked only when no purchase row has it. */
+  payment: () => Promise<Payment | null>,
   /** Cents returned so far; Infinity for a dispute, which takes everything. */
   returned: number,
   /** Cents charged, tax included, for payments with no recorded base price. */
@@ -301,7 +243,7 @@ async function takeBack(
     await logActivity(db, purchase.user_id, eventId, kind, -due);
     return;
   }
-  const paid = await charge();
+  const paid = await payment();
   if (!paid?.customer) return;
   const user = await db
     .prepare('SELECT id, plan_subscription, plan_credits - plan_used AS left FROM users WHERE stripe_customer = ? AND plan_subscription IS NOT NULL')
@@ -309,17 +251,17 @@ async function takeBack(
     .first<{ id: string; plan_subscription: string; left: number }>();
   if (!user) return;
   // Only a payment for the account's current plan touches it, not an older plan's or a charge with no purchase row.
-  const bought = await chargeSubscription(env, paid);
+  const bought = paymentSubscription(paid);
   if (bought?.subscription !== user.plan_subscription) return;
   // A refunded earlier month (a duplicate charge) leaves this month's credits and the plan alone; a dispute of any month still ends it.
   if (kind === 'refund' && bought.periodEnd && bought.periodEnd + PLAN_GRACE <= now()) return;
   // A dispute, or a refund of the whole payment, ends the plan so it doesn't renew.
   if (kind === 'dispute' || share(bought.base) >= 1) {
     try {
-      await stripe(env, `subscriptions/${encodeURIComponent(user.plan_subscription)}`, {}, { method: 'DELETE', idempotencyKey: `plan-cancel-${eventId}` });
+      await payments(env).cancelSubscription(user.plan_subscription, { idempotencyKey: `plan-cancel-${eventId}` });
     } catch (err) {
       // Cancelled already, in the dashboard or by an earlier try.
-      if (!/canceled|cancelled|No such subscription/i.test((err as Error).message)) throw err;
+      if (!isPaymentError(err, 'not_found') && !/canceled|cancelled|No such subscription/i.test((err as Error).message)) throw err;
     }
     await db
       .prepare('UPDATE users SET plan_subscription = NULL, plan_credits = 0, plan_used = 0, plan_period_end = 0 WHERE id = ? AND plan_subscription = ?')
@@ -360,13 +302,18 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   if (path === '/api/stripe/webhook') {
-    const body = await request.text();
-    if (!env.STRIPE_WEBHOOK_SECRET || !(await verifyStripeSignature(body, request.headers.get('stripe-signature'), env.STRIPE_WEBHOOK_SECRET))) {
-      return json({ error: 'Bad signature' }, 400);
+    let event: PaymentEvent;
+    try {
+      // Verified, and for refunds and disputes, resolved to what the payment paid for. Events from the
+      // other mode come back unhandled, so a sandbox test payment can't credit a real account.
+      event = await payments(env).parseWebhook(request);
+    } catch (err) {
+      if (isPaymentError(err, 'bad_signature') || isPaymentError(err, 'not_configured')) return json({ error: 'Bad signature' }, 400);
+      // Stripe couldn't say what a payment was for: its retry tries again.
+      console.error('stripe event failed', err);
+      return json({ error: 'Could not apply the event.' }, 500);
     }
-    const event = JSON.parse(body) as StripeEvent;
-    // Live keys take only live events, so a sandbox test payment sent here can't credit a real account.
-    if (event.livemode !== undefined && event.livemode !== /^[rs]k_live_/.test(env.STRIPE_SECRET_KEY)) return json({ received: true });
+    if (event.type === 'unhandled') return json({ received: true });
     const fresh = await env.DB.prepare('INSERT OR IGNORE INTO stripe_events (id, created_at) VALUES (?, ?)').bind(event.id, now()).run();
     if (fresh.meta.changes) {
       try {
@@ -388,7 +335,7 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
 
   if (path === '/api/portal') {
     if (!user.stripe_customer) return json({ error: 'No purchases yet.' }, 400);
-    const portal = await stripe<{ url: string }>(env, 'billing_portal/sessions', { customer: user.stripe_customer, return_url: `${url.origin}/account` });
+    const portal = await payments(env).portal({ customer: user.stripe_customer, returnUrl: `${url.origin}/account` });
     return json({ url: portal.url });
   }
 
@@ -398,25 +345,28 @@ export async function handleBilling(request: Request, env: BillingEnv, url: URL)
   // A second plan would charge twice while the account tracks only one.
   if (product.monthly && (await planHeld(env, user))) return json({ error: 'You already have an active plan. Manage or cancel it under Manage plan first.' }, 409);
   const customer = await customerFor(env, user);
-  const priceData = {
-    currency: 'usd',
-    unit_amount: product.cents,
-    product_data: {
-      name: product.monthly ? `AnyRedact ${product.name} (${product.credits.toLocaleString('en-US')} credits/month)` : `AnyRedact ${product.name}`,
-      // Managed Payments (on by default) rejects items without an eligible tax code. AI as a service, cloud based, personal use.
-      tax_code: 'txcd_10105001',
-    },
-    ...(product.monthly ? { recurring: { interval: 'month' } } : {}),
-  };
-  const session = await stripe<{ url: string }>(env, 'checkout/sessions', {
-    mode: product.monthly ? 'subscription' : 'payment',
+  const metadata = { user_id: user.id, product: product.id };
+  const session = await payments(env).checkout({
+    mode: product.monthly ? 'subscription' : 'one_time',
     customer,
-    client_reference_id: user.id,
-    line_items: [{ price_data: priceData, quantity: 1 }],
-    metadata: { user_id: user.id, product: product.id },
-    ...(product.monthly ? { subscription_data: { metadata: { user_id: user.id, product: product.id } } } : {}),
-    success_url: `${url.origin}/account?paid=1`,
-    cancel_url: `${url.origin}/account`,
+    clientReference: user.id,
+    items: [
+      {
+        price: {
+          inline: {
+            amount: product.cents,
+            currency: 'usd',
+            name: product.monthly ? `AnyRedact ${product.name} (${product.credits.toLocaleString('en-US')} credits/month)` : `AnyRedact ${product.name}`,
+            interval: product.monthly ? 'month' : undefined,
+            // Managed Payments (on by default) rejects items without an eligible tax code. AI as a service, cloud based, personal use.
+            taxCode: 'txcd_10105001',
+          },
+        },
+      },
+    ],
+    metadata,
+    successUrl: `${url.origin}/account?paid=1`,
+    cancelUrl: `${url.origin}/account`,
   });
   return json({ url: session.url });
 }

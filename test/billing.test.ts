@@ -3,7 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { sha256, upsertUser } from '../src/worker/accounts.ts';
-import { spendCredits, stripeForm, verifyStripeSignature } from '../src/worker/billing.ts';
+import { spendCredits } from '../src/worker/billing.ts';
+import { stripeForm, verifyStripeSignature } from '@iris-offloading/payments/stripe';
 import type { Env } from '../src/worker/detect.ts';
 import entry from '../src/worker/index.ts';
 import { audioCredits } from '../src/shared/pricing.ts';
@@ -69,9 +70,9 @@ test('encodes nested Stripe params', () => {
 
 test('verifies Stripe webhook signatures', async () => {
   const body = '{"id":"evt_1"}';
-  assert.ok(await verifyStripeSignature(body, await sign(body), SECRET));
-  assert.ok(!(await verifyStripeSignature(body + ' ', await sign(body), SECRET)));
-  assert.ok(!(await verifyStripeSignature(body, await sign(body, 1000), SECRET)));
+  assert.ok(await verifyStripeSignature(body, await sign(body), [SECRET]));
+  assert.ok(!(await verifyStripeSignature(body + ' ', await sign(body), [SECRET])));
+  assert.ok(!(await verifyStripeSignature(body, await sign(body, 1000), [SECRET])));
 });
 
 test('webhook grants one-off credits once, under old ids too, and starts the monthly plan', async () => {
@@ -654,7 +655,8 @@ test('checkout after invoice.paid keeps the exact period end, and a double click
     async () => void (await Promise.all([buy(), buy()])),
   );
   const created = calls.filter((c) => c.url.endsWith('/v1/customers'));
-  assert.ok(created.every((c) => c.key === `customer-${fresh}`));
+  assert.equal(new Set(created.map((c) => c.key)).size, 1);
+  assert.ok(created[0]?.key?.startsWith(`customer:${fresh}:`));
 });
 
 test('a scan paid from credits gives back the free credits a parallel scan raced it to', async () => {
